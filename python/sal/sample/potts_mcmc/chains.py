@@ -12,7 +12,7 @@ import functools
 import math
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 from numpy.random import Generator
@@ -969,9 +969,10 @@ def parallel_tempering(
     field : SiteField | np.ndarray
         External field, shape ``(n_states,)``.
     temperatures : TempSchedule | Sequence[float] | Literal["auto"]
-        The ladder, in any order; at least two, all positive. The stationary
-        distribution depends on which pairs are adjacent for exchange, not on
-        the order. ``"auto"`` chooses it by
+        The ladder, coldest first and strictly increasing; at least two, all
+        positive. The order is :func:`cluster_tempering`'s, which 20 of 32
+        explicit-ladder call sites passed when the two were made one (issue
+        #1343); another order is refused, not reversed. ``"auto"`` chooses it by
         :func:`~sal.sample.schedule.adapt_ladder` on pilot runs of this
         function from ``ladder_tuning.start``, drawn from one child spawned
         from ``rng`` first (issue #1337).
@@ -994,8 +995,10 @@ def parallel_tempering(
     cluster_backend : Backend
         Runs the cluster passes, as :func:`anneal_potts` states.
     start : np.ndarray | None
-        One labelling per rung, shape ``(n_replicas, n_nodes)`` and in the
-        ladder's order, each row checked by
+        ``(n_nodes,)`` for every rung, or ``(n_rungs, n_nodes)`` one per rung
+        of the ladder given, coldest first; under ``"auto"`` each tuned rung
+        takes the row of ``ladder_tuning.start``'s rung nearest it in
+        temperature, a tie to the colder (issue #1343). Each row is checked by
         :func:`~sal.sim.potts.check_labelling`; ``None`` draws each from its
         replica's child generator, as before the parameter existed. A given
         start draws nothing, as :func:`anneal_potts`' does, so one step from a
@@ -1014,9 +1017,9 @@ def parallel_tempering(
     ValueError
         If fewer than two temperatures are given --- a ladder of one has
         nothing to exchange and is :func:`sample_potts` --- or any is not
-        positive, or any move is a cluster move and a coupling is negative,
-        or ``move`` is not one entry per rung, or ``start`` is not one
-        labelling per rung.
+        positive, or the ladder is not strictly increasing, coldest first,
+        or any move is a cluster move and a coupling is negative, or
+        ``move`` is not one entry per rung, or ``start`` is neither shape.
     TypeError
         If a rung's entry holds anything but a ``PottsMove``.
     """
@@ -1038,7 +1041,11 @@ def parallel_tempering(
 
     pilot_rng = rng.spawn(1)[0] if isinstance(temperatures, str) else rng
     given, tuned_ladder = resolve_ladder(temperatures, ladder_tuning, pilot)
-    temperatures = check_ladder(ladder(given), needed_by="parallel tempering")
+    temperatures = check_ladder(
+        ladder(given),
+        needed_by="parallel tempering",
+        monotone=Monotone.INCREASING,
+    )
     per_rung = tuple(
         move_set(rung, recolour) for rung in moves_per_rung(move, len(temperatures))
     )
@@ -1049,19 +1056,9 @@ def parallel_tempering(
     n_replicas = len(temperatures)
     children = rng.spawn(n_replicas)
     n_states = int(rows.shape[1])
-    # One contiguous `int64` row per replica: the kernel borrows a row of
-    # this block rather than copying it.
-    if start is None:
-        drawn = [child.integers(0, n_states, size=graph.n_nodes) for child in children]
-    else:
-        if np.shape(start)[:1] != (n_replicas,):
-            msg = (
-                f"start holds one labelling per rung, {n_replicas}, "
-                f"got shape {np.shape(start)}"
-            )
-            raise ValueError(msg)
-        drawn = [check_labelling(row, graph.n_nodes, n_states) for row in start]
-    states = np.ascontiguousarray(np.stack(drawn), dtype=np.int64)
+    states = _rung_starts(
+        start, temperatures, ladder_tuning, children, graph.n_nodes, n_states
+    )
     lattice = _Lattice(
         graph, rows, graph.compressed_adjacency(), backend, cluster_backend
     )
@@ -1107,6 +1104,62 @@ def parallel_tempering(
         termination=Termination.after((burn_in + n_sweeps) * thin, converged=False),
         tuned_ladder=tuned_ladder,
     )
+
+
+def _rung_starts(
+    start: np.ndarray | None,
+    temperatures: Sequence[float],
+    ladder_tuning: LadderTuning | None,
+    children: Sequence[np.random.Generator],
+    n_nodes: int,
+    n_states: int,
+) -> np.ndarray:
+    """One labelling per rung, as both Potts temperings read ``start`` (issue #1343).
+
+    ``None`` draws each rung's from its replica's child generator, as before
+    the parameter existed. ``(n_nodes,)`` is every rung's. ``(n_rungs,
+    n_nodes)`` is one per rung of the ladder given, coldest first; under
+    ``temperatures="auto"`` that ladder is ``ladder_tuning.start``, and each
+    tuned rung takes the row of the starting rung nearest it in temperature,
+    a tie going to the colder. The tuned ladder keeps the starting
+    endpoints, so the two ends take their own rows.
+
+    Returns
+    -------
+    np.ndarray
+        One contiguous ``int64`` row per replica: the kernel borrows a row of
+        this block rather than copying it.
+
+    Raises
+    ------
+    ValueError
+        If ``start`` is neither shape, or a row is not a labelling.
+    """
+    if start is None:
+        drawn = [child.integers(0, n_states, size=n_nodes) for child in children]
+        return np.ascontiguousarray(np.stack(drawn), dtype=np.int64)
+    given = temperatures if ladder_tuning is None else tuple(ladder_tuning.start)
+    shape = np.shape(start)
+    if len(shape) == 1:
+        row = check_labelling(start, n_nodes, n_states)
+        return np.ascontiguousarray(
+            np.repeat(np.asarray(row)[None], len(temperatures), axis=0),
+            dtype=np.int64,
+        )
+    if len(shape) != 2 or shape[0] != len(given):
+        msg = (
+            f"start is one labelling, ({n_nodes},), or one per rung of the "
+            f"ladder given, ({len(given)}, {n_nodes}); got shape {shape}"
+        )
+        raise ValueError(msg)
+    rows = [check_labelling(row, n_nodes, n_states) for row in start]
+    if ladder_tuning is not None:
+        anchors = np.asarray(given, dtype=float)
+        rows = [
+            rows[int(np.argmin(np.abs(anchors - temperature)))]
+            for temperature in temperatures
+        ]
+    return np.ascontiguousarray(np.stack(rows), dtype=np.int64)
 
 
 @dataclass(frozen=True)
@@ -1335,7 +1388,7 @@ class ClusterTempered(Tempered[np.ndarray]):
 def cluster_tempering(
     graph: PottsGraph,
     field: SiteField | np.ndarray,
-    temperatures: Sequence[float] | Literal["auto"],
+    temperatures: Ladder,
     rng: np.random.Generator,
     n_sweeps: int,
     *,
@@ -1344,6 +1397,7 @@ def cluster_tempering(
     thin: int = 1,
     record: bool = False,
     cluster_backend: Backend = Backend.RUST,
+    start: np.ndarray | None = None,
     ladder_tuning: LadderTuning | None = None,
 ) -> ClusterTempered:
     """Parallel tempering on Swendsen-Wang passes, with Houdayer moves at the cold end (issue #1041).
@@ -1369,8 +1423,9 @@ def cluster_tempering(
         Every coupling non-negative.
     field : SiteField | np.ndarray
         ``(n_states,)`` or ``(n_nodes, n_states)``.
-    temperatures : Sequence[float] | Literal["auto"]
-        The ladder, coldest first; at least two, all positive. ``"auto"``
+    temperatures : TempSchedule | Sequence[float] | Literal["auto"]
+        The ladder, coldest first and strictly increasing, the one order of
+        both Potts temperings (issue #1343); at least two, all positive. ``"auto"``
         chooses it as :func:`parallel_tempering` does, on pilot runs of this
         function (issue #1337).
     rng : np.random.Generator
@@ -1385,6 +1440,10 @@ def cluster_tempering(
         test reads and a ground-state search does not.
     cluster_backend : Backend
         Runs the Swendsen-Wang pass, as :func:`anneal_potts` states.
+    start : np.ndarray | None
+        As :func:`parallel_tempering`'s: ``(n_nodes,)`` for every rung or
+        ``(n_rungs, n_nodes)`` per rung, mapped onto a tuned ladder by
+        nearest temperature (issue #1343); ``None`` draws as before.
     ladder_tuning : LadderTuning | None
         As :func:`parallel_tempering`'s.
 
@@ -1396,7 +1455,8 @@ def cluster_tempering(
     ------
     ValueError
         If the ladder is not strictly increasing, coldest first, or
-        ``houdayer_pairs`` is outside ``[0, n_replicas - 1]``.
+        ``houdayer_pairs`` is outside ``[0, n_replicas - 1]``, or ``start``
+        is neither shape.
     """
     refuse_negative_coupling(PottsMove.SWENDSEN_WANG, graph)
 
@@ -1427,11 +1487,8 @@ def cluster_tempering(
     betas = [1.0 / temperature for temperature in temperatures]
     children = rng.spawn(n_replicas)
     n_states = int(rows.shape[1])
-    states = np.ascontiguousarray(
-        np.stack(
-            [child.integers(0, n_states, size=graph.n_nodes) for child in children]
-        ),
-        dtype=np.int64,
+    states = _rung_starts(
+        start, temperatures, ladder_tuning, children, graph.n_nodes, n_states
     )
     adjacency = graph.compressed_adjacency()
     per_sweep = graph.n_nodes + 2 * len(graph.edges)
