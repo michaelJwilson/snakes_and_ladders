@@ -119,6 +119,68 @@ def anneal[S, C, R](
     )
 
 
+def anneal_spent[S, C, R](
+    step: Step[S, C, R],
+    schedule: TempSchedule,
+    start: Moved[S, C],
+    rng: R,
+    keep: Callable[[S], S],
+    *,
+    budget: int,
+) -> Walked[S]:
+    """:func:`anneal` until the steps have spent ``budget``, the schedule read at the spent fraction (issue #1344).
+
+    A step whose cost is not known before it runs --- a Wolff step, charged
+    by its cluster --- cannot be given a step count that spends a budget.
+    Each step here runs at ``schedule(min(n - 1, spent * n // budget))``,
+    ``spent`` what the steps before it cost and ``n`` the schedule's length,
+    and the run stops at the first step that brings ``spent`` to
+    ``budget`` or past it, so it overspends by less than its last step. A
+    step of fixed cost ``c`` with ``budget = n * c`` runs step ``k`` at
+    index ``k * c * n // (n * c) = k``: :func:`anneal`'s run, bitwise. The
+    last temperature runs once ``spent`` reaches ``(n - 1) / n`` of the
+    budget, which every run reaches whose steps each cost at most
+    ``budget / n``. The termination counts the steps run; the start's
+    charge rides on ``spent`` and does not count against ``budget``.
+
+    Raises
+    ------
+    ValueError
+        If ``budget < 1``, or a step charges nothing: such a run never ends.
+    """
+    if budget < 1:
+        msg = f"a budget is at least 1, got {budget}"
+        raise ValueError(msg)
+    state, energy, carried, charged = start
+    best, best_energy = keep(state), energy
+    energies = [energy]
+    tracked = current()
+    n_steps, spent, index = schedule.n_steps, 0, 0
+    while spent < budget:
+        temperature = schedule(min(n_steps - 1, spent * n_steps // budget))
+        moved = step(state, energy, carried, temperature, rng)
+        if moved.spent < 1:
+            msg = "a step charged nothing, so a budget in its unit is never spent"
+            raise ValueError(msg)
+        state, energy, carried = moved.state, moved.energy, moved.carried
+        spent += moved.spent
+        energies.append(energy)
+        if energy < best_energy:
+            best, best_energy = keep(state), energy
+        tracked.record(index, state=best, temperature=temperature, energy=best_energy)
+        index += 1
+    if hasattr(state, "nbytes"):
+        tracked.record_cost(max(index - 1, 0), int(state.nbytes))
+    return Walked(
+        best=best,
+        energy=best_energy,
+        final=state,
+        energies=tuple(energies),
+        spent=charged + spent,
+        termination=Termination.after(index, converged=False),
+    )
+
+
 def anneal_adaptive[S, C, R](
     step: Step[S, C, R],
     schedule: AdaptiveSchedule,
