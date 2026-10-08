@@ -19,7 +19,8 @@ import itertools
 import numpy as np
 import pytest
 from sal.backend import Backend
-from sal.sample.potts_mcmc import PottsMove, Recolour, chains, parallel_tempering
+from sal.sample.potts_mcmc import PottsMove, Recolour, chains
+from sal.sandbox.potts_tempering import parallel_tempering
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import energy
 

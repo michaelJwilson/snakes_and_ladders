@@ -265,7 +265,7 @@ def _population(
     **Every replica draws from its own generator**, spawned from the parent
     that then draws only the resampling uniforms, where a caller asked for
     any --- the rule
-    :func:`~sal.sample.potts_mcmc.parallel_tempering` states
+    :func:`~sal.sandbox.potts_tempering.parallel_tempering` states
     and for the reason it gives. The states are one contiguous block so
     :func:`~sal.sim.potts.energies` scores the population in
     one call and each row is still a buffer the kernel can borrow.

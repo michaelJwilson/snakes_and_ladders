@@ -253,7 +253,6 @@ ALGORITHMS: dict[str, str] = {
     "sample.gibbs.anneal_topology": "sampling and tempering",
     "sample.potts_mcmc.sample_potts": "sampling and tempering",
     "sample.potts_mcmc.anneal_potts": "sampling and tempering",
-    "sample.potts_mcmc.parallel_tempering": "sampling and tempering",
     "sample.gibbs.sample_factor_graph": "sampling and tempering",
     "sample.gibbs.chain_block_sweep": "sampling and tempering",
     "sample.hmc.anneal": "sampling and tempering",

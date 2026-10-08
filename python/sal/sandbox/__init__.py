@@ -34,6 +34,10 @@ referee of the kept one arc for arc. ``covariate_grid`` is here as
 ``tropical`` is, declined: a continuous covariate coded on a power-of-two grid
 (issue #1064), which no family reaches, since the exposure factors and the
 trial count is exact.
+``adaptive_schedules`` is here declined: #1333's ``THERMODYNAMIC`` ramp and
+Huang schedule (issue #1352). ``potts_tempering`` is here on the "unsupported"
+rule, by the owner's decision alone: the Potts ``parallel_tempering`` and what
+ran through it (issue #1352).
 """
 
 from sal import _submodules

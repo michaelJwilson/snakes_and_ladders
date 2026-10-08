@@ -41,9 +41,7 @@ START = np.random.default_rng(1305).integers(0, 3, RUNG.n_nodes)
 #: The entries with no single starting labelling, which refuse a start.
 #: What a recording call returns in place of a run.
 SENTINEL: Any = object()
-NO_START = frozenset(
-    {"field_argmax", "tempering", "tempering-mixed", "max-product", "bifurcation"}
-)
+NO_START = frozenset({"field_argmax", "max-product", "bifurcation"})
 
 
 def _explicit(name: str) -> Callable[..., MethodRun]:

@@ -17,9 +17,10 @@ from sal.sample.gibbs import AnnealedLabelling, AnnealedTopology
 from sal.sample.hmc import AnnealedTheta, HmcChain
 from sal.sample.hmc import Tempered as HmcTempered
 from sal.sample.langevin import LangevinChain
-from sal.sample.potts_mcmc import AnnealedPotts, ClusterTempered, TemperedChains
+from sal.sample.potts_mcmc import AnnealedPotts, ClusterTempered
 from sal.sample.schedule import Annealed, Tempered
 from sal.sample.slice import SliceChain
+from sal.sandbox.potts_tempering import TemperedChains
 
 PACKAGE = Path(__file__).resolve().parents[3] / "python" / "sal"
 

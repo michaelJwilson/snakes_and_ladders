@@ -46,8 +46,6 @@ EXACT = 1e-9
 #: field's argmax rather than a uniform draw.
 REFUSED = (
     "field_argmax",
-    "tempering",
-    "tempering-mixed",
     "max-product",
     "bifurcation",
 )
@@ -73,7 +71,6 @@ BEFORE = {
     "ci/anneal": "b599a8a6d3e3ebbc",
     "ci/swendsen-wang": "baf7e04c393e8a9e",
     "ci/wolff": "6ae699293ac05e3a",
-    "ci/tempering": "efb5e19b6fdbcea1",
     "ci/alpha-expansion": "43fe1263a3fb0417",
     "ci/alpha-beta-swap": "212124e7656e961a",
     "ci/max-product": "2fd81f289869933b",
@@ -84,8 +81,6 @@ BEFORE = {
     "release/anneal": "6582386d83d0024b",
     "release/swendsen-wang": "922f0038e98fe6f4",
     "release/wolff": "8628d1e1aca72bda",
-    # Re-pinned by #1362: the ladder's Wolff rungs take the Rust step by default.
-    "release/tempering": "c2fe802f974d5680",
     "release/alpha-expansion": "a5415d349d97d72f",
     "release/alpha-beta-swap": "7d8f0bca122dcb29",
     "release/max-product": "a6c10c7ef9f08414",

@@ -17,9 +17,10 @@ from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.opt.termination import Stop
 from sal.sample.loop import swap_log_ratio
-from sal.sample.potts_mcmc import chains, cluster_tempering, parallel_tempering
+from sal.sample.potts_mcmc import chains, cluster_tempering
 from sal.sample.tune import LadderTuning, TunedLadder
-from sal.search.ground_state import Problem, run_tempering
+from sal.sandbox.potts_tempering import parallel_tempering, run_tempering
+from sal.search.ground_state import Problem
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
 SEED = 1337

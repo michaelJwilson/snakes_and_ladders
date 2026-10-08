@@ -4,7 +4,7 @@ Replica exchange over the factor graph and over tree topologies: replicas at
 fixed temperatures, each stepped by a move :mod:`sal.sample.gibbs`
 already holds -- the heat-bath sweep for a labelling or a decoding, the
 Metropolis move for a topology -- and exchanged on the ratio
-:func:`sal.sample.potts_mcmc.parallel_tempering` uses
+:func:`sal.sandbox.potts_tempering.parallel_tempering` uses
 (``docs/tex/textbook.tex``, ``eq:exchange``). Nothing here is a new sampler;
 the ensemble is the moves of issue #309 on the ladder of issue #267.
 
@@ -21,7 +21,7 @@ exchange carries what the hot replicas find down the ladder.
 **The exchange loop is not this module's.** It is
 :func:`sal.sample.loop.temper` (issue #1218), which
 :func:`sal.sample.hmc.parallel_tempering` and
-:func:`sal.sample.potts_mcmc.parallel_tempering` run too, each supplying its
+:func:`sal.sandbox.potts_tempering.parallel_tempering` run too, each supplying its
 own step per rung and its own stream as the swap's draw (issue #861). The
 temperings stay entry points with their own referees --- enumeration for the
 lattice, quadrature for the posterior --- and what they share is the loop,
@@ -60,14 +60,11 @@ from sal.sample.potts_mcmc import (
     energies,
     houdayer_move,
     move_set,
-    parallel_tempering,
     refuse_negative_coupling,
     sweep_for,
 )
 from sal.sample.schedule import (
-    FeedbackLadder,
     TempSchedule,
-    adapt_ladder_by_round_trips,
     check_ladder,
     ladder,
 )
@@ -124,7 +121,7 @@ class TemperedEnsemble:
 
         :func:`round_trip_time` on :attr:`walkers`, which is where the
         arithmetic lives: a
-        :class:`~sal.sample.potts_mcmc.TemperedChains` carries
+        :class:`~sal.sandbox.potts_tempering.TemperedChains` carries
         the same trace and is read by the same definition.
         """
         return round_trip_time(self.walkers)
@@ -614,58 +611,4 @@ def tempered_topologies(
         children,
         rng,
         (n_sweeps, burn_in, thin),
-    )
-
-
-def adapt_ladder_round_trips(
-    graph: PottsGraph,
-    field: SiteField | np.ndarray,
-    temperatures: TempSchedule | Sequence[float],
-    rng: np.random.Generator,
-    n_sweeps: int,
-    tolerance: float,
-    max_iterations: int,
-    *,
-    backend: Backend = Backend.RUST,
-) -> FeedbackLadder:
-    """A ladder for :func:`~sal.sample.potts_mcmc.parallel_tempering`, placed by its own round trips.
-
-    :func:`sal.sample.schedule.adapt_ladder_by_round_trips`, the
-    measurement being a :func:`~sal.sample.potts_mcmc.parallel_tempering`
-    run of ``n_sweeps`` per replica on the candidate ladder, read through
-    :func:`up_fraction`. The sibling of
-    :func:`~sal.sample.potts_mcmc.adapt_ladder_potts`, which
-    places the same ladder by its exchange acceptance; both draw from ``rng``
-    in sequence, so one seed reproduces the warm-up, and
-    ``replicas_measured * n_sweeps`` is its cost in sweeps, which a comparison
-    at equal budget charges.
-
-    Parameters
-    ----------
-    graph, field, rng, backend
-        As :func:`~sal.sample.potts_mcmc.parallel_tempering`.
-    temperatures : TempSchedule | Sequence[float]
-        The starting ladder, in either spelling and read by
-        :func:`~sal.sample.schedule.ladder` into the same
-        floats; its endpoints and its length are the result's.
-    n_sweeps : int
-        Sweeps per replica per measurement. The up-fraction is a ratio of
-        visit counts over these, so it sets what the placement can resolve.
-    tolerance, max_iterations
-        As :func:`sal.sample.schedule.adapt_ladder_by_round_trips`.
-
-    Returns
-    -------
-    FeedbackLadder
-    """
-    field = log_weight_of(field)
-
-    def measure(candidate: tuple[float, ...]) -> list[float]:
-        run = parallel_tempering(
-            graph, field, candidate, rng, n_sweeps, backend=backend
-        )
-        return [float(value) for value in up_fraction(run.walkers)]
-
-    return adapt_ladder_by_round_trips(
-        measure, ladder(temperatures), tolerance, max_iterations
     )

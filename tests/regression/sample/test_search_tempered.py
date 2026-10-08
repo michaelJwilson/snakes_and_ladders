@@ -21,23 +21,21 @@ import pytest
 from sal.backend import Backend
 from sal.likelihood.hmm_paths import emission_log_density
 from sal.likelihood.potts import log_weights
-from sal.sample.potts_mcmc import (
-    PottsMove,
-    adapt_ladder_potts,
-    houdayer_move,
-    parallel_tempering,
-    sweep_for,
-)
+from sal.sample.potts_mcmc import PottsMove, houdayer_move, sweep_for
 from sal.sample.statistics import chi_square_p_value, sign_test_p_value
 from sal.sample.tempered import (
     TemperedEnsemble,
-    adapt_ladder_round_trips,
     round_trip_time,
     round_trips,
     tempered_factor_graph,
     tempered_potts_pair,
     tempered_topologies,
     up_fraction,
+)
+from sal.sandbox.potts_tempering import (
+    adapt_ladder_potts,
+    adapt_ladder_round_trips,
+    parallel_tempering,
 )
 from sal.search.support import (
     SupportKind,

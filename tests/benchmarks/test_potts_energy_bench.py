@@ -25,7 +25,7 @@ import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
 from sal.likelihood.potts import log_weights
-from sal.search.ground_state import N_REPLICAS
+from sal.sandbox.potts_tempering import N_REPLICAS
 from sal.search.potts_starts import spatio_rung
 from sal.sim.fixtures import fixture
 from sal.sim.graph import BoundaryCondition, lattice_graph
