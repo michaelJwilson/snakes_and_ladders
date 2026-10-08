@@ -409,8 +409,17 @@ def _log_rising_kernel(
     plain_error: float,
     promise: float,
     floor: float,
+    scaled: bool,
 ) -> None:
-    """``out[i] = lgamma(x[i] + m[i]) - lgamma(x[i])`` over flat, contiguous arrays."""
+    """``out[i] = lgamma(x[i] + m[i]) - lgamma(x[i])`` over flat, contiguous arrays.
+
+    With ``scaled``, ``out[i]`` is that less ``m[i] log x[i]``. The plain
+    difference less ``m log x`` is taken where its bound --- the two
+    ``lgamma`` and ``m log x`` each to ``plain_error`` relative --- meets the
+    promise over ``max(|out|, 1)``, which holds wherever ``m log x`` does not
+    cancel against the rise (small ``x``, or ``m`` large beside ``x``); the
+    series elsewhere, where ``m log x`` is never formed (issue #1332).
+    """
     for i in range(x.size):
         xi = x[i]
         mi = m[i]
@@ -421,7 +430,13 @@ def _log_rising_kernel(
         base = _gammaln(xi)
         plain = rise - base
         bound = plain_error * (max(abs(rise), 1.0) + max(abs(base), 1.0))
-        if bound <= promise * max(abs(plain), 1.0):
+        if scaled:
+            shift = mi * math.log(xi)
+            value = plain - shift
+            if bound + plain_error * abs(shift) <= promise * max(abs(value), 1.0):
+                out[i] = value
+                continue
+        elif bound <= promise * max(abs(plain), 1.0):
             out[i] = plain
             continue
         y = xi
@@ -458,8 +473,14 @@ def _log_rising_kernel(
             p = p * upper_square + power * both
             total += _LGAMMA_SERIES[k] * p
             power *= inverse_square
-        scaled = mi * h + (mi - 0.5) * step + total * gap
-        out[i] = (scaled + mi * math.log(y)) + recurrence
+        series = mi * h + (mi - 0.5) * step + total * gap
+        if scaled:
+            # No shift when `x` is already in the series' range: `log1p(0)`
+            # is 0, and at `x = inf` the ratio would be `inf / inf`.
+            moved = mi * math.log1p((y - xi) / xi) if y != xi else 0.0
+            out[i] = (series + moved) + recurrence
+        else:
+            out[i] = (series + mi * math.log(y)) + recurrence
 
 
 def _digamma_rising_kernel(
@@ -555,6 +576,63 @@ def log_rising(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
         _PLAIN_ERROR,
         _LOG_PROMISE,
         _TERM_FLOOR,
+        False,
+    )
+    return out
+
+
+def log_rising_into(
+    x: NDArray[np.float64], m: NDArray[np.float64], out: NDArray[np.float64]
+) -> None:
+    """:func:`log_rising` written into ``out``, allocating nothing (issue #1332).
+
+    ``x``, ``m`` and ``out`` are ``float64``, C-contiguous and of one shape;
+    no broadcast is taken, since a broadcast allocates. A compiled loop that
+    needs rising factorials takes them from tables built once per M step
+    with this, such as :func:`sal.emissions.bb.trial_tables`; no scalar
+    ``@njit`` form is public. ``out`` is :func:`log_rising` bit for bit.
+    """
+    for name, array in (("x", x), ("m", m), ("out", out)):
+        if array.dtype != np.float64 or not array.flags.c_contiguous:
+            msg = f"{name} is C-contiguous float64, got {array.dtype}"
+            raise ValueError(msg)
+    if not x.shape == m.shape == out.shape:
+        msg = f"x, m and out share one shape, got {x.shape}, {m.shape}, {out.shape}"
+        raise ValueError(msg)
+    _kernels()[0](
+        x.reshape(-1),
+        m.reshape(-1),
+        out.reshape(-1),
+        _SERIES_FROM,
+        _SMALL_T,
+        _PLAIN_ERROR,
+        _LOG_PROMISE,
+        _TERM_FLOOR,
+        False,
+    )
+
+
+def scaled_rising_array(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
+    """``lgamma(x + m) - lgamma(x) - m log x``, :func:`scaled_rising` on NumPy arrays; broadcasts.
+
+    :func:`log_rising`'s compiled kernel. The plain ``lgamma`` difference less
+    ``m log x`` where its error bound meets the 1e-14 promise over
+    ``max(|f|, 1)`` --- no cancellation, as at small ``x`` --- and otherwise
+    the series with ``m log x`` removed inside it, never formed: ``0`` at
+    ``x = inf`` and at ``m = 0``. The beta-binomial's tables are these
+    (issue #1332).
+    """
+    x_, m_, out = _flat(x, m)
+    _kernels()[0](
+        x_,
+        m_,
+        out.reshape(-1),
+        _SERIES_FROM,
+        _SMALL_T,
+        _PLAIN_ERROR,
+        _LOG_PROMISE,
+        _TERM_FLOOR,
+        True,
     )
     return out
 
@@ -588,6 +666,24 @@ def on_distinct(
     if values.dim() == 0 or values.shape[-1] != 1 or values.numel() < 64:
         return table(values)
     distinct, inverse = distinct_values(values)
+    rows = table(distinct.reshape(-1, 1))
+    return rows[inverse.reshape(-1)].reshape(*values.shape[:-1], rows.shape[-1])
+
+
+def on_distinct_array(
+    values: NDArray[np.float64],
+    table: Callable[[NDArray[np.float64]], NDArray[np.float64]],
+) -> NDArray[np.float64]:
+    """:func:`on_distinct` on NumPy arrays, for a caller that takes no derivative (issue #1332).
+
+    ``values`` ends in a singleton axis, ``(..., 1)``, and ``table`` maps a
+    ``(D, 1)`` column of them to ``(D, K)``. Elementwise, so the gathered
+    entries are ``table(values)`` bit for bit. Too few values, or no
+    singleton axis, and ``table`` takes them directly.
+    """
+    if values.ndim == 0 or values.shape[-1] != 1 or values.size < 64:
+        return table(values)
+    distinct, inverse = np.unique(values, return_inverse=True)
     rows = table(distinct.reshape(-1, 1))
     return rows[inverse.reshape(-1)].reshape(*values.shape[:-1], rows.shape[-1])
 

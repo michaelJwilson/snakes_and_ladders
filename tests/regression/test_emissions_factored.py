@@ -2,7 +2,7 @@
 
 :mod:`sal.emissions.nb` tabulates the negative binomial by count and leaves
 the exposure to the caller; :mod:`sal.emissions.bb` tabulates the
-beta-binomial's nine ``lgamma`` terms each by its own integer. Each is
+beta-binomial's rising factorials each by its own integer (issue #1332). Each is
 reassembled here per observation and judged against the family scoring the
 same draws, simulated from the family at a seeded per-observation covariate.
 """
@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 import torch
 from sal.emissions import BetaBinomialEmission, NegativeBinomialEmission
-from sal.emissions.bb import log_factorial, trial_tables
+from sal.emissions.bb import beta_binomial_log_pmf, log_factorial, trial_tables
 from sal.emissions.nb import count_log_factor, exposure_table
 
 SEED = 20260925
@@ -104,36 +104,48 @@ def test_the_exposure_table_completed_per_observation_is_the_density_to_its_roun
     )
 
 
+#: The scaled rising-factorial pmf against the family's ``lgamma``
+#: arithmetic, over ``max(|f|, 1)`` (issue #1332). Both routes form ``log C``
+#: from three ``lgamma`` of size up to ``lgamma(41)``, each rounded to half an
+#: ulp: 3.7e-14 per route, 7.3e-14 between two, 1e-13 with the rest of the
+#: sum. Derived, not fitted.
+DENSITY_TOLERANCE = 1e-13
+
+
 @pytest.mark.oracle
-def test_the_trial_tables_summed_in_the_familys_order_are_its_density_bitwise() -> None:
-    # Nine `lgamma`, each of the argument `log_density` forms, summed in its
-    # order: the same numbers, so the same bits, including the unobserved
-    # draws (zero) and none past their trials.
+def test_the_trial_tables_summed_in_order_are_the_numpy_pmf_bitwise() -> None:
+    # `log C + U + V - W`, the order `beta_binomial_log_pmf` sums in and the
+    # same `log_rising` and `gammaln` calls, so the same bits; the family's
+    # `log_density` agrees within DENSITY_TOLERANCE (measured 4.2e-14).
     family, successes, trials = _beta_binomial()
     z, n = successes.astype(np.int64), trials.astype(np.int64)
     tables = trial_tables(family, int(z.max()) + 1, int(n.max()) + 1)
     factorial = log_factorial(int(n.max()) + 1)
     observed = n > 0
     zo, no = z[observed], n[observed]
-    total, alpha, beta = tables.log_beta
 
-    assembled = torch.zeros(z.size, family.n_states, dtype=torch.float64)
+    assembled = np.zeros((z.size, family.n_states))
+    log_p, log_q = tables.log_rate
+    binomial = (
+        ((factorial[no] - factorial[zo]) - factorial[no - zo])[:, None]
+        + zo[:, None] * log_p
+    ) + (no - zo)[:, None] * log_q
     assembled[observed] = (
-        ((factorial[no] - factorial[zo]) - factorial[no - zo]).unsqueeze(-1)
-        + tables.success[zo]
-        + tables.failure[no - zo]
-        - tables.trial[no]
-        + total
-        - alpha
-        - beta
+        (binomial + tables.success[zo]) + tables.failure[no - zo]
+    ) - tables.trial[no]
+    pmf = beta_binomial_log_pmf(
+        zo[:, None], no[:, None], family.alpha.numpy(), family.beta.numpy()
     )
     want = family.log_density(
         torch.as_tensor(successes, dtype=torch.float64),
         covariate=torch.as_tensor(trials)[:, None],
-    )
+    ).numpy()
 
     assert bool((~observed).any())
-    assert torch.equal(assembled, want)
+    assert np.array_equal(assembled[observed], pmf)
+    assert np.array_equal(assembled[~observed], want[~observed])
+    worst = float((np.abs(assembled - want) / np.maximum(np.abs(want), 1.0)).max())
+    assert worst <= DENSITY_TOLERANCE, worst
 
 
 @pytest.mark.oracle
@@ -141,4 +153,4 @@ def test_the_log_factorial_is_the_factorial() -> None:
     # `lgamma(j + 1) = log j!`, against the integers themselves.
     exact = np.log([float(np.prod(np.arange(1, j + 1))) for j in range(21)])
 
-    np.testing.assert_allclose(log_factorial(21).numpy(), exact, rtol=1e-15, atol=0)
+    np.testing.assert_allclose(log_factorial(21), exact, rtol=1e-15, atol=0)

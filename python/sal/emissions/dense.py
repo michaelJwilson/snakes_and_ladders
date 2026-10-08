@@ -17,9 +17,11 @@ channel's plus the second's. The joint pair is refused: its trial count is the
 observed total, and a total of zero is a support point there where the trial
 term reads it as unobserved.
 
-**The order is the caller's.** The beta-binomial's nine tabulated terms are
-summed in the family's order and each score is its ``log_density`` bit for
-bit. The negative binomial's exposure term is completed either in the family's
+**The order is the caller's.** The beta-binomial's tabulated terms, scaled
+rising factorials and log rates summed in :mod:`sal.emissions.bb`'s order
+(issue #1332), are
+:func:`~sal.emissions.bb.beta_binomial_log_pmf` bit for bit and the family's
+``log_density`` within 1e-14 ``max(|f|, 1)``. The negative binomial's exposure term is completed either in the family's
 order, ``A + r ln(r / t) + y ln(mu c / t)`` (:attr:`Order.FAMILY`, two
 logarithms a score, 2.3 ulp relative at the ci instance of
 ``spatio_sequential_counts_covariate``), or as the coupled kernel does,
@@ -43,7 +45,7 @@ import torch
 
 from sal import oxisal
 from sal.emissions.base import as_array, split_covariate
-from sal.emissions.bb import log_factorial, trial_tables
+from sal.emissions.bb import density_table, log_factorial, trial_tables
 from sal.emissions.counts import (
     BetaBinomialEmission,
     CountPairEmission,
@@ -118,7 +120,13 @@ def _extent(counts: np.ndarray) -> int:
 def _density_table(
     family: NegativeBinomialEmission | BetaBinomialEmission, extent: int
 ) -> np.ndarray:
-    """The family's own ``log_density`` at every count below ``extent``, ``(extent, K)``."""
+    """The family's own ``log_density`` at every count below ``extent``, ``(extent, K)``.
+
+    A beta-binomial's is :func:`~sal.emissions.bb.density_table`, the NumPy
+    pmf every other route reads (issue #1332).
+    """
+    if isinstance(family, BetaBinomialEmission):
+        return np.ascontiguousarray(density_table(family, extent)).reshape(-1)
     grid = torch.arange(extent, dtype=torch.float64)
     return np.ascontiguousarray(family.log_density(grid).numpy()).reshape(-1)
 
@@ -162,12 +170,12 @@ def _success_arguments(
     tables = trial_tables(family, extent, trials_extent)
     return {
         "successes": counts,
-        "success_table": np.ascontiguousarray(tables.success.numpy()).reshape(-1),
+        "success_table": np.ascontiguousarray(tables.success).reshape(-1),
         "trials": per_observation,
-        "failure_table": np.ascontiguousarray(tables.failure.numpy()).reshape(-1),
-        "trial_table": np.ascontiguousarray(tables.trial.numpy()).reshape(-1),
-        "log_factorial": np.ascontiguousarray(log_factorial(trials_extent).numpy()),
-        "log_beta": np.ascontiguousarray(tables.log_beta.numpy()).reshape(-1),
+        "failure_table": np.ascontiguousarray(tables.failure).reshape(-1),
+        "trial_table": np.ascontiguousarray(tables.trial).reshape(-1),
+        "log_factorial": log_factorial(trials_extent),
+        "log_rate": np.ascontiguousarray(tables.log_rate).reshape(-1),
     }
 
 
