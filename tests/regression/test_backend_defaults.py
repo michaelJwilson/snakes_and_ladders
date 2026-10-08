@@ -55,8 +55,6 @@ EXCEPTIONS = {
     "sample/gibbs/__init__.py::heat_bath(backend)": _GIBBS,
     "sample/slice.py::slice_sample(backend)": _NO_RUST,
     "search/icm/__init__.py::colouring(backend)": _GIBBS,
-    "search/icm/__init__.py::iterated_conditional_modes(backend)": _GIBBS,
-    "search/icm/__init__.py::merge_small_labels(backend)": _GIBBS,
     "search/trws/__init__.py::trws(backend)": _GIBBS,
     "sim/count_pairs/__init__.py::simulate_count_pairs(backend)": (
         "<2x at stress: 1.05x (30.7 s against 29.1 s, "
@@ -92,6 +90,16 @@ FLIPPED = {
     "sample/potts_keyed.py::cluster_moves(backend)": "13.5x, 64^2",
     "likelihood/pruning/__init__.py::log_likelihood(backend)": "15.5x, tree_jc/stress",
     "learn/ranking.py::ground_state_target(backend)": "32.8x, spatio_only/stress",
+    # An owner exception to the 2x rule (#1368): one compiled path for the
+    # annealing loop and its polish, on simplicity grounds; numba and Python
+    # stay as the oracles it is pinned bitwise against.
+    "search/icm/__init__.py::iterated_conditional_modes(backend)": (
+        "owner decision, not the 2x rule (#1368): one compiled path for the "
+        "anneal loop and its polish"
+    ),
+    "search/icm/__init__.py::merge_small_labels(backend)": (
+        "owner decision, not the 2x rule (#1368), as iterated_conditional_modes"
+    ),
     "search/spatio_sequential.py::fit_spatio_sequential(backend)": (
         "2.21x, negative binomial under exposure, spatio_sequential/stress (#1308)"
     ),

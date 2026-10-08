@@ -131,18 +131,33 @@ def test_the_numba_descent_in_any_order_every_sweep_run_is_the_python_one(
     every_value(range(6), check)
 
 
-@pytest.mark.smoke
-def test_descent_has_no_rust_backend() -> None:
-    graph = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.5)
-
-    with pytest.raises(ValueError, match="runs on numba or python, not rust"):
-        iterated_conditional_modes(
-            graph,
-            np.zeros(3),
-            np.random.default_rng(0),
-            backend=Backend.RUST,
-            n_states=3,
-        )
+@pytest.mark.oracle
+@pytest.mark.parametrize("order", [SweepOrder.INDEX, SweepOrder.CHECKERBOARD])
+@pytest.mark.parametrize("min_sites", [0, 5])
+def test_the_rust_descent_is_the_numba_descent_bitwise(
+    order: SweepOrder, min_sites: int
+) -> None:
+    """``oxisal.icm_sweeps`` against the ``numba`` kernel: labelling, sweeps and termination, forbidden labels and floor included (#1368)."""
+    graph = lattice_graph((7, 9), BoundaryCondition.PERIODIC, 0.4)
+    for seed in range(20):
+        draw = np.random.default_rng(seed)
+        field = draw.normal(0.0, 1.0, (graph.n_nodes, 4))
+        field[draw.random(field.shape) < 0.1] = -np.inf
+        runs = [
+            iterated_conditional_modes(
+                graph,
+                field,
+                np.random.default_rng(seed),
+                sweep_order=order,
+                min_sites=min_sites,
+                backend=backend,
+            )
+            for backend in (Backend.NUMBA, Backend.RUST)
+        ]
+        np.testing.assert_array_equal(runs[0].labelling, runs[1].labelling)
+        assert runs[0].sweeps == runs[1].sweeps
+        assert runs[0].energy == runs[1].energy
+        assert runs[0].termination == runs[1].termination
 
 
 def _recomputing_descent(

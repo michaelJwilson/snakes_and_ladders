@@ -45,6 +45,39 @@ use rand_chacha::ChaCha8Rng;
 
 use crate::wolff::heat_bath_label;
 
+/// Site `node`'s unnormalized log conditional into `local`: its field row,
+/// plus each incident coupling on its neighbour's current label, summed in
+/// the adjacency's order. The single-site sweep and ICM (#1368) share it, so
+/// the two read a site's neighbours one way.
+///
+/// # Errors
+/// Returns `Err` where an adjacency entry names a node outside `state`.
+#[inline]
+pub fn conditional(
+    local: &mut [f64],
+    field: &[f64],
+    state: &[i64],
+    offsets: &[usize],
+    neighbours: &[i64],
+    couplings: &[f64],
+    node: usize,
+) -> Result<(), String> {
+    let n_nodes = state.len();
+    let n_states = local.len();
+    local.copy_from_slice(&field[node * n_states..(node + 1) * n_states]);
+    for entry in offsets[node]..offsets[node + 1] {
+        let neighbour = neighbours[entry];
+        if neighbour < 0 || neighbour as usize >= n_nodes {
+            return Err(format!(
+                "adjacency entry {entry} names node {neighbour}, \
+                 expected [0, {n_nodes})"
+            ));
+        }
+        local[state[neighbour as usize] as usize] += couplings[entry];
+    }
+    Ok(())
+}
+
 /// Run `n_sweeps` heat-bath sweeps over `state`, in place.
 ///
 /// Each sweep visits every site in index order and redraws it from its exact
@@ -176,17 +209,9 @@ pub fn single_site_sweeps_impl(
     // it is the flat sweep-and-node position this returns.
     for (position, &draw) in draws.iter().enumerate().skip(first) {
         let node = position % n_nodes;
-        local.copy_from_slice(&field[node * n_states..(node + 1) * n_states]);
-        for entry in offsets[node]..offsets[node + 1] {
-            let neighbour = neighbours[entry];
-            if neighbour < 0 || neighbour as usize >= n_nodes {
-                return Err(format!(
-                    "adjacency entry {entry} names node {neighbour}, \
-                     expected [0, {n_nodes})"
-                ));
-            }
-            local[state[neighbour as usize] as usize] += couplings[entry];
-        }
+        conditional(
+            &mut local, field, state, offsets, neighbours, couplings, node,
+        )?;
 
         // `beta` here and not on the arguments, because the oracle
         // scales the accumulated local field rather than its parts.

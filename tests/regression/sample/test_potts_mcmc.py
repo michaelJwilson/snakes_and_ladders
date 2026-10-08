@@ -1064,6 +1064,7 @@ def _autocorrelation_in_site_updates(move: PottsMove, graph: PottsGraph) -> floa
         burn_in=CRITICAL.burn_in * factor,
         cluster_backend=Backend.PYTHON,
         recolour=Recolour.UNIFORM,  # the recorded study's move (#1323)
+        loop_backend=Backend.PYTHON,  # and its loop's stream (#1368)
     )
     tau = integrated_autocorrelation_time(energies(graph, field, chain.states))
     return tau * chain.mean_cluster_size / graph.n_nodes
@@ -1108,6 +1109,7 @@ def test_the_cluster_advantage_is_absent_at_the_registry_instance() -> None:
             sweeps,
             burn_in=sweeps // 5,
             recolour=Recolour.UNIFORM,  # the recorded study's move (#1323)
+            loop_backend=Backend.PYTHON,  # the notebook's stream (#1368)
         )
         tau = integrated_autocorrelation_time(energies(graph, field, chain.states))
         times[move] = tau * chain.mean_cluster_size / graph.n_nodes

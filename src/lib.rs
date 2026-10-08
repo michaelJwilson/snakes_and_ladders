@@ -30,6 +30,7 @@ pub mod energy;
 pub mod hmc;
 pub mod hmm_decode;
 pub mod hmm_stream;
+pub mod icm;
 pub mod lattice_cut;
 pub mod maxflow;
 #[cfg(feature = "sandbox")]
@@ -38,6 +39,7 @@ pub mod message_passing;
 pub mod metropolis;
 pub mod mixture_stream;
 pub mod potts;
+pub mod potts_loop;
 pub mod pruning;
 #[cfg(feature = "sandbox")]
 pub mod pruning_burn;
@@ -66,6 +68,7 @@ pub use hmm_stream::{
     categorical_em_step, count_cells, count_em_step, gaussian_em_step, gaussian_hmm_statistics,
     posterior_probabilities_into, ragged_posterior_probabilities,
 };
+pub use icm::icm_sweeps;
 pub use lattice_cut::LatticeCut;
 pub use maxflow::{ising_ground_state, ising_ground_states, max_flow};
 #[cfg(feature = "sandbox")]
@@ -119,6 +122,8 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(single_site_sweeps, m)?)?;
     m.add_function(wrap_pyfunction!(swendsen_wang_sweep, m)?)?;
     m.add_function(wrap_pyfunction!(wolff_sweeps, m)?)?;
+    m.add_function(wrap_pyfunction!(potts_loop::potts_loop, m)?)?;
+    m.add_function(wrap_pyfunction!(icm_sweeps, m)?)?;
     m.add_function(wrap_pyfunction!(swendsen_wang_heat_bath_sweeps, m)?)?;
     m.add_function(wrap_pyfunction!(class_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(external_field, m)?)?;

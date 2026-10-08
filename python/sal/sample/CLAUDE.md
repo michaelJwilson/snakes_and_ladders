@@ -55,6 +55,13 @@ draws reach it without the module importing their type.
   `termination` is the polisher's. `spent` holds both, `polish_spent` the
   polish's part. `polish=None` is the unpolished run, bitwise.
 
+- **Python is not the step caller where the step is cheaper than the call.**
+  A loop that crosses into a compiled kernel once per step pays an
+  interpreter iteration and a crossing per step; where the step is a few
+  sites, that is the run. Such a loop runs whole in the compiled backend,
+  one crossing per run, and the Python loop stays as the oracle it is
+  pinned to (#1368).
+
 - **A tuned step is chosen by a named criterion, and the criterion is not
   the outcome.** `tune_step` ranks a pilot's candidates by the ESJD per
   gradient, the lowest energy reached or the polished gap; on #1195's HMM

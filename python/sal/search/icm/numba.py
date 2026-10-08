@@ -13,6 +13,8 @@ indexes without bounds checks. It touches no Python object and so is
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import numpy as np
 from numba import njit
 
@@ -138,8 +140,13 @@ def icm_sweeps_checked(
     n_sweeps: int,
     stop_when_clean: bool,
     min_sites: int,
+    kernel: Callable[..., int] | None = None,
 ) -> int:
     """:func:`icm_sweeps` behind the shape checks the Rust entries make (#571), messages theirs.
+
+    ``kernel`` is the compiled sweep called after the checks: this module's
+    :func:`icm_sweeps` where ``None``, or ``oxisal.icm_sweeps`` on the same
+    signature (issue #1368), so the two backends share one set of checks.
 
     ``state`` is updated in place, so it must already be a 1-D C-contiguous
     ``int64`` array; the rest are made contiguous in the kernel's dtypes here,
@@ -252,7 +259,7 @@ def icm_sweeps_checked(
         msg = f"state at node {node} is {int(state[node])}, expected [0, {n_states})"
         raise ValueError(msg)
     sweeps = int(
-        icm_sweeps(
+        (icm_sweeps if kernel is None else kernel)(
             state,
             field,
             offsets,

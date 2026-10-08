@@ -33,7 +33,7 @@ precede them.
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from enum import StrEnum
 
 import numpy as np
@@ -196,7 +196,7 @@ def iterated_conditional_modes(
     sweep_order: SweepOrder = SweepOrder.INDEX,
     stop_when_clean: bool = True,
     min_sites: int = 0,
-    backend: Backend = Backend.NUMBA,
+    backend: Backend = Backend.RUST,
 ) -> Labelling:
     """Single-site descent to a local minimum, dissolving states below ``min_sites`` after each sweep.
 
@@ -217,9 +217,12 @@ def iterated_conditional_modes(
     :func:`~sal.search.icm.numba.icm_sweeps`, returns the
     labelling the Python loop returns **bitwise** --- same update, same
     order, same first-minimum tie rule, same floor from the same draws ---
-    which is what lets it be the default (#264).
-    :data:`~sal.backend.Backend.PYTHON` is the oracle that
-    pins it.
+    which is what made it the default (#264).
+    :data:`~sal.backend.Backend.RUST`, ``oxisal.icm_sweeps``, returns it
+    bitwise too and is the default since #1368, by the owner's decision on
+    simplicity rather than the 2x rule: one compiled path for the annealing
+    loop and its polish. :data:`~sal.backend.Backend.NUMBA` and
+    :data:`~sal.backend.Backend.PYTHON` stay as the oracles that pin it.
 
     Parameters
     ----------
@@ -287,10 +290,11 @@ def iterated_conditional_modes(
         else check_labelling(start, n_nodes, n_states)
     )
     lazy = sweep_order is SweepOrder.RANDOM and stop_when_clean
-    if backend is Backend.NUMBA and sweep_order is SweepOrder.RESIDUAL:
+    compiled = backend in (Backend.NUMBA, Backend.RUST)
+    if compiled and sweep_order is SweepOrder.RESIDUAL:
         msg = f"{sweep_order} order reorders from each sweep's labels; it needs {Backend.PYTHON}"
         raise ValueError(msg)
-    if backend is Backend.NUMBA and lazy:
+    if compiled and lazy:
         msg = (
             f"the compiled sweep takes every sweep's order drawn up front, "
             f"which spends the generator past a clean sweep the Python sweep "
@@ -299,7 +303,9 @@ def iterated_conditional_modes(
         )
         raise ValueError(msg)
     refuse_backend(
-        "iterated conditional modes", backend, (Backend.NUMBA, Backend.PYTHON)
+        "iterated conditional modes",
+        backend,
+        (Backend.RUST, Backend.NUMBA, Backend.PYTHON),
     )
     # The permutations the sweep visits in, one per sweep and in the order a
     # per-sweep draw would take them (issue #923): with every sweep run, the
@@ -320,7 +326,7 @@ def iterated_conditional_modes(
     )
     offsets, neighbour_index, edge_couplings = graph.compressed_adjacency()
 
-    if backend is Backend.NUMBA:
+    if compiled:
         labelling = np.ascontiguousarray(labelling, dtype=np.int64)
         sweeps = icm_sweeps_checked(
             labelling,
@@ -333,10 +339,9 @@ def iterated_conditional_modes(
             max_iterations,
             stop_when_clean,
             min_sites,
+            kernel=_rust_icm() if backend is Backend.RUST else None,
         )
-        return _descended(
-            graph, values, labelling, sweeps, n_states, min_sites, offsets
-        )
+        return descended(graph, values, labelling, sweeps, n_states, min_sites, offsets)
 
     # The compressed rows as Python sequences, converted once rather than
     # sliced per site: a NumPy slice and gather per site measured a third of
@@ -379,7 +384,7 @@ def iterated_conditional_modes(
             break
     labelling[:] = labels
 
-    return _descended(graph, values, labelling, sweeps, n_states, min_sites, offsets)
+    return descended(graph, values, labelling, sweeps, n_states, min_sites, offsets)
 
 
 def merge_small_labels(
@@ -390,7 +395,7 @@ def merge_small_labels(
     *,
     min_sites: int,
     max_iterations: int = 200,
-    backend: Backend = Backend.NUMBA,
+    backend: Backend = Backend.RUST,
     policy: FloorPolicy = FloorPolicy.UNIFORM,
 ) -> Labelling:
     """``labelling`` with no state below ``min_sites`` sites, descended again: the floor after any solver (issue #1081).
@@ -419,7 +424,8 @@ def merge_small_labels(
         ICM sweeps to run at most.
     backend : Backend
         :func:`iterated_conditional_modes`'s, and the floor's under
-        ``SMALLEST_FIRST_BEST_FIELD``: the numba kernel, or its Python oracle.
+        ``SMALLEST_FIRST_BEST_FIELD``: the compiled kernels (the floor's is
+        ``numba`` under either compiled backend), or the Python oracle.
     policy : FloorPolicy
         ``UNIFORM``, the default, is the merge before #1324, bitwise.
         ``SMALLEST_FIRST_BEST_FIELD`` floors ``labelling`` first with no
@@ -592,7 +598,14 @@ def _merge_rounds(
         yield u, v, change, target[labels]
 
 
-def _descended(
+def _rust_icm() -> Callable[..., int]:
+    """``oxisal.icm_sweeps``, imported at the call as the other Rust routes import it."""
+    from sal import oxisal
+
+    return oxisal.icm_sweeps
+
+
+def descended(
     graph: PottsGraph,
     values: np.ndarray,
     labelling: np.ndarray,

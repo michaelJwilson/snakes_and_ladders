@@ -205,126 +205,220 @@ pub fn wolff_sweeps_impl(
     }
 
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-    let sites = Uniform::new(0, n_nodes).map_err(|e| e.to_string())?;
-    let labels = Uniform::new(0, n_states).map_err(|e| e.to_string())?;
+    let draw = WolffDraw::new(n_nodes, n_states)?;
     // Allocated once per batch: the stamp, and the heat bath's per-label sums.
-    let mut stamp = vec![0u32; n_nodes];
-    let mut sums = vec![0.0f64; n_states];
-
+    let mut scratch = WolffScratch::new(n_nodes, n_states);
     for step in 0..n_steps {
-        let epoch = step as u32 + 1;
-        let seed_node = if root < 0 {
-            sites.sample(&mut rng)
-        } else {
-            root as usize
-        };
-        let colour = state[seed_node];
-        if colour < 0 || colour >= n_states as i64 {
-            return Err(format!(
-                "state at node {seed_node} is {colour}, expected [0, {n_states})"
-            ));
-        }
-        let members = &mut *out.members;
-        members[0] = seed_node as i64;
-        stamp[seed_node] = epoch;
-        let (mut head, mut len) = (0usize, 1usize);
-        while head < len {
-            let node = members[head] as usize;
-            head += 1;
-            let (lo, hi) = (offsets[node], offsets[node + 1]);
-            if lo < 0 || hi < lo || hi as usize > neighbours.len() {
-                return Err(format!(
-                    "offsets of node {node} are [{lo}, {hi}), outside [0, {}]",
-                    neighbours.len()
-                ));
-            }
-            for position in lo as usize..hi as usize {
-                let neighbour = neighbours[position];
-                if neighbour < 0 || neighbour >= n_nodes as i64 {
-                    return Err(format!(
-                        "neighbour {neighbour} at position {position} is outside [0, {n_nodes})"
-                    ));
-                }
-                let neighbour = neighbour as usize;
-                if stamp[neighbour] == epoch || state[neighbour] != colour {
-                    continue;
-                }
-                let coupling = couplings[position];
-                // `NaN` is refused beside a negative coupling: neither gives
-                // `1 - exp(-beta J)` that is a probability.
-                if coupling.is_nan() || coupling < 0.0 {
-                    return Err(format!(
-                        "coupling {coupling} at position {position} is negative: the cluster \
-                         moves refuse it"
-                    ));
-                }
-                let bond = -(-beta * coupling).exp_m1();
-                let uniform: f64 = StandardUniform.sample(&mut rng);
-                if uniform < bond {
-                    stamp[neighbour] = epoch;
-                    members[len] = neighbour as i64;
-                    len += 1;
-                }
-            }
-        }
-        let cluster = &members[..len];
-
-        let label = if heat_bath {
-            sums.iter_mut().for_each(|s| *s = 0.0);
-            for &member in cluster {
-                let row = &field[member as usize * n_states..][..n_states];
-                for (s, &h) in sums.iter_mut().zip(row) {
-                    *s += h;
-                }
-            }
-            let label = heat_bath_label(&mut sums, beta, colour as usize, &mut rng) as i64;
-            out.proposals[step] = label != colour;
-            out.accepts[step] = label != colour;
-            label
-        } else {
-            let offer = if proposed >= 0 {
-                proposed as usize
-            } else {
-                labels.sample(&mut rng)
-            };
-            let accepted = if offer as i64 == colour {
-                out.proposals[step] = false;
-                false
-            } else {
-                out.proposals[step] = true;
-                let (mut offered, mut current) = (0.0f64, 0.0f64);
-                for &member in cluster {
-                    let row = member as usize * n_states;
-                    offered += field[row + offer];
-                    current += field[row + colour as usize];
-                }
-                if offered == f64::NEG_INFINITY {
-                    false
-                } else if current == f64::NEG_INFINITY {
-                    true
-                } else {
-                    let difference = beta * (offered - current);
-                    difference >= 0.0 || {
-                        let uniform: f64 = StandardUniform.sample(&mut rng);
-                        uniform < difference.exp()
-                    }
-                }
-            };
-            out.accepts[step] = accepted;
-            if accepted {
-                offer as i64
-            } else {
-                colour
-            }
-        };
-        if label != colour {
-            for &member in cluster {
-                state[member as usize] = label;
-            }
-        }
+        let (len, proposal, accept, _) = wolff_step(
+            state,
+            lattice,
+            beta,
+            heat_bath,
+            root,
+            proposed,
+            &mut rng,
+            &draw,
+            &mut scratch,
+            out.members,
+        )?;
+        out.proposals[step] = proposal;
+        out.accepts[step] = accept;
         out.sizes[step] = len as i64;
     }
     Ok(())
+}
+
+/// The two uniform distributions a Wolff step draws its seed site and its
+/// uniform proposal from, built once per run.
+pub struct WolffDraw {
+    sites: Uniform<usize>,
+    labels: Uniform<usize>,
+}
+
+impl WolffDraw {
+    /// Over `n_nodes` sites and `n_states` labels.
+    ///
+    /// # Errors
+    /// Returns `Err` where either is zero.
+    pub fn new(n_nodes: usize, n_states: usize) -> Result<Self, String> {
+        Ok(Self {
+            sites: Uniform::new(0, n_nodes).map_err(|e| e.to_string())?,
+            labels: Uniform::new(0, n_states).map_err(|e| e.to_string())?,
+        })
+    }
+}
+
+/// A run's Wolff scratch: the visited stamp per site, its epoch, and the
+/// heat bath's per-label sums. Held across steps so a step allocates nothing
+/// and clears nothing (#1368).
+pub struct WolffScratch {
+    /// The epoch of the step that last reached each site.
+    pub stamp: Vec<u32>,
+    /// The current step's epoch; `stamp[i] == epoch` marks a member.
+    pub epoch: u32,
+    sums: Vec<f64>,
+}
+
+impl WolffScratch {
+    /// For `n_nodes` sites and `n_states` labels.
+    #[must_use]
+    pub fn new(n_nodes: usize, n_states: usize) -> Self {
+        Self {
+            stamp: vec![0u32; n_nodes],
+            epoch: 0,
+            sums: vec![0.0f64; n_states],
+        }
+    }
+}
+
+/// One Wolff step of [`wolff_sweeps_impl`] on the caller's generator and
+/// scratch: `(cluster size, proposed another label, label changed, the
+/// cluster's label before the step)`, the
+/// cluster in `members[..size]`. The batch kernel and the Rust loop
+/// (`potts_loop.rs`, #1368) both call it, so the two draw alike.
+///
+/// # Errors
+/// As [`wolff_sweeps_impl`], for what the cluster reaches.
+#[allow(clippy::too_many_arguments)]
+pub fn wolff_step(
+    state: &mut [i64],
+    lattice: &Lattice<'_>,
+    beta: f64,
+    heat_bath: bool,
+    root: i64,
+    proposed: i64,
+    rng: &mut ChaCha8Rng,
+    draw: &WolffDraw,
+    scratch: &mut WolffScratch,
+    members: &mut [i64],
+) -> Result<(usize, bool, bool, i64), String> {
+    let n_nodes = state.len();
+    let n_states = lattice.n_states;
+    let (field, offsets, neighbours, couplings) = (
+        lattice.field,
+        lattice.offsets,
+        lattice.neighbours,
+        lattice.couplings,
+    );
+    if scratch.epoch == u32::MAX {
+        scratch.stamp.iter_mut().for_each(|s| *s = 0);
+        scratch.epoch = 0;
+    }
+    scratch.epoch += 1;
+    let epoch = scratch.epoch;
+    let stamp = &mut scratch.stamp;
+    let sums = &mut scratch.sums;
+    let (sites, labels) = (&draw.sites, &draw.labels);
+    let (proposal, accept);
+    let seed_node = if root < 0 {
+        sites.sample(rng)
+    } else {
+        root as usize
+    };
+    let colour = state[seed_node];
+    if colour < 0 || colour >= n_states as i64 {
+        return Err(format!(
+            "state at node {seed_node} is {colour}, expected [0, {n_states})"
+        ));
+    }
+    members[0] = seed_node as i64;
+    stamp[seed_node] = epoch;
+    let (mut head, mut len) = (0usize, 1usize);
+    while head < len {
+        let node = members[head] as usize;
+        head += 1;
+        let (lo, hi) = (offsets[node], offsets[node + 1]);
+        if lo < 0 || hi < lo || hi as usize > neighbours.len() {
+            return Err(format!(
+                "offsets of node {node} are [{lo}, {hi}), outside [0, {}]",
+                neighbours.len()
+            ));
+        }
+        for position in lo as usize..hi as usize {
+            let neighbour = neighbours[position];
+            if neighbour < 0 || neighbour >= n_nodes as i64 {
+                return Err(format!(
+                    "neighbour {neighbour} at position {position} is outside [0, {n_nodes})"
+                ));
+            }
+            let neighbour = neighbour as usize;
+            if stamp[neighbour] == epoch || state[neighbour] != colour {
+                continue;
+            }
+            let coupling = couplings[position];
+            // `NaN` is refused beside a negative coupling: neither gives
+            // `1 - exp(-beta J)` that is a probability.
+            if coupling.is_nan() || coupling < 0.0 {
+                return Err(format!(
+                    "coupling {coupling} at position {position} is negative: the cluster \
+                     moves refuse it"
+                ));
+            }
+            let bond = -(-beta * coupling).exp_m1();
+            let uniform: f64 = StandardUniform.sample(rng);
+            if uniform < bond {
+                stamp[neighbour] = epoch;
+                members[len] = neighbour as i64;
+                len += 1;
+            }
+        }
+    }
+    let cluster = &members[..len];
+
+    let label = if heat_bath {
+        sums.iter_mut().for_each(|s| *s = 0.0);
+        for &member in cluster {
+            let row = &field[member as usize * n_states..][..n_states];
+            for (s, &h) in sums.iter_mut().zip(row) {
+                *s += h;
+            }
+        }
+        let label = heat_bath_label(sums, beta, colour as usize, rng) as i64;
+        proposal = label != colour;
+        accept = label != colour;
+        label
+    } else {
+        let offer = if proposed >= 0 {
+            proposed as usize
+        } else {
+            labels.sample(rng)
+        };
+        let accepted = if offer as i64 == colour {
+            proposal = false;
+            false
+        } else {
+            proposal = true;
+            let (mut offered, mut current) = (0.0f64, 0.0f64);
+            for &member in cluster {
+                let row = member as usize * n_states;
+                offered += field[row + offer];
+                current += field[row + colour as usize];
+            }
+            if offered == f64::NEG_INFINITY {
+                false
+            } else if current == f64::NEG_INFINITY {
+                true
+            } else {
+                let difference = beta * (offered - current);
+                difference >= 0.0 || {
+                    let uniform: f64 = StandardUniform.sample(rng);
+                    uniform < difference.exp()
+                }
+            }
+        };
+        accept = accepted;
+        if accepted {
+            offer as i64
+        } else {
+            colour
+        }
+    };
+    if label != colour {
+        for &member in cluster {
+            state[member as usize] = label;
+        }
+    }
+    Ok((len, proposal, accept, colour))
 }
 
 /// PyO3 boundary for [`wolff_sweeps_impl`], `Err` mapped to a Python

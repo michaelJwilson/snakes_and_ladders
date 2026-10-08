@@ -202,6 +202,9 @@ def test_the_rust_chain_is_the_oracle_s_chain_state_for_state() -> None:
             np.random.default_rng(seed),
             PIN_SWEEPS,
             backend=Backend.PYTHON,
+            # The kernels' pin, on one loop: the Rust loop draws its own
+            # stream (#1368) and is refereed by law in test_potts_loop_rust.py.
+            loop_backend=Backend.PYTHON,
         )
         rust = oracle_sample_potts(
             graph,
@@ -210,6 +213,7 @@ def test_the_rust_chain_is_the_oracle_s_chain_state_for_state() -> None:
             np.random.default_rng(seed),
             PIN_SWEEPS,
             backend=Backend.RUST,
+            loop_backend=Backend.PYTHON,
         )
 
         np.testing.assert_array_equal(python.states, rust.states)
