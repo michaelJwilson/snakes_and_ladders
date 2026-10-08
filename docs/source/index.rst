@@ -848,6 +848,9 @@ whether or not it has members yet.
 .. automodule:: sal.qa.potts_clusters
    :members:
 
+.. automodule:: sal.qa.known_ground_states
+   :members:
+
 .. automodule:: sal.scripts
    :members:
 

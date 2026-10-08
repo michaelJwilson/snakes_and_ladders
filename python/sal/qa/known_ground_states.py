@@ -39,6 +39,16 @@ negative coupling, from :data:`GLASS_BASE_SWEEPS` sweeps. The anneal's
 ``spent`` holds its polish, so it exceeds the level by ``polish_spent`` and
 by at most one step; the pilots' spend is ``tuned`` and reported apart.
 
+**The workload cell.** Beside the fixtures, :func:`workload` builds one
+instance modelled on a downstream workload: 3,000 sites on a periodic
+triangular lattice (degree 6), ``J = 1``, ``q = 4``, contiguous planted domains
+of shares :data:`WORKLOAD_SHARES`, and a unary whose top-two margin is
+``0.5 J`` times the degree with the argmax wrong on 30% of sites. It has no
+closed form; it is read against the TRW-S bound (:func:`sal.search.trws.trws`),
+the best energy any arm found, and the Hamming distance to the planting after
+the best renaming, and it adds the downstream record's arms at 4,000 sweeps'
+visits. Its instances stay here until #1390 makes canonical fixtures.
+
 Run as ``python -m sal.qa.known_ground_states``; it prints one row per cell.
 """
 
@@ -471,6 +481,301 @@ def measure(
     )
 
 
+# --- the downstream workload cell: no exact optimum, a bound and a planting ---
+
+#: The workload's lattice: periodic triangular, every site of degree 6, 3,000 sites.
+WORKLOAD_SHAPE = (50, 60)
+#: ``q`` and the coupling of the workload.
+WORKLOAD_STATES, WORKLOAD_COUPLING = 4, 1.0
+#: Planted label shares: one label at 2%, the other three spanning 1:10.
+WORKLOAD_SHARES = (0.02, 0.07, 0.21, 0.70)
+#: The unary top-two margin, ``0.5 * J * degree``.
+WORKLOAD_MARGIN = 0.5 * WORKLOAD_COUPLING * 6
+#: Share of sites whose unary argmax is a wrong label, the planted one second.
+WORKLOAD_MISLEAD = 0.30
+#: Per-entry Gaussian jitter on the unary, so energies are continuous and ties
+#: between labellings are measure zero; the margin stays 3.0 in mean.
+WORKLOAD_JITTER = 0.25
+#: The seed the workload instance is drawn from.
+WORKLOAD_SEED = 7
+#: The workload's reported seeds: fewer, its reference arms run 4,000 sweeps.
+WORKLOAD_SEEDS = tuple(range(8))
+#: The downstream reference runs: 4,000 sweeps' site visits.
+WORKLOAD_SWEEPS = 4000
+
+
+@dataclass(frozen=True)
+class Workload:
+    """The workload instance, its planting and its TRW-S bound."""
+
+    problem: Problem
+    planted: np.ndarray
+    bound: float
+    trws_energy: float
+    trws_seconds: float
+
+
+def workload() -> Workload:
+    """The hex-lattice workload: contiguous planted domains, a misleading unary on 30% of sites.
+
+    The planting thresholds a smooth random surface (eight random plane waves)
+    at the quantiles :data:`WORKLOAD_SHARES` names, so domains are contiguous
+    and their sizes exact. Each site's unary puts :data:`WORKLOAD_MARGIN` on
+    its top label over the second and the same below the second on the rest;
+    the top is the planted label except on :data:`WORKLOAD_MISLEAD` of sites,
+    where a uniform wrong label is top and the planted one second;
+    :data:`WORKLOAD_JITTER` is then added to every entry.
+    """
+    from sal.search.trws import trws
+    from sal.sim.graph import triangular_lattice_graph
+
+    rng = np.random.default_rng(WORKLOAD_SEED)
+    rows, columns = WORKLOAD_SHAPE
+    graph = triangular_lattice_graph(
+        WORKLOAD_SHAPE, BoundaryCondition.PERIODIC, WORKLOAD_COUPLING
+    )
+    r, c = np.divmod(np.arange(rows * columns), columns)
+    surface = np.zeros(rows * columns)
+    for _ in range(8):
+        kr, kc = rng.integers(1, 4), rng.integers(1, 4)
+        phase = rng.uniform(0.0, 2.0 * np.pi)
+        surface += np.cos(2.0 * np.pi * (kr * r / rows + kc * c / columns) + phase)
+    cuts = np.quantile(surface, np.cumsum(WORKLOAD_SHARES)[:-1])
+    planted = np.searchsorted(cuts, surface).astype(np.int64)
+    n = rows * columns
+    field = np.full((n, WORKLOAD_STATES), -WORKLOAD_MARGIN)
+    misled = rng.random(n) < WORKLOAD_MISLEAD
+    wrong = (planted + rng.integers(1, WORKLOAD_STATES, size=n)) % WORKLOAD_STATES
+    top = np.where(misled, wrong, planted)
+    second = np.where(misled, planted, (planted + 1) % WORKLOAD_STATES)
+    field[np.arange(n), second] = 0.0
+    field[np.arange(n), top] = WORKLOAD_MARGIN
+    field += rng.normal(0.0, WORKLOAD_JITTER, size=field.shape)
+    problem = Problem(graph, field, WORKLOAD_STATES)
+    started = time.perf_counter()
+    bounded = trws(graph, field)
+    return Workload(
+        problem,
+        planted,
+        float(bounded.bound),
+        float(bounded.energy),
+        time.perf_counter() - started,
+    )
+
+
+@dataclass(frozen=True)
+class WorkloadRow:
+    """One arm on the workload, medians over :data:`WORKLOAD_SEEDS`."""
+
+    method: str
+    budget: int
+    to_bound: float
+    to_best: float
+    accuracy: float
+    spent: int
+    polish_spent: int
+    seconds: float
+    best_energy: float
+
+
+def _reference_anneal(
+    problem: Problem,
+    move: PottsMove | tuple[PottsMove, ...],
+    recolour: Recolour,
+    polish: Polish | None,
+    rng: np.random.Generator,
+) -> tuple[Run, np.ndarray]:
+    """The downstream reference run: the record's 2.0 to 0.05 exponential over 4,000 sweeps' visits."""
+    from sal.search.ground_state import ANNEAL_SCHEDULE
+
+    budget = WORKLOAD_SWEEPS * problem.visits_per_sweep
+    started = time.perf_counter()
+    run = anneal_potts(
+        problem.graph,
+        problem.field,
+        ANNEAL_SCHEDULE.build(WORKLOAD_SWEEPS),
+        rng,
+        move=move,
+        recolour=recolour,
+        budget=Budget(Cost.SITE_VISITS, budget),
+        polish=polish,
+    )
+    return (
+        Run(
+            float(run.energy),
+            int(run.spent),
+            int(run.polish_spent),
+            time.perf_counter() - started,
+        ),
+        np.asarray(run.best),
+    )
+
+
+def measure_workload(
+    seeds: Sequence[int] = WORKLOAD_SEEDS,
+) -> tuple[Workload, list[WorkloadRow]]:
+    """Every arm on the workload: the grid's, and the downstream record's at 4,000 sweeps."""
+    from sal.search.spatio_sequential import label_accuracy
+
+    work = workload()
+    problem = work.problem
+    q = problem.n_states
+    raw: list[tuple[str, int, list[Run], list[np.ndarray]]] = []
+
+    started = time.perf_counter()
+    expanded = alpha_expansion(
+        problem.graph, problem.field, backend=Backend.RUST, n_states=q
+    )
+    ae_seconds = time.perf_counter() - started
+    ae_spent = expanded.cycles * q * problem.visits_per_sweep
+    raw.append(
+        (
+            "ae",
+            ae_spent,
+            [Run(float(expanded.energy), ae_spent, 0, ae_seconds)],
+            [expanded.labelling],
+        )
+    )
+    reference = expansion_icm(problem)
+    base = reference.spent
+    settled = iterated_conditional_modes(
+        problem.graph,
+        problem.field,
+        np.random.default_rng(0),
+        start=expanded.labelling,
+        n_states=q,
+    )
+    raw.append(("ae+icm", base, [reference], [settled.labelling]))
+    for level in LEVELS:
+        budget = level * base
+        runs = [
+            restart_icm(problem, budget, np.random.default_rng([seed, 1]))
+            for seed in seeds
+        ]
+        raw.append((f"restart-icm x{level}", budget, runs, []))
+        for arm in ("anneal-sw", "anneal-wolff"):
+            params, _ = tuned_schedule(problem, arm, budget)
+            pairs = []
+            for seed in seeds:
+                move, recolour = ANNEAL_MOVES[arm]
+                clock = time.perf_counter()
+                run = anneal_potts(
+                    problem.graph,
+                    problem.field,
+                    params.build(max(2, budget // problem.visits_per_sweep)),
+                    np.random.default_rng([seed, 2]),
+                    move=move,
+                    recolour=recolour,
+                    budget=Budget(Cost.SITE_VISITS, budget),
+                    polish=Polish.ICM_MERGE,
+                )
+                pairs.append(
+                    (
+                        Run(
+                            float(run.energy),
+                            int(run.spent),
+                            int(run.polish_spent),
+                            time.perf_counter() - clock,
+                        ),
+                        np.asarray(run.best),
+                    )
+                )
+            raw.append(
+                (
+                    f"{arm} x{level}",
+                    budget,
+                    [p[0] for p in pairs],
+                    [p[1] for p in pairs],
+                )
+            )
+    references: dict[
+        str, tuple[PottsMove | tuple[PottsMove, ...], Recolour, Polish | None]
+    ] = {
+        "glauber 4000 sweeps": ((PottsMove.SINGLE_SITE,), Recolour.PER_MOVE, None),
+        "glauber 4000 + icm_merge": (
+            (PottsMove.SINGLE_SITE,),
+            Recolour.PER_MOVE,
+            Polish.ICM_MERGE,
+        ),
+        "wolff-hb 4000 sweeps' visits": (
+            (PottsMove.WOLFF_HEAT_BATH,),
+            Recolour.PER_MOVE,
+            None,
+        ),
+        "wolff+gibbs 4000 sweeps' visits": (
+            PottsMove.WOLFF,
+            Recolour.HEAT_BATH,
+            None,
+        ),
+        "wolff-hb + icm_merge": (
+            (PottsMove.WOLFF_HEAT_BATH,),
+            Recolour.PER_MOVE,
+            Polish.ICM_MERGE,
+        ),
+    }
+    for name, (moves, recolouring, polish) in references.items():
+        pairs = [
+            _reference_anneal(
+                problem, moves, recolouring, polish, np.random.default_rng([seed, 3])
+            )
+            for seed in seeds
+        ]
+        raw.append(
+            (
+                name,
+                WORKLOAD_SWEEPS * problem.visits_per_sweep,
+                [p[0] for p in pairs],
+                [p[1] for p in pairs],
+            )
+        )
+    best = min(
+        [work.trws_energy] + [run.energy for _, _, runs, _ in raw for run in runs]
+    )
+    rows = [
+        WorkloadRow(
+            method=name,
+            budget=budget,
+            to_bound=float(np.median([run.energy - work.bound for run in runs])),
+            to_best=float(np.median([run.energy - best for run in runs])),
+            accuracy=float(
+                np.median([label_accuracy(lab, work.planted, q) for lab in labels])
+            )
+            if labels
+            else float("nan"),
+            spent=int(np.median([run.spent for run in runs])),
+            polish_spent=int(np.median([run.polish_spent for run in runs])),
+            seconds=float(np.median([run.seconds for run in runs])),
+            best_energy=float(min(run.energy for run in runs)),
+        )
+        for name, budget, runs, labels in raw
+    ]
+    return work, rows
+
+
+def workload_table(work: Workload, rows: Sequence[WorkloadRow]) -> str:
+    """The workload's rows as markdown, with the bound and TRW-S's own decode."""
+    n = work.problem.n_nodes
+    argmax = work.problem.field.argmax(axis=1)
+    lines = [
+        f"workload: {n} sites, triangular periodic, q = {work.problem.n_states}, "
+        f"J = {WORKLOAD_COUPLING}; TRW-S bound {work.bound:.4f}, its decode "
+        f"{work.trws_energy:.4f} ({1e3 * work.trws_seconds:.0f} ms); unary argmax "
+        f"misses {float(np.mean(argmax != work.planted)):.3f} of sites",
+        "",
+        "| method | budget | E - bound | E - best | Hamming (aligned) | spent "
+        "| polish | wall ms |",
+        "|" + " --- |" * 8,
+    ]
+    for row in rows:
+        hamming = "" if np.isnan(row.accuracy) else f"{(1.0 - row.accuracy) * n:.0f}"
+        lines.append(
+            f"| {row.method} | {row.budget} | {row.to_bound:.4f} | "
+            f"{row.to_best:.4f} | {hamming} | {row.spent} | {row.polish_spent} | "
+            f"{1e3 * row.seconds:.1f} |"
+        )
+    return "\n".join(lines)
+
+
 def main() -> None:
     """Print the grid and the top-level misses."""
     started = time.perf_counter()
@@ -483,6 +788,9 @@ def main() -> None:
             f"  {c.instance} {c.method}: exact {c.exact:.2f}, <=1% {c.near:.2f}, "
             f"median gap {c.median_gap:.3e} at {c.budget} site visits"
         )
+    work, rows = measure_workload()
+    print()
+    print(workload_table(work, rows))
     print(f"wall {time.perf_counter() - started:.1f} s")
 
 
