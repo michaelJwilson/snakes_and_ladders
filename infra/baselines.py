@@ -70,7 +70,10 @@ from sal.learn.rollout import greedy_rollout, rollout
 from sal.learn.tree import FeatureSet, RewardModel, TreeEnvironment
 from sal.likelihood.potts import log_weights
 from sal.log import get_logger, phase
+from sal.opt.hmm import EmissionHmmObjective
+from sal.ragged import Ragged
 from sal.search.icm import iterated_conditional_modes
+from sal.search.trws import trws
 from sal.sim.fixtures import (
     BASELINE_LIBRARIES,
     Baseline,
@@ -85,6 +88,7 @@ from sal.sim.fixtures import (
 )
 from sal.sim.graph import PottsGraph
 from sal.sim.params import SimulationParams
+from sal.sim.potts import penalized
 from sal.sim.simulate import simulate_alignment
 from sal.sim.topology import MoveSet, Topology, enumerate_topologies
 from sal.sim.tree import edges
@@ -489,6 +493,95 @@ def planted_glass_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
     }
 
 
+def potts_reference_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
+    """The TRW-S lower bound and the planted energy of the Potts reference cell (issue #1390).
+
+    The cell is past enumeration, so a labelling is read against a bracket:
+    the bound below and the planted labelling above. TRW-S runs to its own
+    convergence test at its default cap; a forbidden label enters it through
+    :func:`~sal.sim.potts.penalized`, which keeps the bound a bound.
+    """
+    params = loaded.params
+    cell = params.instance()
+    field = (
+        penalized(cell.graph, cell.field)
+        if np.isneginf(cell.field).any()
+        else cell.field
+    )
+    bounded = trws(cell.graph, field)
+    budget = {
+        "nodes": params.n_nodes,
+        "states": params.n_states,
+        "iterations": len(bounded.trace),
+    }
+    return {
+        "trws_bound": Measurement(
+            algorithm="TRW-S lower bound on the minimum energy, to convergence",
+            value=float(bounded.bound),
+            seed=None,
+            budget=budget,
+            rtol=FIT_RTOL,
+        ),
+        "trws_energy": Measurement(
+            algorithm="the energy of the labelling TRW-S decodes",
+            value=float(bounded.energy),
+            seed=None,
+            budget=budget,
+            rtol=FIT_RTOL,
+        ),
+        "planted_energy": Measurement(
+            algorithm=(
+                "the energy of the planted labelling, an upper bound on the "
+                "minimum and not the minimum"
+            ),
+            value=float(cell.planted_energy),
+            seed=int(params.seed),
+            budget={"nodes": params.n_nodes, "states": params.n_states},
+            rtol=None,
+        ),
+    }
+
+
+def count_hmm_log_likelihood(loaded: Fixture[Any]) -> float:
+    """The generating parameters' log-likelihood of the drawn count-pair HMM cell.
+
+    The forward recursion over the one segment at the truth, through
+    :class:`~sal.opt.hmm.EmissionHmmObjective`'s PyTorch value, the oracle
+    its compiled gradient is pinned to.
+    """
+    cell = loaded.params.instance()
+    objective = EmissionHmmObjective(
+        Ragged(cell.observations, cell.lengths),
+        cell.components,
+        covariate=cell.covariate,
+    )
+    theta = objective.theta_from_truth(
+        cell.initial, cell.transition, **cell.components.named_parameters()
+    )
+    return -float(objective(theta))
+
+
+def count_hmm_reference_baseline(loaded: Fixture[Any]) -> dict[str, Measurement]:
+    """The count-pair HMM reference cell's log-likelihood at its truth (issue #1390)."""
+    params = loaded.params
+    return {
+        "generating_log_likelihood": Measurement(
+            algorithm=(
+                "the forward log-likelihood of the drawn pairs at the "
+                "generating initial, transition and emission parameters"
+            ),
+            value=count_hmm_log_likelihood(loaded),
+            seed=int(params.seed),
+            budget={
+                "positions": params.n_positions,
+                "levels": params.n_levels,
+                "segment_length": params.segment_length,
+            },
+            rtol=FIT_RTOL,
+        ),
+    }
+
+
 @dataclass(frozen=True)
 class BaselineSpec:
     """One record: which instance, which modules computed it, and how.
@@ -553,6 +646,24 @@ SPECS: tuple[BaselineSpec, ...] = (
             "sal.sim.canonical",
         ),
         compute=planted_glass_baseline,
+    ),
+    *(
+        BaselineSpec(
+            problem="potts_reference",
+            tier=tier,
+            modules=("sal.search.trws", "sal.sim.potts_cell"),
+            compute=potts_reference_baseline,
+        )
+        for tier in (Scale.CI, Scale.STRESS, Scale.RELEASE)
+    ),
+    *(
+        BaselineSpec(
+            problem="count_hmm_reference",
+            tier=tier,
+            modules=("sal.opt.hmm", "sal.sim.count_hmm_cell"),
+            compute=count_hmm_reference_baseline,
+        )
+        for tier in (Scale.CI, Scale.STRESS, Scale.RELEASE)
     ),
     BaselineSpec(
         problem="potts_chain",

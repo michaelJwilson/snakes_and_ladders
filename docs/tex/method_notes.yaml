@@ -144,6 +144,14 @@
     reaches it from 0.562 of 32 seeds (issue #823). A heuristic with no bound,
     refereed by enumeration at this size and by nothing above it.
 
+"Potts reference cell, planted domains in a misleading field":
+  samplers: >-
+    Annealing is what the cell is declared for (issue #1390): the field's
+    argmax is wrong on 30% of sites, so a sweep at zero temperature starts in
+    the wrong basin there, and the instance is bracketed below by the TRW-S
+    bound and above by the planted energy rather than solved. At 3,000 sites
+    TRW-S decodes a labelling at its own bound, 335 below the planted energy.
+
 "Low-density parity-check code, Gallager (3,6)":
   optimizers: >-
     Sum-product decodes to the bitwise posterior and min-sum to the most
@@ -215,6 +223,13 @@
     The relaxation of the state path is exact at every corner and gives a
     gradient over paths; it says nothing at a length past which the path
     enumeration that referees it cannot run.
+
+"Count-pair HMM reference cell, one dominant level":
+  optimizers: >-
+    The gradient fit and Baum-Welch are run from the generating parameters
+    and from starts (issue #1390); the cell is declared with more generating
+    levels than fitted states, so no fit reaches the truth and the
+    log-likelihood at the truth is a reference point, not a maximum.
 
 "Coupled spatio-sequential model":
   initializers: >-

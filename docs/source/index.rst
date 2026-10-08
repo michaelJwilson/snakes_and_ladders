@@ -124,7 +124,13 @@ whether or not it has members yet.
 .. automodule:: sal.sim.potts_chain
    :members:
 
+.. automodule:: sal.sim.potts_cell
+   :members:
+
 .. automodule:: sal.sim.hmm
+   :members:
+
+.. automodule:: sal.sim.count_hmm_cell
    :members:
 
 .. automodule:: sal.sim.mixture

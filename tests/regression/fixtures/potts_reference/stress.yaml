@@ -1,0 +1,60 @@
+model: potts-reference
+oracle: none
+
+# The Potts reference cell (issue #1390): 3,000 sites on a periodic
+# triangular lattice (degree 6), q = 4, J = 1. It is #1378's workload cell
+# (sal.qa.known_ground_states.workload on PR #1392), drawn bitwise: same seed,
+# same draws in the same order. Past enumeration; refereed by the TRW-S bound
+# and the planted energy in stress.baseline.json.
+seed: 7
+shape: [50, 60]
+graph: triangular
+boundary: periodic
+n_states: 4
+coupling: 1.0
+
+# One label at 2% of sites, the other three at 1:3:10 --- #1378's shares.
+shares: [0.02, 0.07, 0.21, 0.70]
+
+# Top-two margin over J times the mean degree (6 here, so a margin of 3.0);
+# the argmax is a wrong label on 30% of sites; every entry carries N(0, 0.25).
+margin_ratio: 0.5
+mislead: 0.30
+jitter: 0.25
+
+planted_digest: af675e1392795147
+
+# One factor at a time from this instance (issue #1390). Each entry names the
+# fields that differ and nothing else; PottsReferenceParams.variant builds it.
+# The margin ratio is held, so a graph of another degree keeps margin / (J d).
+variants:
+  # graph
+  square: {graph: square}
+  knn: {graph: knn, neighbours: 6}
+  disconnected: {components: 5}
+  # q: one label at 2%, the rest geometric over 1:10
+  q2: {n_states: 2, shares: [0.02, 0.98]}
+  q8:
+    n_states: 8
+    shares: [0.02, 0.03351685390697976, 0.04919601361766079, 0.07220987275792787,
+             0.10598959834916935, 0.15557145483246806, 0.22834766746599652,
+             0.3351685390697976]
+  q16:
+    n_states: 16
+    shares: [0.02, 0.016240114557208758, 0.019143337665492432,
+             0.022565566005345174, 0.026599581433465313, 0.03135475229240676,
+             0.03695999855401142, 0.043567287037485, 0.05135575146283655,
+             0.06053654904064661, 0.07135858526775808, 0.08411526213687696,
+             0.09915243271439117, 0.1168777777472059, 0.13777185851278226,
+             0.1624011455720876]
+  # margin over J d
+  margin_0.1: {margin_ratio: 0.1}
+  margin_3: {margin_ratio: 3.0}
+  # imbalance: equal shares, and the rest spanning 1:50
+  equal: {shares: [0.25, 0.25, 0.25, 0.25]}
+  imbalance_50: {shares: [0.02, 0.01687587359638253, 0.11933044658449098, 0.8437936798191265]}
+  # one label forbidden at 30% of sites, never the planted or the top two
+  forbidden: {forbidden: 0.30}
+  # n
+  n_1e4: {shape: [100, 100]}
+  n_1e5: {shape: [250, 400]}
