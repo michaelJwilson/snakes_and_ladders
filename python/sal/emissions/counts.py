@@ -46,6 +46,7 @@ from sal.emissions.mstep import (
     solve_dispersion_exposed_rust,
     solve_dispersion_m_step,
     solve_dispersion_tied,
+    solve_rate_at_concentration,
 )
 from sal.emissions.rising import (
     LARGE_SHAPE,
@@ -426,7 +427,7 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         mean = (weights.T @ values) / mass
         live = (weights.sum(dim=0) >= COLLAPSED_MASS) & (mean > 0.0)
         if bool(live.all()):
-            return self._solve_states(values, weights, offsets, mean)
+            return _floored(self._solve_states(values, weights, offsets, mean))
         # A state the E step has emptied, or that holds only zero counts, has
         # no mean or dispersion to estimate and its solve would refuse; it
         # keeps its parameters and is reported (issue #1136).
@@ -441,13 +442,16 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         fitted_mean[live] = part.components.mean
         if self._tied:
             dispersion[:] = part.components.dispersion[0]
-        return Reestimate(
-            NegativeBinomialEmission(dispersion, fitted_mean, tied=self._tied),
-            converged=part.converged,
-            at_boundary=part.at_boundary,
-            iterations=part.iterations,
-            residual=part.residual,
-            frozen=frozen,
+        return _floored(
+            Reestimate(
+                NegativeBinomialEmission(dispersion, fitted_mean, tied=self._tied),
+                converged=part.converged,
+                at_boundary=part.at_boundary,
+                iterations=part.iterations,
+                residual=part.residual,
+                frozen=frozen,
+            ),
+            held=frozen,
         )
 
     def _solve_states(
@@ -552,6 +556,40 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         return NegativeBinomialEmission(
             named["dispersion"], named["mean"], tied=self._tied
         )
+
+
+def _floored(
+    step: Reestimate[NegativeBinomialEmission], held: tuple[int, ...] = ()
+) -> Reestimate[NegativeBinomialEmission]:
+    """``step`` with every state solved at or under :data:`~sal.emissions.mstep.DISPERSION_FLOOR` marked degenerate (issue #1346).
+
+    A floored state is not an estimate, so the step is reported unconverged
+    and EM ends the fit on it with its last valid parameters. The family
+    returned holds the floored dispersion at the floor, so a direct caller
+    still gets a family the constructor admits. ``held`` are the frozen
+    states, which kept their parameters and are not re-read. A step with no
+    floored state is returned as it came, bit for bit.
+    """
+    dispersion = step.components.dispersion
+    at_floor = dispersion <= mstep.DISPERSION_FLOOR
+    for state in held:
+        at_floor[state] = False
+    if not bool(at_floor.any()):
+        return step
+    family = step.components
+    return Reestimate(
+        NegativeBinomialEmission(
+            torch.clamp(dispersion, min=mstep.DISPERSION_FLOOR),
+            family.mean,
+            tied=family.tied,
+        ),
+        converged=False,
+        at_boundary=step.at_boundary,
+        iterations=step.iterations,
+        residual=step.residual,
+        frozen=step.frozen,
+        degenerate=marked_states(at_floor),
+    )
 
 
 class PoissonEmission(EmissionFamily, CountEmissionFamily):
@@ -1115,9 +1153,10 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
                 supplied[observed],
             )
         mass = weights.sum(dim=0)
+        held = mass < COLLAPSED_MASS
         live = torch.tensor(
             [
-                float(mass[k]) >= COLLAPSED_MASS
+                not bool(held[k])
                 and effective_trials(
                     supplied if per_observation else float(self._trials[k]),
                     weights[:, k],
@@ -1128,25 +1167,43 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
         )
         if bool(live.all()):
             return self._solve_states(values, weights, supplied, per_observation)
-        # An emptied state, or one whose posterior-weighted trial count is
-        # below two, where a beta-binomial is a Bernoulli and no
-        # concentration is identified, keeps its parameters (issue #1136).
-        frozen = marked_states(~live)
+        # An emptied state keeps its parameters (issue #1136). One whose
+        # posterior-weighted trial count is below two is a Bernoulli at one
+        # trial and near it below two: no concentration is identified, so it
+        # holds its concentration, re-estimates its rate, and is reported
+        # degenerate (issue #1346).
+        bernoulli = ~held & ~live
+        frozen = marked_states(held)
+        alpha, beta = self._alpha.clone(), self._beta.clone()
+        for state in marked_states(bernoulli):
+            concentration = float(self._alpha[state] + self._beta[state])
+            rate = solve_rate_at_concentration(
+                values,
+                weights[:, state],
+                supplied if per_observation else float(self._trials[state]),
+                concentration,
+            )
+            alpha[state] = rate * concentration
+            beta[state] = (1.0 - rate) * concentration
+        degenerate = marked_states(bernoulli)
         if not bool(live.any()):
-            return Reestimate(self, frozen=frozen)
+            return Reestimate(
+                BetaBinomialEmission(self._trials, alpha, beta, tied=self._tied),
+                frozen=frozen,
+                degenerate=degenerate,
+            )
         part = BetaBinomialEmission(
             self._trials[live], self._alpha[live], self._beta[live], tied=self._tied
         )._solve_states(values, weights[:, live], supplied, per_observation)
-        alpha, beta = self._alpha.clone(), self._beta.clone()
         alpha[live] = part.components.alpha
         beta[live] = part.components.beta
         if self._tied:
             # One concentration across states: the held states take the
             # shared value at their own rate.
             shared = float(part.components.concentration[0])
-            rate = self._alpha / (self._alpha + self._beta)
-            alpha = torch.where(live, alpha, rate * shared)
-            beta = torch.where(live, beta, (1.0 - rate) * shared)
+            rate_of = alpha / (alpha + beta)
+            alpha = torch.where(live, alpha, rate_of * shared)
+            beta = torch.where(live, beta, (1.0 - rate_of) * shared)
         return Reestimate(
             BetaBinomialEmission(self._trials, alpha, beta, tied=self._tied),
             converged=part.converged,
@@ -1154,6 +1211,7 @@ class BetaBinomialEmission(EmissionFamily, CountEmissionFamily):
             iterations=part.iterations,
             residual=part.residual,
             frozen=frozen,
+            degenerate=degenerate,
         )
 
     def _solve_states(

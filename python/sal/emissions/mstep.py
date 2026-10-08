@@ -27,6 +27,26 @@ from sal.emissions.rising import digamma_rising
 _DISPERSION_BRACKET_RATIO = 1e-9
 
 
+#: The least dispersion ``r`` an M step returns (issue #1346): ``float64``
+#: machine epsilon, 2.2e-16. Derived from the arithmetic, not fitted. Below it
+#: ``r + y`` rounds to ``y`` for every count ``y >= 1``, so the rise
+#: ``lgamma(r + y)`` in ``S(r, y)`` (:func:`~sal.emissions.rising.scaled_rising_table`)
+#: and the ``digamma(r + y)`` in the score no longer carry ``r``. ``S`` itself
+#: keeps its digits there --- within 1e-15 relative of ``mpmath`` from
+#: ``r = 1e-12`` to ``1e-300`` at ``y = 2, 5`` --- so the floor marks where
+#: the data stop resolving ``r``, not where ``S`` fails. A state solved at
+#: or below it is degenerate: the family reports it, and EM ends the fit with
+#: :attr:`~sal.opt.termination.Stop.DEGENERATE`. The bracket's lower end is
+#: held at it, which changes no bracket whose identifiable bound is above
+#: 2.2e-7.
+DISPERSION_FLOOR = float(np.finfo(np.float64).eps)
+
+
+def _dispersion_lower(upper: float) -> float:
+    """The dispersion bracket's lower end: nine decades under ``upper``, held at :data:`DISPERSION_FLOOR`."""
+    return max(upper * _DISPERSION_BRACKET_RATIO, DISPERSION_FLOOR)
+
+
 #: How far a re-estimated binomial probability is held from 0 and 1. A
 #: weighted mean of exactly 0 or exactly n makes ``log p`` or ``log(1 - p)``
 #: infinite, and a state that took no weight produces one; the margin is
@@ -236,6 +256,35 @@ def solve_beta_binomial(
         converged=residual <= tolerance,
         iterations=iterations,
         residual=residual,
+    )
+
+
+def solve_rate_at_concentration(
+    values: torch.Tensor,
+    weights: torch.Tensor,
+    trials: float | torch.Tensor,
+    concentration: float,
+    *,
+    tolerance: float = 1e-10,
+) -> float:
+    """The beta-binomial mean rate at a held concentration, by bisection (issue #1346).
+
+    The M step of a state under two mean trials, where
+    :func:`identifiable_concentration_bound` has no value: at one trial a
+    beta-binomial is a Bernoulli whatever its concentration, so the rate is
+    identified and the concentration is not. :func:`solve_beta_binomial`'s
+    rate half, one pass, at the concentration the state holds.
+
+    Returns
+    -------
+    float
+        The rate, in ``[PROBABILITY_MARGIN, 1 - PROBABILITY_MARGIN]``.
+    """
+    return _bisect(
+        _rate_score_at(values, weights, trials, concentration),
+        PROBABILITY_MARGIN,
+        1.0 - PROBABILITY_MARGIN,
+        tolerance,
     )
 
 
@@ -593,7 +642,7 @@ def solve_dispersion(
     upper = identifiable_dispersion_bound(
         _effective_rate(mean, weights), float(weights.sum())
     )
-    lower = upper * _DISPERSION_BRACKET_RATIO
+    lower = _dispersion_lower(upper)
     if _weighted_dispersion_score(values, weights, upper, mean) > 0.0:
         return SolvedDispersion(upper, at_boundary=True, iterations=0, residual=0.0)
     if _weighted_dispersion_score(values, weights, lower, mean) < 0.0:
@@ -676,7 +725,7 @@ def solve_dispersion_batched(
         identifiable_dispersion_bound(float(mean[k]), float(weights[:, k].sum()))
         for k in range(n_states)
     ]
-    lowers = [u * _DISPERSION_BRACKET_RATIO for u in uppers]
+    lowers = [_dispersion_lower(u) for u in uppers]
     upper = torch.tensor(uppers, dtype=values.dtype)
     lower = torch.tensor(lowers, dtype=values.dtype)
     at_upper = score(upper) > 0.0
@@ -770,7 +819,7 @@ def solve_dispersion_tied(
         rate = float((weights * rates).sum()) / total
 
     upper = identifiable_dispersion_bound(rate, total)
-    lower = upper * _DISPERSION_BRACKET_RATIO
+    lower = _dispersion_lower(upper)
     if score(upper) > 0.0:
         return SolvedDispersion(upper, at_boundary=True, iterations=0, residual=0.0)
     if score(lower) < 0.0:
@@ -1029,7 +1078,7 @@ def solve_dispersion_rust(
         weight_tails(values, columns).reshape(-1),
         columns.sum(dim=1).numpy().astype(np.float64),
         np.asarray(means, dtype=np.float64),
-        np.asarray([u * _DISPERSION_BRACKET_RATIO for u in uppers]),
+        np.asarray([_dispersion_lower(u) for u in uppers]),
         np.asarray(uppers, dtype=np.float64),
         tolerance,
         value,
@@ -1111,7 +1160,7 @@ def solve_dispersion_exposed_rust(
         np.ascontiguousarray(values.to(torch.float64).numpy()),
         columns.sum(dim=1).numpy().astype(np.float64),
         np.asarray(means, dtype=np.float64),
-        np.asarray([u * _DISPERSION_BRACKET_RATIO for u in uppers]),
+        np.asarray([_dispersion_lower(u) for u in uppers]),
         np.asarray(uppers, dtype=np.float64),
         tolerance,
         value,
