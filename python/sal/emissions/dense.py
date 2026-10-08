@@ -45,7 +45,7 @@ import torch
 
 from sal import oxisal
 from sal.emissions.base import as_array, split_covariate
-from sal.emissions.bb import log_factorial, trial_tables
+from sal.emissions.bb import density_table, log_factorial, trial_tables
 from sal.emissions.counts import (
     BetaBinomialEmission,
     CountPairEmission,
@@ -120,7 +120,13 @@ def _extent(counts: np.ndarray) -> int:
 def _density_table(
     family: NegativeBinomialEmission | BetaBinomialEmission, extent: int
 ) -> np.ndarray:
-    """The family's own ``log_density`` at every count below ``extent``, ``(extent, K)``."""
+    """The family's own ``log_density`` at every count below ``extent``, ``(extent, K)``.
+
+    A beta-binomial's is :func:`~sal.emissions.bb.density_table`, the NumPy
+    pmf every other route reads (issue #1332).
+    """
+    if isinstance(family, BetaBinomialEmission):
+        return np.ascontiguousarray(density_table(family, extent)).reshape(-1)
     grid = torch.arange(extent, dtype=torch.float64)
     return np.ascontiguousarray(family.log_density(grid).numpy()).reshape(-1)
 

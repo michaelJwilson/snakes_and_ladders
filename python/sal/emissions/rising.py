@@ -413,9 +413,12 @@ def _log_rising_kernel(
 ) -> None:
     """``out[i] = lgamma(x[i] + m[i]) - lgamma(x[i])`` over flat, contiguous arrays.
 
-    With ``scaled``, ``out[i]`` is that less ``m[i] log x[i]``, from the series
-    alone (the caller passes ``plain_error = inf``), so nothing of size
-    ``m log x`` is formed and differenced (issue #1332).
+    With ``scaled``, ``out[i]`` is that less ``m[i] log x[i]``. The plain
+    difference less ``m log x`` is taken where its bound --- the two
+    ``lgamma`` and ``m log x`` each to ``plain_error`` relative --- meets the
+    promise over ``max(|out|, 1)``, which holds wherever ``m log x`` does not
+    cancel against the rise (small ``x``, or ``m`` large beside ``x``); the
+    series elsewhere, where ``m log x`` is never formed (issue #1332).
     """
     for i in range(x.size):
         xi = x[i]
@@ -427,7 +430,13 @@ def _log_rising_kernel(
         base = _gammaln(xi)
         plain = rise - base
         bound = plain_error * (max(abs(rise), 1.0) + max(abs(base), 1.0))
-        if bound <= promise * max(abs(plain), 1.0):
+        if scaled:
+            shift = mi * math.log(xi)
+            value = plain - shift
+            if bound + plain_error * abs(shift) <= promise * max(abs(value), 1.0):
+                out[i] = value
+                continue
+        elif bound <= promise * max(abs(plain), 1.0):
             out[i] = plain
             continue
         y = xi
@@ -603,11 +612,12 @@ def log_rising_into(
 def scaled_rising_array(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
     """``lgamma(x + m) - lgamma(x) - m log x``, :func:`scaled_rising` on NumPy arrays; broadcasts.
 
-    :func:`log_rising`'s compiled kernel on its series route at every ``x``
-    (below :data:`_SERIES_FROM` through the recurrence), less ``m log x``
-    inside the series rather than after it: ``0`` at ``x = inf`` and at
-    ``m = 0``, and no term of size ``m log x`` is differenced. The
-    beta-binomial's tables are these (issue #1332).
+    :func:`log_rising`'s compiled kernel. The plain ``lgamma`` difference less
+    ``m log x`` where its error bound meets the 1e-14 promise over
+    ``max(|f|, 1)`` --- no cancellation, as at small ``x`` --- and otherwise
+    the series with ``m log x`` removed inside it, never formed: ``0`` at
+    ``x = inf`` and at ``m = 0``. The beta-binomial's tables are these
+    (issue #1332).
     """
     x_, m_, out = _flat(x, m)
     _kernels()[0](
@@ -616,7 +626,7 @@ def scaled_rising_array(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
         out.reshape(-1),
         _SERIES_FROM,
         _SMALL_T,
-        math.inf,
+        _PLAIN_ERROR,
         _LOG_PROMISE,
         _TERM_FLOOR,
         True,

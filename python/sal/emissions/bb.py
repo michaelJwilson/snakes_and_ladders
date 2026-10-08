@@ -94,6 +94,20 @@ def _log_rates(
     return np.log(alpha / total), np.log(beta / total)
 
 
+def density_table(family: BetaBinomialEmission, extent: int) -> NDArray[np.float64]:
+    """:func:`beta_binomial_log_pmf` at every count below ``extent`` and the family's own trials, ``(extent, K)``.
+
+    The table a caller without a per-observation trial count reads (issue
+    #1332); successes past a state's trials score ``-inf``.
+    """
+    return beta_binomial_log_pmf(
+        np.arange(extent, dtype=np.float64)[:, None],
+        family.trials.detach().numpy(),
+        family.alpha.detach().numpy(),
+        family.beta.detach().numpy(),
+    )
+
+
 def beta_binomial_log_pmf(
     successes: ArrayLike, trials: ArrayLike, alpha: ArrayLike, beta: ArrayLike
 ) -> NDArray[np.float64]:

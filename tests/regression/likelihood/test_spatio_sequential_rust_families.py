@@ -48,7 +48,8 @@ LOG_TOLERANCE = 1e-12
 #: (issue #1332). Both routes form ``log C`` from three ``lgamma`` of size up
 #: to ``lgamma(n + 1)``, each rounded to half an ulp: at ``n <= 40`` that is
 #: ``1.5 eps lgamma(41) = 3.7e-14`` per route, so 7.3e-14 between two, and
-#: 1e-13 with the rest of the sum. Derived, not fitted; measured 1.1e-14.
+#: 1e-13 with the rest of the sum. Derived, not fitted; measured 1.1e-14
+#: under a trial count and 1.7e-14 at the family's own trials.
 BB_TOLERANCE = 1e-13
 
 #: Absolute, on probabilities.
@@ -195,7 +196,7 @@ def test_each_table_is_keyed_as_stated_and_is_the_family_s_density(name: str) ->
             covariate=covariate,
         ).numpy()
         got = scores[:, :, m, :]
-        if isinstance(family, BetaBinomialEmission) and covariate is not None:
+        if isinstance(family, BetaBinomialEmission):
             finite = np.isfinite(want)
             assert np.array_equal(np.isfinite(got), finite)
             scale = np.maximum(np.abs(want[finite]), 1.0)

@@ -18,7 +18,7 @@ from sal.emissions import (
     CountPairEmission,
     NegativeBinomialEmission,
 )
-from sal.emissions.bb import beta_binomial_log_pmf
+from sal.emissions.bb import beta_binomial_log_pmf, density_table
 from sal.emissions.dense import Order, log_emission
 from sal.emissions.nb import exposure_table
 from sal.sim.count_pairs import IndependentCountPair
@@ -156,7 +156,9 @@ def test_the_beta_binomial_is_the_numpy_pmf_bitwise(order: Order) -> None:
 @pytest.mark.oracle
 def test_without_a_covariate_each_channel_is_its_density_bitwise() -> None:
     # The table is `log_density` at every count, so reading it is bitwise;
-    # successes past the declared 40 trials score `-inf` in both.
+    # successes past the declared 40 trials score `-inf` in both. The
+    # beta-binomial's is `bb.density_table`, bitwise, and torch's within
+    # _DENSITY_TOLERANCE (#1332; measured 3.1e-14).
     successes = DRAWS["successes"] + 2
 
     assert (successes > 40).any()
@@ -164,9 +166,15 @@ def test_without_a_covariate_each_channel_is_its_density_bitwise() -> None:
         log_emission(NB, DRAWS["totals"], order=Order.FAMILY),
         _density(NB, DRAWS["totals"], None),
     )
-    assert np.array_equal(
-        log_emission(BB, successes, order=Order.TABULATED),
-        _density(BB, successes, None),
+    got = log_emission(BB, successes, order=Order.TABULATED)
+    want = _density(BB, successes, None)
+    table = density_table(BB, int(successes.max()) + 1)
+    assert np.array_equal(got, np.moveaxis(table[successes.astype(np.int64)], -1, 0))
+    finite = np.isfinite(want)
+    assert np.array_equal(np.isfinite(got), finite)
+    scale = np.maximum(np.abs(want[finite]), 1.0)
+    assert float((np.abs(got[finite] - want[finite]) / scale).max()) <= (
+        _DENSITY_TOLERANCE
     )
 
 

@@ -105,7 +105,12 @@ from sal.emissions import (
     NegativeBinomialEmission,
     validated_trials,
 )
-from sal.emissions.bb import beta_binomial_log_pmf, log_factorial, trial_tables
+from sal.emissions.bb import (
+    beta_binomial_log_pmf,
+    density_table,
+    log_factorial,
+    trial_tables,
+)
 from sal.emissions.nb import exposure_table
 from sal.likelihood.spatio_sequential import (
     COVARIATE_ROWS,
@@ -523,6 +528,10 @@ def _count_table(
     counts = torch.from_numpy(np.arange(extent, dtype=np.float64))
     table = np.empty((extent, params.n_classes, params.n_states))
     for m, side in enumerate(sides):
+        if isinstance(side, BetaBinomialEmission):
+            # The NumPy pmf every beta-binomial route reads (issue #1332).
+            table[:, m, :] = density_table(side, extent)
+            continue
         table[:, m, :] = side.log_density(counts).numpy()
     return table
 

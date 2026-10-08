@@ -741,7 +741,7 @@ stated order. Against `mpmath` at 50 digits the pmf is within 1e-11 nats for
 `max(|f|, 1)` at `n <= 40`, and sums to 1 within 1e-12 over `n <= 100` at
 1e16 (e^132 before). The tables are `bb.beta_binomial_log_pmf` bitwise; torch
 and the Rust count kernel agree within 1e-13, derived from `log C`'s rounding,
-measured 1.1e-14 to 4.6e-14. Checked in
+measured 1.1e-14 to 4.6e-14; the trial-free tables read the same pmf. Checked in
 `tests/regression/test_emissions_beta_binomial_rising.py`.
 
 **Polar codes are a row, and the CRC-aided list is built and measured**
