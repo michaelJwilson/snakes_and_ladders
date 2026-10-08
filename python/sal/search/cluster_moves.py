@@ -34,7 +34,7 @@ from sal.sample.potts_mcmc import (
 from sal.search.ground_state import MethodRun, Rung
 
 #: Replicas in :func:`run_cluster_tempering`'s ladder, the count
-#: `search.ground_state.run_tempering` uses.
+#: `sandbox.potts_tempering.run_tempering` uses.
 CLUSTER_LADDER_REPLICAS = 6
 
 

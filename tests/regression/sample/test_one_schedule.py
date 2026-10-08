@@ -24,7 +24,6 @@ from sal.sample.annealed import (
     population_annealing,
     simulated_tempering,
 )
-from sal.sample.potts_mcmc import adapt_ladder_potts, parallel_tempering
 from sal.sample.schedule import (
     ExponentialTempSchedule,
     InverseTemperatures,
@@ -36,10 +35,14 @@ from sal.sample.schedule import (
     temperatures,
 )
 from sal.sample.tempered import (
-    adapt_ladder_round_trips,
     tempered_factor_graph,
     tempered_potts_pair,
     tempered_topologies,
+)
+from sal.sandbox.potts_tempering import (
+    adapt_ladder_potts,
+    adapt_ladder_round_trips,
+    parallel_tempering,
 )
 from sal.sim.factor_graph import from_potts
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph

@@ -34,7 +34,8 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use rand_distr::{Distribution, StandardUniform, Uniform};
 
-use crate::potts::{single_site_sweeps_impl, swendsen_wang_sweep_impl};
+use crate::icm::{icm_sweeps_impl, no_survivor, IcmScratch};
+use crate::potts::{conditional, single_site_sweeps_impl, swendsen_wang_sweep_impl};
 use crate::wolff::{wolff_step, Lattice, WolffDraw, WolffScratch};
 
 /// A heat-bath (Glauber) sweep over every site in index order.
@@ -65,6 +66,11 @@ pub struct Plan<'a> {
     pub record: bool,
     /// Whether to keep the lowest-energy state.
     pub track_best: bool,
+    /// Whether to descend the final state, and the best where kept, by ICM
+    /// to a fixed point once the schedule ends (`Polish.ICM`, #1363).
+    pub polish: bool,
+    /// The polish's floor, `iterated_conditional_modes`' `min_sites`.
+    pub min_sites: usize,
 }
 
 /// What one run returns beside the final state, which it leaves in place.
@@ -97,6 +103,10 @@ pub struct Ran {
     pub indices: Vec<u32>,
     /// The site visits each main step charged.
     pub charges: Vec<u64>,
+    /// The best state descended by the polish; empty unpolished.
+    pub best_polished: Vec<i64>,
+    /// The polish's sweeps from the final state and from the best.
+    pub polish_sweeps: (usize, usize),
 }
 
 /// `E(s) = -sum_i h_i[s_i] - sum_(ij) J_ij [s_i == s_j]`, from the
@@ -378,7 +388,7 @@ pub fn potts_loop_impl(
             ran.spent_main += visits;
             ran.indices.push(at as u32);
             ran.charges.push(visits);
-            if plan.record && (index + 1) % plan.thin == 0 {
+            if plan.record && (index + 1).is_multiple_of(plan.thin) {
                 ran.records.extend_from_slice(state);
             }
             ran.n_main += 1;
@@ -386,7 +396,157 @@ pub fn potts_loop_impl(
         step += 1;
     }
     ran.final_energy = energy;
+    if plan.polish {
+        let mut polish = Polisher::new(n_nodes, n_states, plan.min_sites);
+        ran.polish_sweeps.0 = polish.descend(
+            state,
+            lattice.field,
+            &offsets_usize,
+            neighbours,
+            couplings,
+            &mut rng,
+        )?;
+        if plan.track_best {
+            ran.best_polished = ran.best.clone();
+            ran.polish_sweeps.1 = polish.descend(
+                &mut ran.best_polished,
+                lattice.field,
+                &offsets_usize,
+                neighbours,
+                couplings,
+                &mut rng,
+            )?;
+        }
+    }
     Ok(ran)
+}
+
+/// The polish's ICM descent, in index order to a fixed point (#1363), on the
+/// run's stream for the floor's uniforms.
+struct Polisher {
+    scratch: IcmScratch,
+    draws: Vec<f64>,
+    chunk: usize,
+    min_sites: usize,
+}
+
+impl Polisher {
+    fn new(n_nodes: usize, n_states: usize, min_sites: usize) -> Self {
+        // Chunks of `n_nodes` sweeps unfloored, as `chains._descend` runs
+        // them; a floor draws `chunk * n_nodes` uniforms a chunk, so 16.
+        let chunk = if min_sites > 0 { 16 } else { n_nodes.max(1) };
+        Self {
+            scratch: IcmScratch::new(n_states),
+            draws: vec![0.0; if min_sites > 0 { chunk * n_nodes } else { 0 }],
+            chunk,
+            min_sites,
+        }
+    }
+
+    /// Descend `state` until a sweep changes nothing, or a chunk ends on a
+    /// labelling no sweep can change (settled, or a floor only a forbidden
+    /// label could meet); the sweeps run.
+    fn descend(
+        &mut self,
+        state: &mut [i64],
+        field: &[f64],
+        offsets: &[usize],
+        neighbours: &[i64],
+        couplings: &[f64],
+        rng: &mut ChaCha8Rng,
+    ) -> Result<usize, String> {
+        let mut swept = 0usize;
+        loop {
+            for draw in self.draws.iter_mut() {
+                *draw = StandardUniform.sample(&mut *rng);
+            }
+            let sweeps = icm_sweeps_impl(
+                state,
+                field,
+                offsets,
+                neighbours,
+                couplings,
+                &[],
+                &self.draws,
+                self.chunk,
+                true,
+                self.min_sites,
+                &mut self.scratch,
+            )
+            .map_err(|message| {
+                // The sweep the message names counts every chunk's.
+                if message.contains("left no state") {
+                    let sweep = swept + message_sweep(&message);
+                    no_survivor(sweep, self.min_sites)
+                } else {
+                    message
+                }
+            })?;
+            swept += sweeps;
+            if sweeps < self.chunk
+                || self.unmovable(state, field, offsets, neighbours, couplings)?
+            {
+                return Ok(swept);
+            }
+        }
+    }
+
+    /// Whether a sweep would leave `state` as it is, or a site below the
+    /// floor allows no surviving label: `icm._descended`'s two stops.
+    fn unmovable(
+        &mut self,
+        state: &[i64],
+        field: &[f64],
+        offsets: &[usize],
+        neighbours: &[i64],
+        couplings: &[f64],
+    ) -> Result<bool, String> {
+        let n_states = self.scratch.local.len();
+        let mut local = vec![0.0f64; n_states];
+        let mut settled = true;
+        for node in 0..state.len() {
+            conditional(
+                &mut local, field, state, offsets, neighbours, couplings, node,
+            )?;
+            let mut best = 0usize;
+            for label in 1..n_states {
+                if local[label] > local[best] {
+                    best = label;
+                }
+            }
+            if best as i64 != state[node] {
+                settled = false;
+                break;
+            }
+        }
+        if self.min_sites == 0 {
+            return Ok(settled);
+        }
+        let mut counts = vec![0usize; n_states];
+        for &label in state {
+            counts[label as usize] += 1;
+        }
+        let below = |label: usize| counts[label] > 0 && counts[label] < self.min_sites;
+        if !(0..n_states).any(below) {
+            return Ok(settled);
+        }
+        Ok(state.iter().enumerate().any(|(node, &label)| {
+            below(label as usize)
+                && !(0..n_states).any(|other| {
+                    counts[other] >= self.min_sites
+                        && field[node * n_states + other] > f64::NEG_INFINITY
+                })
+        }))
+    }
+}
+
+/// The sweep [`no_survivor`]'s message names.
+fn message_sweep(message: &str) -> usize {
+    message
+        .split_whitespace()
+        .nth(1)
+        .and_then(|word| word.parse().ok())
+        .unwrap_or(0)
 }
 
 /// The energy change of recolouring `cluster` from `from` to `to`, read after
@@ -427,9 +587,9 @@ fn recoloured(
 /// PyO3 boundary for [`potts_loop_impl`]: the final state in place, and a
 /// dict of the rest, with the GIL released for the run.
 #[pyfunction]
-#[pyo3(name = "potts_loop", signature = (state, field, offsets, neighbours, couplings, moves, temperatures, budget, n_main, lead, thin, record, track_best, seed))]
+#[pyo3(signature = (state, field, offsets, neighbours, couplings, moves, temperatures, budget, n_main, lead, thin, record, track_best, seed, polish = false, min_sites = 0))]
 #[allow(clippy::too_many_arguments)]
-pub fn run_potts_loop<'py>(
+pub fn potts_loop<'py>(
     py: Python<'py>,
     mut state: PyReadwriteArray1<'py, i64>,
     field: PyReadonlyArrayDyn<'py, f64>,
@@ -445,6 +605,8 @@ pub fn run_potts_loop<'py>(
     record: bool,
     track_best: bool,
     seed: u64,
+    polish: bool,
+    min_sites: usize,
 ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
     let [n_rows, n_states] = *field.shape() else {
         return Err(PyValueError::new_err(format!(
@@ -475,6 +637,8 @@ pub fn run_potts_loop<'py>(
         thin,
         record,
         track_best,
+        polish,
+        min_sites,
     };
     let ran = py
         .detach(|| potts_loop_impl(state, &lattice, &plan, seed))
@@ -493,6 +657,8 @@ pub fn run_potts_loop<'py>(
     out.set_item("records", PyArray1::from_vec(py, ran.records))?;
     out.set_item("indices", PyArray1::from_vec(py, ran.indices))?;
     out.set_item("charges", PyArray1::from_vec(py, ran.charges))?;
+    out.set_item("best_polished", PyArray1::from_vec(py, ran.best_polished))?;
+    out.set_item("polish_sweeps", ran.polish_sweeps)?;
     Ok(out)
 }
 
@@ -517,6 +683,8 @@ mod tests {
             thin: 1,
             record: true,
             track_best: true,
+            polish: false,
+            min_sites: 0,
         }
     }
 

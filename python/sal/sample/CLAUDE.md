@@ -48,6 +48,20 @@ draws reach it without the module importing their type.
   that does not fold --- a walker along the ladder, a re-estimated state ---
   is named in `loop`'s docstring with the reason.
 
+- **Annealing converges by its polisher, never by its schedule (#1363).**
+  The schedule runs its full defined length, steps or a `Budget`, with no
+  window and no extra hold; a `polish` then runs from the final state to its
+  own criterion (an ICM fixed point, a gradient tolerance), and the result's
+  `termination` is the polisher's. `spent` holds both, `polish_spent` the
+  polish's part. `polish=None` is the unpolished run, bitwise.
+
+- **Python is not the step caller where the step is cheaper than the call.**
+  A loop that crosses into a compiled kernel once per step pays an
+  interpreter iteration and a crossing per step; where the step is a few
+  sites, that is the run. Such a loop runs whole in the compiled backend,
+  one crossing per run, and the Python loop stays as the oracle it is
+  pinned to (#1368).
+
 - **A tuned step is chosen by a named criterion, and the criterion is not
   the outcome.** `tune_step` ranks a pilot's candidates by the ESJD per
   gradient, the lowest energy reached or the polished gap; on #1195's HMM
@@ -103,8 +117,9 @@ draws reach it without the module importing their type.
 - **A ramp has one home: its explicit call (#1333).** `schedule.ramp` is a
   `match` on `ScheduleShape` onto `ramp.<shape>`, and every shape makes some
   `g(T)` linear in some `s(k)` with exact endpoints; `ScheduleParams.build`
-  goes through the same `match`. A schedule that reads the chain is not a
-  ramp: it is an `AdaptiveSchedule`, walked by `loop.anneal_adaptive`.
+  goes through the same `match`. A schedule that reads the chain, or a
+  measured `sigma_E(T)`, is not a ramp; the two #1333 built are declined and
+  conserved in `sal.sandbox.adaptive_schedules` (#1352).
   `tests/regression/sample/test_schedule_ramps.py` holds each member to an
   explicit call, a case and a `tune_schedule` candidate.
 - **Schedule pilot options default off (#1337).** `ScheduleTuning`'s
@@ -114,8 +129,8 @@ draws reach it without the module importing their type.
   `tests/regression/sample/test_schedule_racing.py` holds racing to a
   hand-run halving and the polished rank to the polish applied by hand.
 - **A tuned ladder is `"auto"` beside a `LadderTuning` (#1337).**
-  `parallel_tempering`, `cluster_tempering` and `ground_state.run_tempering`
-  resolve it through `tune.resolve_ladder` onto `schedule.adapt_ladder`, on
+  `cluster_tempering` resolves it through `tune.resolve_ladder` onto
+  `schedule.adapt_ladder`, on
   pilots drawn from one child spawned first; a given ladder draws nothing
   for it. `tests/regression/sample/test_ladder_tuning.py` holds the band.
 

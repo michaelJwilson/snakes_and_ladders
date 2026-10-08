@@ -68,6 +68,7 @@ averaging; Geyer (1992) for the effective sample size.
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import itertools
 import math
@@ -149,7 +150,8 @@ from sal.track import TrackedOptimization
 from sal.track import current as current_tracked
 
 if TYPE_CHECKING:
-    from sal.opt.starts import Polished
+    from sal.opt.budget import Budget
+    from sal.opt.starts import Polished, Polisher
 
 #: The public surface, and the names #1010 moved to
 #: :mod:`sal.sample.chain`, exported from here for one release.
@@ -704,6 +706,8 @@ def anneal(
     adaptation: Adaptation | None = None,
     tuning: StepTuning | None = None,
     backend: Backend = Backend.RUST,
+    polish: Polisher | None = None,
+    polish_budget: Budget | None = None,
 ) -> AnnealedTheta:
     """Simulated annealing with Hamiltonian proposals: :func:`sample` on a schedule.
 
@@ -753,11 +757,89 @@ def anneal(
         tracked (issue #1249); otherwise, and always under
         ``Backend.PYTHON``, the torch transition runs it. The compiled walk
         draws from its own ChaCha8 stream, seeded by one draw of ``rng``.
+    polish, polish_budget
+        The polisher run from ``final`` once the schedule ends, to its own
+        tolerance, and its iteration cap in
+        :attr:`~sal.cost.Cost.ITERATIONS`, as
+        :class:`~sal.sample.tune.StepTuning` pairs them (issue #1363):
+        :func:`~sal.opt.starts.polish_by_fit` is L-BFGS to its gradient
+        tolerance. Where the schedule's ``best`` scores below ``final``'s
+        polish it is polished too, and the lower is ``best``. The termination
+        is the polish's, :attr:`~sal.opt.termination.Stop.BUDGET` where its
+        cap ran out, ``polished_by`` names it, and ``polish_spent`` its
+        iterations, inside ``spent``. ``None``, the default, is the run
+        before the parameters existed, bitwise.
 
     Returns
     -------
     AnnealedTheta
+
+    Raises
+    ------
+    ValueError
+        If ``polish`` and ``polish_budget`` are not given together, or the
+        budget is not in iterations.
     """
+    if (polish is None) != (polish_budget is None):
+        msg = "a polish and its budget come together, or neither"
+        raise ValueError(msg)
+    if polish_budget is not None and polish_budget.unit is not Cost.ITERATIONS:
+        msg = f"a polish budget is in {Cost.ITERATIONS}, got {polish_budget.unit}"
+        raise ValueError(msg)
+    run = _anneal(
+        objective,
+        schedule,
+        rng,
+        step_size=step_size,
+        n_steps=n_steps,
+        start=start,
+        integrator=integrator,
+        adaptation=adaptation,
+        tuning=tuning,
+        backend=backend,
+    )
+    if polish is None or polish_budget is None:
+        return run
+    return _polished(objective, run, polish, polish_budget)
+
+
+def _polished(
+    objective: Objective, run: AnnealedTheta, polish: Polisher, budget: Budget
+) -> AnnealedTheta:
+    """``run`` with ``polish`` from its final point, and from its best where that scores lower (issue #1363)."""
+    final = polish(objective, run.final, budget)
+    polished, iterations = final, final.iterations
+    if run.value < final.value:
+        best = polish(objective, run.best, budget)
+        iterations += best.iterations
+        if best.value < final.value:
+            polished = best
+    return dataclasses.replace(
+        run,
+        best=polished.theta,
+        value=polished.value,
+        final=final.theta,
+        spent=run.spent + iterations,
+        termination=polished.termination,
+        polish_spent=iterations,
+        polished_by=getattr(polish, "__name__", type(polish).__name__),
+    )
+
+
+def _anneal(
+    objective: Objective,
+    schedule: TempSchedule,
+    rng: np.random.Generator | torch.Generator,
+    *,
+    step_size: StepSize,
+    n_steps: int,
+    start: torch.Tensor | None,
+    integrator: Integrator,
+    adaptation: Adaptation | None,
+    tuning: StepTuning | None,
+    backend: Backend,
+) -> AnnealedTheta:
+    """:func:`anneal`'s schedule, unpolished."""
     generator = torch_stream(rng)
     tuned = _tuned(
         objective,

@@ -24,6 +24,9 @@ module. It is referenced here, never restated. What follows is local.
   which case and pins the two against each other there. A route conserved
   under this clause with no such case is not conserved, it is abandoned, and
   the rule above applies instead.
+- **A route the owner no longer supports moves in by that decision alone.**
+  No measurement and no superseding referee: the decision is the reason,
+  and the changelog names it. Its tests move with it and keep passing.
 - **A declined route moves in only if it was finished.** Clean, scoped to a
   question that was posed, and refereed by tests that still pass — an
   abandoned half-attempt is not conserved, it is reported.
@@ -32,14 +35,15 @@ module. It is referenced here, never restated. What follows is local.
   wheel, the per-pull-request jobs and a developer's install pay nothing for a
   route that lost. `DEV.md` names the flag and where it is compiled.
 - **Something has to build it on a schedule.**
-- **Only `tests/` and `sal.qa` import from here.**
+- **Only `tests/` and `sal.qa` import from here.** Nothing supported imports
+  it, and `import sal` does not load it.
 - **Nothing should be deleted.** An oracle that is slow is still the oracle; an
   oracle nothing tests against is a gap to file as a ticket, not a file to
   remove.
 
 ## What is conserved here, and on which rule
 
-Three rules admit a route, and each conserved module names the one it came in
+Four rules admit a route, and each conserved module names the one it came in
 on and the case it referees. The numbers stay where they are produced --- the
 pull request that made the move, and `STATUS.md` where they are evidence.
 
@@ -56,3 +60,5 @@ pull request that made the move, and `STATUS.md` where they are evidence.
 | `annealed_em` | declined | plain EM, which an empty schedule and one step at one reproduce bitwise; on `emission_mixture/ci` both reach one maximum from every `data` start tried (#903, #916). The HMM twin `annealed_baum_welch`: the tempered E step at one is `ragged.posteriors` bitwise; over ten starts on a six-state Gaussian HMM no schedule beats plain EM by two standard errors (#1171) |
 | `covariate_grid` | declined | the continuous exposure, where each gridded score is within its stated bound of the family's `log_density` and a class's evidence within its members' summed bounds of the NumPy oracle; bitwise on a power-of-two grid; linear and log-spaced. No family reaches it: the exposure factors and the trial count is exact; a continuous covariate on a family that does not factor brings it back (#1064) |
 | `potts_mip` | declined | the ground state as a MIP over the local polytope, the enumerated minimum on ten small lattices including the frustrated ones; at `spatio_tiling/release` the whole MIP did not leave HiGHS's root node in its time limit (`STATUS.md`), so it brackets the optimum and does not certify it. Tests `release`, the tiling-rung one skipped (#1069) |
+| `adaptive_schedules` | declined | the `THERMODYNAMIC` ramp, equal thermodynamic length per step on Kaufman's exact `8 x 8` Ising `sigma_E` to `1e-10`, and the Huang schedule's recurrence bitwise; declined because sal measures no `sigma_E(T)` and `tune_schedule` cannot rank an online schedule (#1333, #1352) |
+| `potts_tempering` | unsupported | the Potts `parallel_tempering` with `temperatures="auto"`, `adapt_ladder_potts`, `adapt_ladder_round_trips` and the `tempering` and `tempering-mixed` ground-state arms; enumeration and the product-kernel row referee it in `tests/regression/sandbox/` (#1352) |

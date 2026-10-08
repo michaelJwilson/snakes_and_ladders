@@ -27,6 +27,7 @@ from sal.sample.loop import (
     Exchanging,
     Moved,
     Step,
+    Walked,
     anneal,
     anneal_spent,
     swap_log_ratio,
@@ -57,12 +58,11 @@ from sal.sample.potts_mcmc.sweeps import (
     wolff_sweep,
 )
 from sal.sample.schedule import (
-    AdaptedLadder,
     Annealed,
     Monotone,
+    Polish,
     Tempered,
     TempSchedule,
-    adapt_ladder,
     check_ladder,
     ladder,
 )
@@ -77,6 +77,9 @@ from sal.sample.tune import (
     resolve_ladder,
     resolve_schedule,
 )
+from sal.search.alpha_expansion import Labelling
+from sal.search.icm import descended as icm_descended
+from sal.search.icm import iterated_conditional_modes
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
     SiteField,
@@ -86,11 +89,7 @@ from sal.sim.potts import (
     log_weight_of,
     site_field,
 )
-
-# `current` is aliased: `parallel_tempering` already binds that name to the
-# replicas' energies, and one of the two has to give.
 from sal.track import NULL as NULL_TRACKED
-from sal.track import TrackedOptimization
 from sal.track import current as current_tracked
 
 #: The move sets :func:`balanced_sweep_at` serves.
@@ -114,16 +113,38 @@ _LOOP_CODES = {
 }
 
 
-def loop_codes(move: Sequence[PottsMove], loop_backend: Backend) -> list[int] | None:
+def loop_codes(
+    move: Sequence[PottsMove],
+    loop_backend: Backend | None,
+    backend: Backend = Backend.RUST,
+    cluster_backend: Backend = Backend.RUST,
+) -> list[int] | None:
     """``move`` as the Rust loop's codes, or ``None`` where the Python loop runs the whole run (issue #1368).
 
     The Python loop runs where it is asked for, where a move in ``move`` has
     no Rust kernel the loop can call (heat-bath Swendsen-Wang, #1364; the
-    gradient-informed, ghost-spin, label-directed and Niedermayer moves), and
-    inside a :func:`~sal.track.track` block, whose per-step records are
-    Python calls.
+    gradient-informed, ghost-spin, label-directed and Niedermayer moves),
+    where ``backend`` or ``cluster_backend`` asks for a Python oracle the loop
+    does not call, and inside a :func:`~sal.track.track` block, whose
+    per-step records are Python calls.
     """
+    if loop_backend is None:
+        # The default: the Rust loop where a step grows a single cluster,
+        # 26.6x to 373x the Python loop (#1368); single-site and
+        # Swendsen-Wang sets measured 1.1x to 1.4x at 256x256, under the 2x
+        # rule, and keep the oracle's chain state for state there.
+        loop_backend = (
+            Backend.RUST
+            if any(each in _SINGLE_CLUSTER_MOVES for each in move)
+            else Backend.PYTHON
+        )
     if loop_backend is not Backend.RUST or current_tracked() is not NULL_TRACKED:
+        return None
+    if backend is not Backend.RUST and PottsMove.SINGLE_SITE in move:
+        return None
+    if cluster_backend is not Backend.RUST and any(
+        each is not PottsMove.SINGLE_SITE for each in move
+    ):
         return None
     if any(each not in _LOOP_CODES for each in move):
         return None
@@ -144,6 +165,8 @@ def run_loop(
     thin: int = 1,
     record: bool = False,
     track_best: bool = False,
+    polish: bool = False,
+    min_sites: int = 0,
 ) -> dict[str, Any]:
     """One ``oxisal.potts_loop`` call: the whole run in Rust, ``state`` moved in place (issue #1368).
 
@@ -168,6 +191,8 @@ def run_loop(
         record,
         track_best,
         int(rng.integers(0, 2**62)),
+        polish,
+        min_sites,
     )
 
 
@@ -333,7 +358,7 @@ def sample_potts(
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
-    loop_backend: Backend = Backend.PYTHON,
+    loop_backend: Backend | None = None,
 ) -> PottsChain:
     """Run one chain and return the configuration after every sweep.
 
@@ -400,7 +425,7 @@ def sample_potts(
         The starting labelling. ``None``, the default, draws one uniformly
         from ``rng`` as before; a given start draws nothing, so
         :func:`sample_potts_starts` can run the ordered start (issue #1316).
-    loop_backend : Backend
+    loop_backend : Backend | None
         Which implementation runs the **step loop** (issue #1368).
         :data:`~sal.backend.Backend.RUST` runs burn-in, the steps, the
         charge and the recording in one ``oxisal.potts_loop`` call on a
@@ -409,8 +434,9 @@ def sample_potts(
         the loop calls the Rust kernels. It covers single-site, uniform
         Swendsen-Wang and both Wolff moves; any other move in ``move``, or a
         :func:`~sal.track.track` block, runs the whole chain on the Python
-        loop (:func:`loop_codes`). :data:`~sal.backend.Backend.PYTHON`, the
-        oracle, is the default.
+        loop (:func:`loop_codes`). :data:`~sal.backend.Backend.PYTHON` is the
+        oracle. ``None``, the default, runs the Rust loop where ``move``
+        holds a Wolff move and the Python loop otherwise (:func:`loop_codes`).
 
     Returns
     -------
@@ -446,7 +472,7 @@ def sample_potts(
             check_labelling(start, graph.n_nodes, n_states), dtype=np.int64
         )
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    codes = loop_codes(move, loop_backend)
+    codes = loop_codes(move, loop_backend, backend, cluster_backend)
     if codes is not None:
         return _rust_chain(
             graph,
@@ -534,7 +560,7 @@ def _rust_chain(
         np.ones(1),
         rng,
         budget=budget,
-        n_main=0 if budget else int(n_sweeps) * thin,
+        n_main=0 if isinstance(n_sweeps, Budget) else n_sweeps * thin,
         lead=burn_in * thin,
         thin=thin,
         record=True,
@@ -662,7 +688,7 @@ def step_visits(move: PottsMove, graph: PottsGraph, cluster_sites: int = 0) -> i
     return per_sweep
 
 
-#: What :func:`parallel_tempering` takes as ``move``: one move set for every
+#: What :func:`~sal.sandbox.potts_tempering.parallel_tempering` takes as ``move``: one move set for every
 #: rung, or per rung a move set or a sequence of them run in order (#1158).
 RungMoves = PottsMove | Sequence[PottsMove | Sequence[PottsMove]]
 
@@ -705,7 +731,7 @@ def moves_per_rung(move: RungMoves, n_rungs: int) -> tuple[tuple[PottsMove, ...]
 #: :func:`rung_moves`' threshold on :func:`critical_ratio`: a rung at or
 #: above it runs a single-site sweep after its cluster move. The transition
 #: itself; the measurement brackets it between the ladder's rungs at 0.76
-#: and 1.58 (``tests/regression/search/test_tempering_rung_moves.py``).
+#: and 1.58 (``tests/regression/sandbox/test_potts_tempering_rung_threshold.py``).
 PAIR_FROM = 1.0
 
 
@@ -784,7 +810,7 @@ def rung_moves(
     field x1, x10 and x30 (ratio 0.08 to 5.3), it moved no ladder's energy
     at x10 or x30.
 
-    **Measured** through :func:`~sal.search.ground_state.run_tempering` at
+    **Measured** through :func:`~sal.sandbox.potts_tempering.run_tempering` at
     1,000 sweeps' site visits, five seeds, on ``spatio_only/release`` (71 x 71
     triangular, q = 10, J = 0.7, ``k`` = 0.36, 0.76, 1.58, 3.30, 6.91, 14.5),
     mean energy (standard error): single-site everywhere -9,900.1 (10.9);
@@ -803,9 +829,9 @@ def rung_moves(
         The instance. A negative coupling refuses every cluster move, so
         such a graph is single-site on every rung.
     field : SiteField | np.ndarray
-        As :func:`parallel_tempering` takes it.
+        As :func:`~sal.sandbox.potts_tempering.parallel_tempering` takes it.
     temperatures : TempSchedule | Sequence[float]
-        The ladder, in :func:`parallel_tempering`'s order.
+        The ladder, in :func:`~sal.sandbox.potts_tempering.parallel_tempering`'s order.
 
     Returns
     -------
@@ -870,7 +896,9 @@ def anneal_potts(
     start: np.ndarray | None = None,
     tuning: ScheduleTuning | None = None,
     budget: Budget | None = None,
-    loop_backend: Backend = Backend.PYTHON,
+    loop_backend: Backend | None = None,
+    polish: Polish | None = None,
+    min_sites: int = 0,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -951,7 +979,7 @@ def anneal_potts(
         its clusters, spends the budget and ends its ramp at it; ``n_sweeps``
         is then the steps run. A move set of fixed cost per step ``c`` given
         ``budget.size = schedule.n_steps * c`` is the default run, bitwise.
-    loop_backend : Backend
+    loop_backend : Backend | None
         Which implementation runs the **step loop** (issue #1368), as
         :func:`sample_potts` takes it. :data:`~sal.backend.Backend.RUST` reads
         the temperature, charges :func:`step_visits`, tracks the best and
@@ -959,8 +987,31 @@ def anneal_potts(
         so ``trace`` is empty, as for the compiled Swendsen-Wang pass, and
         ``energy`` is ``best``'s energy recomputed by :func:`energies`.
         :data:`~sal.backend.Backend.PYTHON`, :func:`~sal.sample.loop.anneal`
-        and :func:`~sal.sample.loop.anneal_spent`, is the oracle and the
-        default.
+        and :func:`~sal.sample.loop.anneal_spent`, is the oracle. ``None``,
+        the default, runs the Rust loop where ``move`` holds a Wolff move,
+        201x to 373x the Python loop on a Wolff anneal at 256x256, and the
+        Python loop otherwise, 1.1x to 1.4x there (:func:`loop_codes`). With ``polish``, the same call descends
+        ``final`` and ``best`` by the Rust ICM, on the floor's uniforms from
+        its own stream.
+    polish : Polish | None
+        The polisher run once the schedule ends (issue #1363). ``None``, the
+        default, is the run before the parameter existed, bitwise.
+        :attr:`~sal.sample.schedule.Polish.ICM` descends from ``final`` in
+        index order until a full sweep changes no label, honouring forbidden
+        labels, and charges a heat-bath sweep's site visits
+        (:func:`step_visits`) per sweep, the clean one included, in
+        ``polish_spent``: the update reads and writes what a sweep at
+        ``T = 0`` does. Where the schedule's ``best`` scores
+        below ``final``'s fixed point it is descended too, also charged, and
+        the lower fixed point is ``best``; ``final`` is the one from
+        ``final``. ``termination`` is the descent's: converged at the fixed
+        point, :attr:`~sal.opt.termination.Stop.INFEASIBLE` where
+        ``min_sites`` meets a site that allows no surviving label.
+    min_sites : int
+        The floor the polish applies (:func:`~sal.search.icm.iterated_conditional_modes`),
+        drawing its uniforms from ``rng`` after the schedule's draws; ``0``,
+        the default, applies none and draws nothing. Refused without
+        ``polish``.
 
     Returns
     -------
@@ -971,10 +1022,14 @@ def anneal_potts(
     ValueError
         If ``start`` is not one integer state in range per node, as
         :func:`~sal.sample.tune.resolve_schedule` refuses, or if ``budget``
-        is not in :attr:`~sal.cost.Cost.SITE_VISITS`.
+        is not in :attr:`~sal.cost.Cost.SITE_VISITS`, or if ``min_sites`` is
+        given without ``polish``.
     """
     field = log_weight_of(field)
     site_visits(budget)
+    if min_sites and polish is None:
+        msg = f"min_sites={min_sites} is the polish's floor; it needs a polish"
+        raise ValueError(msg)
     given = move
     move = move_set(move, recolour)
     refuse_negative_coupling(move, graph)
@@ -999,7 +1054,7 @@ def anneal_potts(
     lattice = _Lattice(
         graph, rows, graph.compressed_adjacency(), backend, cluster_backend
     )
-    codes = loop_codes(move, loop_backend)
+    codes = loop_codes(move, loop_backend, backend, cluster_backend)
     if codes is not None:
         ran = run_loop(
             state,
@@ -1011,16 +1066,28 @@ def anneal_potts(
             budget=0 if budget is None else budget.size,
             n_main=schedule.n_steps,
             track_best=True,
+            polish=polish is Polish.ICM,
+            min_sites=min_sites,
         )
         best = np.asarray(ran["best"])
-        return AnnealedPotts(
+        walked = Walked(
             best=best,
             energy=lattice.energy(best),
             final=state,
-            n_sweeps=int(ran["n_main"]),
+            energies=(),
             spent=int(ran["spent_total"]),
-            unit=Cost.SITE_VISITS,
             termination=Termination.after(int(ran["n_main"]), converged=False),
+        )
+        if polish is Polish.ICM:
+            return _polished_rust(graph, rows, walked, ran, min_sites, tuned)
+        return AnnealedPotts(
+            best=best,
+            energy=walked.energy,
+            final=state,
+            n_sweeps=int(ran["n_main"]),
+            spent=walked.spent,
+            unit=Cost.SITE_VISITS,
+            termination=walked.termination,
             trace=(),
             tuned=tuned,
         )
@@ -1031,6 +1098,8 @@ def anneal_potts(
         if budget is None
         else anneal_spent(step, schedule, origin, rng, np.copy, budget=budget.size)
     )
+    if polish is Polish.ICM:
+        return _polished(graph, rows, walked, rng, min_sites, trace, tuned)
     return AnnealedPotts(
         best=walked.best,
         energy=walked.energy,
@@ -1044,239 +1113,125 @@ def anneal_potts(
     )
 
 
-@dataclass(frozen=True, kw_only=True)
-class TemperedChains(Tempered[np.ndarray]):
-    """What a parallel-tempering run produced (issue #1090).
-
-    A :class:`~sal.sample.schedule.Tempered` over labellings: ``best`` is the
-    lowest-energy configuration seen at any temperature, and ``spent`` the
-    site visits of every replica's steps, burn-in included, each move charged
-    as :func:`anneal_potts` charges it (issue #1156).
-
-    Parameters
-    ----------
-    states : np.ndarray
-        Recorded configurations, shape ``(n_sweeps, n_replicas, n_nodes)``;
-        replica ``r`` sits at ``temperatures[r]`` throughout, because a swap
-        exchanges *configurations* between temperatures rather than moving a
-        chain along the ladder.
-    energy : float
-        ``best``'s energy, in :func:`energies`' convention.
-    n_sweeps : int
-        Sweeps run per replica after burn-in --- the budget per replica, so
-        the whole run cost ``n_replicas`` times this.
-    walkers : np.ndarray
-        ``walkers[t, w]`` is the rung walker ``w`` sat at, at recorded sweep
-        ``t``, shape ``(n_sweeps, n_replicas)``. The other reading of the
-        same run: a *replica* is a temperature configurations pass through,
-        where a *walker* is a configuration followed through the swaps, and
-        a round trip is a statement about the second.
-        :func:`sal.sample.tempered.round_trips` and
-        :func:`sal.sample.tempered.up_fraction` read it, an
-        exchange acceptance being a per-pair number a ladder can look
-        healthy in while nothing crosses it (issue #756).
-    tuned_ladder : TunedLadder | None
-        The pilot that chose the ladder under ``temperatures="auto"`` (issue
-        #1337), ``None`` for a given ladder; its spend is not in ``spent``.
-    """
-
-    states: np.ndarray
-    energy: float
-    n_sweeps: int
-    walkers: np.ndarray
-    tuned_ladder: TunedLadder | None = None
-
-
-def parallel_tempering(
+def _descend(
     graph: PottsGraph,
-    field: SiteField | np.ndarray,
-    temperatures: Ladder,
-    rng: np.random.Generator,
-    n_sweeps: int,
-    burn_in: int = 0,
-    thin: int = 1,
-    *,
-    move: RungMoves = PottsMove.SINGLE_SITE,
-    recolour: Recolour = Recolour.PER_MOVE,
-    backend: Backend = Backend.RUST,
-    cluster_backend: Backend = Backend.RUST,
-    start: np.ndarray | None = None,
-    ladder_tuning: LadderTuning | None = None,
-) -> TemperedChains:
-    """Replicas at fixed temperatures, exchanging configurations by Metropolis.
+    rows: np.ndarray,
+    start: np.ndarray,
+    rng: Generator,
+    min_sites: int,
+) -> Labelling:
+    """ICM in index order from ``start`` until a full sweep changes no label, or the floor is infeasible.
 
-    Each replica runs its rung's moves once per step at its own temperature,
-    in the order given, then every adjacent pair proposes to exchange configurations and accepts
-    on :func:`swap_log_ratio`. The hot replicas cross barriers the cold one
-    cannot, and an exchange carries what they find down the ladder (Swendsen &
-    Wang, 1986; Geyer, 1991; Earl & Deem, 2005).
-
-    **The exchange is exact for every move set** (issue #1156). The swap ratio
-    reads energies alone, so the product law ``prod_r exp(-beta_r E)`` is
-    invariant whenever each replica's move leaves its own rung's law
-    invariant, which every :class:`~sal.sample.potts_mcmc.moves.PottsMove`
-    does, and so does any sequence of them run in order on one rung. Each
-    rung may therefore run its own moves (issue #1158); :func:`rung_moves`
-    chooses them from the temperature. This is not :func:`cluster_tempering`,
-    which adds Houdayer moves between replicas.
-
-    **Moves belong to rungs, configurations to walkers.** An exchange swaps
-    configurations between rungs and leaves each rung's moves where they
-    are, so a configuration handed to a colder rung is next moved by that
-    rung's moves at that rung's ``beta``. Every closure :func:`sweep_for`
-    builds reads ``beta`` per call and stores nothing read from a
-    configuration; the one state any keeps is the label-directed pass's call
-    counter, which cycles the target label and is a rung's own. Each
-    ``(rung, position)`` gets its own closure, so no two share it.
-
-    **The replicas must not share a stream and must be reproducible from one
-    seed.** The passed generator spawns a child per replica; the parent
-    then draws only the exchange uniforms. Sharing one stream would correlate
-    the replicas, which is the whole point lost while every diagnostic looks
-    healthy.
-
-    Parameters
-    ----------
-    graph : PottsGraph
-        The instance. Couplings of either sign, except under a cluster move,
-        which refuses a negative one as :func:`anneal_potts` does.
-    field : SiteField | np.ndarray
-        External field, shape ``(n_states,)``.
-    temperatures : TempSchedule | Sequence[float] | Literal["auto"]
-        The ladder, coldest first and strictly increasing; at least two, all
-        positive. The order is :func:`cluster_tempering`'s, which 20 of 32
-        explicit-ladder call sites passed when the two were made one (issue
-        #1343); another order is refused, not reversed. ``"auto"`` chooses it by
-        :func:`~sal.sample.schedule.adapt_ladder` on pilot runs of this
-        function from ``ladder_tuning.start``, drawn from one child spawned
-        from ``rng`` first (issue #1337).
-    rng : np.random.Generator
-        The parent generator: it spawns one child per replica and then draws
-        only the exchange uniforms, so one seeded generator reproduces the run.
-    n_sweeps, burn_in, thin : int
-        As :func:`sample_potts`, applied per replica.
-    move : PottsMove | Sequence[PottsMove | Sequence[PottsMove]]
-        One move set every rung runs, or one entry per rung in the ladder's
-        order, each a move set or a non-empty sequence of them run in order
-        every step. Each is built by :func:`sweep_for` once per rung and
-        position, so no rung shares another's mutable state. A single
-        ``PottsMove`` is the chain of issue #1156 bitwise; single-site, the
-        default, is the chain before the parameter existed, bitwise.
-    backend : Backend
-        As :func:`anneal_potts`: the Rust sweep by default, the oracle that
-        pins it on request, each replica on its own child generator either
-        way.
-    cluster_backend : Backend
-        Runs the cluster passes, as :func:`anneal_potts` states.
-    start : np.ndarray | None
-        ``(n_nodes,)`` for every rung, or ``(n_rungs, n_nodes)`` one per rung
-        of the ladder given, coldest first; under ``"auto"`` each tuned rung
-        takes the row of ``ladder_tuning.start``'s rung nearest it in
-        temperature, a tie to the colder (issue #1343). Each row is checked by
-        :func:`~sal.sim.potts.check_labelling`; ``None`` draws each from its
-        replica's child generator, as before the parameter existed. A given
-        start draws nothing, as :func:`anneal_potts`' does, so one step from a
-        fixed pair is a draw from the product kernel's row (issue #1156).
-    ladder_tuning : LadderTuning | None
-        The pilot that chooses ``temperatures="auto"``, required with it and
-        refused without it. A given ladder draws nothing for it, so its run
-        is bitwise the run before #1337.
-
-    Returns
-    -------
-    TemperedChains
-
-    Raises
-    ------
-    ValueError
-        If fewer than two temperatures are given --- a ladder of one has
-        nothing to exchange and is :func:`sample_potts` --- or any is not
-        positive, or the ladder is not strictly increasing, coldest first,
-        or any move is a cluster move and a coupling is negative, or
-        ``move`` is not one entry per rung, or ``start`` is neither shape.
-    TypeError
-        If a rung's entry holds anything but a ``PottsMove``.
+    Chunks of ``n_nodes`` sweeps, each resumed from the last: an unfloored
+    index-order descent draws nothing, so the chunks are one descent. The
+    returned ``sweeps`` and termination iterations count every chunk's sweeps.
     """
-    field = log_weight_of(field)
-
-    def pilot(candidate: tuple[float, ...]) -> tuple[list[float], int]:
-        run = parallel_tempering(
+    swept, labelling = 0, start
+    while True:
+        descended = iterated_conditional_modes(
             graph,
-            field,
-            candidate,
-            pilot_rng,
-            ladder_tuning.n_sweeps if ladder_tuning else 0,
-            move=move,
-            recolour=recolour,
-            backend=backend,
-            cluster_backend=cluster_backend,
+            rows,
+            rng,
+            start=labelling,
+            max_iterations=max(graph.n_nodes, 1),
+            min_sites=min_sites,
         )
-        return [float(value) for value in run.swap_acceptance], run.spent
-
-    pilot_rng = rng.spawn(1)[0] if isinstance(temperatures, str) else rng
-    given, tuned_ladder = resolve_ladder(temperatures, ladder_tuning, pilot)
-    temperatures = check_ladder(
-        ladder(given),
-        needed_by="parallel tempering",
-        monotone=Monotone.INCREASING,
-    )
-    per_rung = tuple(
-        move_set(rung, recolour) for rung in moves_per_rung(move, len(temperatures))
-    )
-    for each in dict.fromkeys(m for rung in per_rung for m in rung):
-        refuse_negative_coupling(each, graph)
-
-    rows = site_field(np.asarray(field, dtype=float), graph.n_nodes)
-    n_replicas = len(temperatures)
-    children = rng.spawn(n_replicas)
-    n_states = int(rows.shape[1])
-    states = _rung_starts(
-        start, temperatures, ladder_tuning, children, graph.n_nodes, n_states
-    )
-    lattice = _Lattice(
-        graph, rows, graph.compressed_adjacency(), backend, cluster_backend
-    )
-    # One sweep per rung and position: the label-directed pass keeps a call
-    # counter, and a rung's counter is its own.
-    steps = [lattice.rung(rung, scored=False) for rung in per_rung]
-    # `swap_acceptance` is the mean over adjacent pairs of the fraction
-    # accepted so far, recorded from the first step after burn-in. Round
-    # trips and rung occupation are not: neither is a number this run
-    # computes, and a hook does not define a metric (issue #778).
-    tracked: TrackedOptimization = current_tracked()
-    burned = burn_in * thin
-
-    def observe(sweep: int, run: Exchanging[np.ndarray]) -> None:
-        if sweep >= burned:
-            tracked.record(
-                sweep - burned,
-                state=run.best,
-                swap_acceptance=float(np.mean(run.swap_acceptance)),
+        swept += descended.sweeps
+        labelling = descended.labelling
+        if descended.termination.reason is not Stop.BUDGET:
+            return Labelling(
+                labelling,
+                descended.energy,
+                swept,
+                termination=Termination(
+                    descended.termination.converged,
+                    swept,
+                    descended.termination.reason,
+                ),
             )
 
-    run, recorded = lattice.temper(
-        steps,
-        temperatures,
-        states,
-        children,
-        rng,
-        (n_sweeps, burn_in, thin),
-        kept=n_sweeps,
-        observe=observe,
-    )
-    tracked.record_cost(max(n_sweeps * thin - 1, 0), states.nbytes)
-    return TemperedChains(
-        states=recorded,
-        temperatures=tuple(temperatures),
-        swap_acceptance=run.swap_acceptance,
-        best=run.best,
-        energy=run.energy,
-        n_sweeps=n_sweeps,
-        walkers=run.walkers,
-        spent=run.spent,
+
+def _polished(
+    graph: PottsGraph,
+    rows: np.ndarray,
+    walked: Walked[np.ndarray],
+    rng: Generator,
+    min_sites: int,
+    trace: list[ClusterCounter],
+    tuned: TunedSchedule | None,
+) -> AnnealedPotts:
+    """``walked`` with :attr:`Polish.ICM` run from its final state, and from its best where that scores lower (issue #1363)."""
+    final = _descend(graph, rows, walked.final, rng, min_sites)
+    polished, sweeps = final, final.sweeps
+    if walked.energy < final.energy:
+        best = _descend(graph, rows, walked.best, rng, min_sites)
+        sweeps += best.sweeps
+        if best.energy < final.energy:
+            polished = best
+    charged = sweeps * step_visits(PottsMove.SINGLE_SITE, graph)
+    return AnnealedPotts(
+        best=polished.labelling,
+        energy=polished.energy,
+        final=final.labelling,
+        n_sweeps=walked.termination.iterations,
+        spent=walked.spent + charged,
         unit=Cost.SITE_VISITS,
-        termination=Termination.after((burn_in + n_sweeps) * thin, converged=False),
-        tuned_ladder=tuned_ladder,
+        termination=polished.termination,
+        polish_spent=charged,
+        polished_by=Polish.ICM.value,
+        trace=tuple(trace),
+        tuned=tuned,
+    )
+
+
+def _polished_rust(
+    graph: PottsGraph,
+    rows: np.ndarray,
+    walked: Walked[np.ndarray],
+    ran: dict[str, Any],
+    min_sites: int,
+    tuned: TunedSchedule | None,
+) -> AnnealedPotts:
+    """:func:`_polished` on the descents the Rust loop ran in its call (issue #1368).
+
+    The loop descends ``final`` and ``best`` both; the best's sweeps are
+    charged, and its fixed point taken, exactly where :func:`_polished`
+    descends it, on the same energies and the same termination
+    (:func:`~sal.search.icm.descended`).
+    """
+    offsets = graph.compressed_adjacency().offsets
+    n_states = int(rows.shape[1])
+    final_sweeps, best_sweeps = (int(each) for each in ran["polish_sweeps"])
+    final = icm_descended(
+        graph, rows, walked.final, final_sweeps, n_states, min_sites, offsets
+    )
+    polished, sweeps = final, final.sweeps
+    if walked.energy < final.energy:
+        best = icm_descended(
+            graph,
+            rows,
+            np.asarray(ran["best_polished"]),
+            best_sweeps,
+            n_states,
+            min_sites,
+            offsets,
+        )
+        sweeps += best.sweeps
+        if best.energy < final.energy:
+            polished = best
+    charged = sweeps * step_visits(PottsMove.SINGLE_SITE, graph)
+    return AnnealedPotts(
+        best=polished.labelling,
+        energy=polished.energy,
+        final=final.labelling,
+        n_sweeps=walked.termination.iterations,
+        spent=walked.spent + charged,
+        unit=Cost.SITE_VISITS,
+        termination=polished.termination,
+        polish_spent=charged,
+        polished_by=Polish.ICM.value,
+        trace=(),
+        tuned=tuned,
     )
 
 
@@ -1608,13 +1563,13 @@ def cluster_tempering(
     temperatures : TempSchedule | Sequence[float] | Literal["auto"]
         The ladder, coldest first and strictly increasing, the one order of
         both Potts temperings (issue #1343); at least two, all positive. ``"auto"``
-        chooses it as :func:`parallel_tempering` does, on pilot runs of this
+        chooses it as :func:`~sal.sandbox.potts_tempering.parallel_tempering` does, on pilot runs of this
         function (issue #1337).
     rng : np.random.Generator
         Spawns one child per replica, then draws the Houdayer seed sites and
         every accept uniform; under ``"auto"`` it first spawns the pilots'.
     n_sweeps, burn_in, thin : int
-        As :func:`parallel_tempering`.
+        As :func:`~sal.sandbox.potts_tempering.parallel_tempering`.
     houdayer_pairs : int
         How many of the coldest adjacent pairs run a Houdayer move a step.
     record : bool
@@ -1623,11 +1578,11 @@ def cluster_tempering(
     cluster_backend : Backend
         Runs the Swendsen-Wang pass, as :func:`anneal_potts` states.
     start : np.ndarray | None
-        As :func:`parallel_tempering`'s: ``(n_nodes,)`` for every rung or
+        As :func:`~sal.sandbox.potts_tempering.parallel_tempering`'s: ``(n_nodes,)`` for every rung or
         ``(n_rungs, n_nodes)`` per rung, mapped onto a tuned ladder by
         nearest temperature (issue #1343); ``None`` draws as before.
     ladder_tuning : LadderTuning | None
-        As :func:`parallel_tempering`'s.
+        As :func:`~sal.sandbox.potts_tempering.parallel_tempering`'s.
 
     Returns
     -------
@@ -1723,58 +1678,6 @@ def cluster_tempering(
         unit=Cost.SITE_VISITS,
         termination=Termination.after((burn_in + n_sweeps) * thin, converged=False),
         tuned_ladder=tuned_ladder,
-    )
-
-
-def adapt_ladder_potts(
-    graph: PottsGraph,
-    field: SiteField | np.ndarray,
-    temperatures: TempSchedule | Sequence[float],
-    rng: np.random.Generator,
-    n_sweeps: int,
-    band: tuple[float, float],
-    max_iterations: int,
-    max_replicas: int,
-    *,
-    backend: Backend = Backend.RUST,
-) -> AdaptedLadder:
-    """A ladder for :func:`parallel_tempering`, from its own exchange acceptances.
-
-    :func:`sal.sample.schedule.adapt_ladder`, the measurement being
-    a :func:`parallel_tempering` run of ``n_sweeps`` per replica on the
-    candidate ladder, drawn from ``rng`` in sequence so one seed reproduces the
-    warm-up. ``replicas_measured * n_sweeps`` is the warm-up's cost in sweeps,
-    which a comparison against a hand ladder at equal budget charges (issue
-    #333).
-
-    Parameters
-    ----------
-    graph, field, rng, backend
-        As :func:`parallel_tempering`.
-    temperatures : TempSchedule | Sequence[float]
-        The starting ladder, in either spelling and read by
-        :func:`~sal.sample.schedule.ladder` into the same
-        floats; its endpoints are kept.
-    n_sweeps : int
-        Sweeps per replica per measurement. Each acceptance is a fraction of
-        ``n_sweeps`` proposals, so this sets what the band can resolve.
-    band, max_iterations, max_replicas
-        As :func:`sal.sample.schedule.adapt_ladder`.
-
-    Returns
-    -------
-    AdaptedLadder
-    """
-    field = log_weight_of(field)
-
-    def measure(candidate: tuple[float, ...]) -> list[float]:
-        run = parallel_tempering(
-            graph, field, candidate, rng, n_sweeps, backend=backend
-        )
-        return [float(value) for value in run.swap_acceptance]
-
-    return adapt_ladder(
-        measure, ladder(temperatures), band, max_iterations, max_replicas
     )
 
 
@@ -1886,7 +1789,7 @@ def sample_potts_pair(
     graph, field, move, rng, n_sweeps, burn_in, thin, temperature, backend, cluster_backend
         As :func:`sample_potts`, applied to each replica. ``rng`` spawns one
         child per replica and keeps the pair's own draws, so the two replicas
-        do not share a stream --- :func:`parallel_tempering`'s rule, for its
+        do not share a stream --- :func:`~sal.sandbox.potts_tempering.parallel_tempering`'s rule, for its
         reason.
     houdayer : bool
         Whether the pair takes the isoenergetic move after each pair of

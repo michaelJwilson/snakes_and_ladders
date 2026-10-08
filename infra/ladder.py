@@ -406,15 +406,6 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
-        "parallel tempering",
-        "sample.potts_mcmc.parallel_tempering",
-        "annealing",
-        T + "sample/test_potts_mcmc.py"
-        "::test_tempering_reaches_the_ground_energy_annealing_reaches",
-        cost=Cost.SWEEPS,
-    ),
-    Rung(
-        "potts",
         "learned policy",
         "learn.potts_nd.PottsNDEnvironment",
         "exact cut / max-flow",
@@ -432,8 +423,8 @@ LADDER: tuple[Rung, ...] = (
     ),
     Rung(
         "potts",
-        "run_tempering, run_field_argmax, run_max_product",
-        "search.ground_state.run_tempering",
+        "run_field_argmax, run_max_product",
+        "search.ground_state.run_field_argmax",
         None,
         T + "search/test_ground_state.py"
         "::test_the_runners_record_the_energy_their_kernels_return",

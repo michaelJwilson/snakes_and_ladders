@@ -104,15 +104,14 @@ def test_release_tempering_steps_benchmark(
     benchmark: BenchmarkFixture, move: PottsMove
 ) -> None:
     # `STEPS` `parallel_tempering` steps at `spatio_tiling/release` on the
-    # ladder and cluster backend `ground_state.run_tempering` runs (issue
+    # ladder and cluster backend `potts_tempering.run_tempering` runs (issue
     # #1156), each six replica moves, the energies and five exchange
     # proposals; ten steps so the per-call setup is not what is timed.
-    from sal.sample.potts_mcmc import parallel_tempering
+    from sal.sandbox.potts_tempering import N_REPLICAS, parallel_tempering
     from sal.search.ground_state import (
         _COMPILED_CLUSTERS,
         ANNEAL_END,
         ANNEAL_START,
-        N_REPLICAS,
     )
     from sal.search.potts_starts import tiling_rung
     from sal.sim.fixtures import fixture
@@ -142,9 +141,13 @@ def test_release_rung_moves_tempering_steps_benchmark(
     # `STEPS` steps of the ladder `rung_moves` picks at `spatio_tiling/release`
     # (issue #1158): heat-bath Swendsen-Wang on the two hottest rungs, it and a
     # single-site sweep on the four below, on the compiled cluster route
-    # `ground_state.run_tempering` takes; beside the single-move rows above.
-    from sal.sample.potts_mcmc import parallel_tempering, rung_moves
-    from sal.search.ground_state import N_REPLICAS, tempering_ladder
+    # `potts_tempering.run_tempering` takes; beside the single-move rows above.
+    from sal.sample.potts_mcmc import rung_moves
+    from sal.sandbox.potts_tempering import (
+        N_REPLICAS,
+        parallel_tempering,
+        tempering_ladder,
+    )
     from sal.search.potts_starts import tiling_rung
     from sal.sim.fixtures import fixture
 

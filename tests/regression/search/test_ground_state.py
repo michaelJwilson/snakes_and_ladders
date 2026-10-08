@@ -24,14 +24,10 @@ from sal.likelihood.message_passing import (
 )
 from sal.opt.budget import Budget
 from sal.opt.termination import Stop, Termination
-from sal.sample.potts_mcmc import (
-    PottsMove,
-    Recolour,
-    anneal_potts,
-    parallel_tempering,
-    sample_potts,
-)
+from sal.sample.potts_mcmc import PottsMove, Recolour, anneal_potts, sample_potts
 from sal.sample.schedule import ExponentialTempSchedule
+from sal.sandbox import potts_tempering
+from sal.sandbox.potts_tempering import parallel_tempering
 from sal.search import ground_state
 from sal.search.alpha_expansion import (
     alpha_beta_swap,
@@ -390,14 +386,16 @@ def test_the_runners_record_the_energy_their_kernels_return() -> None:
     budget = Budget(Cost.SITE_VISITS, 60 * rung.visits_per_sweep)
     seed = 11
 
-    tempering = ground_state.run_tempering(rung, budget, np.random.default_rng(seed))
+    tempering = potts_tempering.run_tempering(rung, budget, np.random.default_rng(seed))
     per_replica = max(
-        1, budget.size // (ground_state.N_REPLICAS * rung.visits_per_sweep)
+        1, budget.size // (potts_tempering.N_REPLICAS * rung.visits_per_sweep)
     )
     ladder = tuple(
         float(value)
         for value in np.geomspace(
-            ground_state.ANNEAL_END, ground_state.ANNEAL_START, ground_state.N_REPLICAS
+            ground_state.ANNEAL_END,
+            ground_state.ANNEAL_START,
+            potts_tempering.N_REPLICAS,
         )
     )
     kernel = parallel_tempering(
@@ -407,7 +405,8 @@ def test_the_runners_record_the_energy_their_kernels_return() -> None:
     assert tempering.energy == kernel.energy
     assert np.array_equal(tempering.labelling, kernel.best)
     assert (
-        tempering.spent == ground_state.N_REPLICAS * per_replica * rung.visits_per_sweep
+        tempering.spent
+        == potts_tempering.N_REPLICAS * per_replica * rung.visits_per_sweep
     )
 
     argmax = ground_state.run_field_argmax(rung, budget, np.random.default_rng(seed))

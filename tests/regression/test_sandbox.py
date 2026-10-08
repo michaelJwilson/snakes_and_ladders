@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import ast
 import importlib
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -20,10 +22,18 @@ import sal.sandbox
 PACKAGE = Path(sal.__file__).parent
 SANDBOX = "sal.sandbox"
 
-# The packages the oracle home may not be imported from: everything that could
-# carry a hot path. `qa` renders and may read an oracle; `tests/` pins against
-# one. `sandbox` itself is excluded because an oracle may import a sibling.
-FORBIDDEN_IMPORTERS = ("sim", "likelihood", "opt", "search", "learn")
+# The packages the oracle home may not be imported from: every supported one
+# (#1352). `qa` renders and may read an oracle; `tests/` pins against one.
+# `sandbox` itself is excluded because an oracle may import a sibling.
+FORBIDDEN_IMPORTERS = tuple(
+    sorted(
+        path.name
+        for path in PACKAGE.iterdir()
+        if path.is_dir()
+        and (path / "__init__.py").exists()
+        and path.name not in {"sandbox", "qa"}
+    )
+)
 
 
 def _imports_sandbox(source: str) -> bool:
@@ -43,13 +53,32 @@ def _imports_sandbox(source: str) -> bool:
 @pytest.mark.critical
 @pytest.mark.infra
 def test_no_hot_path_package_imports_the_sandbox() -> None:
-    offenders = sorted(
-        str(path.relative_to(PACKAGE))
+    assert {"sample", "search", "sim"} <= set(FORBIDDEN_IMPORTERS)
+    modules = [
+        path
         for package in FORBIDDEN_IMPORTERS
         for path in (PACKAGE / package).rglob("*.py")
+    ] + list(PACKAGE.glob("*.py"))
+    offenders = sorted(
+        str(path.relative_to(PACKAGE))
+        for path in modules
         if _imports_sandbox(path.read_text())
     )
     assert offenders == []
+
+
+@pytest.mark.infra
+def test_import_sal_does_not_import_the_sandbox() -> None:
+    # A fresh interpreter: this module imports the sandbox itself (#1352).
+    code = (
+        "import sys, sal; "
+        "print(any(m == 'sal.sandbox' or m.startswith('sal.sandbox.') "
+        "for m in sys.modules))"
+    )
+    ran = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert ran.stdout.strip() == "False"
 
 
 @pytest.mark.critical

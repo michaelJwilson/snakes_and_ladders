@@ -239,7 +239,21 @@ def potts_loop(
     record: bool,
     track_best: bool,
     seed: int,
+    polish: bool = False,
+    min_sites: int = 0,
 ) -> dict[str, Any]: ...
+def icm_sweeps(
+    state: np.ndarray,
+    field: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    orders: np.ndarray,
+    draws: np.ndarray,
+    n_sweeps: int,
+    stop_when_clean: bool,
+    min_sites: int,
+) -> int: ...
 def class_posteriors(
     totals: np.ndarray,
     successes: np.ndarray | None,

@@ -21,12 +21,15 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from sal.backend import Backend
-from sal.opt.budget import Budget
 from sal.cost import Cost
+from sal.opt.budget import Budget
+from sal.opt.termination import Stop
 from sal.sample.loop import Moved, anneal_spent
 from sal.sample.potts_mcmc import PottsMove, Recolour, anneal_potts, sample_potts
-from sal.sample.potts_mcmc.chains import loop_codes, run_loop
-from sal.sample.schedule import ramp
+from sal.sample.potts_mcmc.chains import loop_codes, run_loop, step_visits
+from sal.sample.schedule import Polish, ramp
+from sal.search.alpha_expansion import Labelling
+from sal.search.icm import iterated_conditional_modes
 from sal.sim.potts import site_field
 
 from tests._chains import cell_counts, enumerated_law
@@ -152,7 +155,7 @@ def test_a_wolff_budget_replays_on_the_python_loop(move: PottsMove) -> None:
     temperatures: list[float] = []
 
     def replay(
-        s: np.ndarray, energy: float, carried: None, temperature: float, rng: None
+        s: np.ndarray, energy: float, _carried: None, temperature: float, _rng: None
     ) -> Moved[np.ndarray, None]:
         temperatures.append(temperature)
         return Moved(s, energy, None, charges[len(temperatures) - 1])
@@ -184,3 +187,83 @@ def test_a_move_without_a_rust_kernel_runs_the_python_loop_bitwise() -> None:
     assert np.array_equal(runs[0].best, runs[1].best)
     assert runs[0].energy == runs[1].energy
     assert runs[0].spent == runs[1].spent
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("move", [PottsMove.WOLFF, PottsMove.SINGLE_SITE])
+def test_the_polish_in_the_rust_loop_is_the_numba_descent_of_its_states(
+    move: PottsMove,
+) -> None:
+    """The polish the loop runs equals ``numba`` ICM from the same run's final and best, bitwise, unfloored (#1368).
+
+    An unfloored index-order descent draws nothing, so the polished and the
+    unpolished call share the schedule's stream; the referee descends the
+    unpolished run's states with the ``numba`` kernel as ``chains._polished``
+    does and compares labelling, ``polish_spent``, ``spent`` and the stop.
+    """
+    graph = _graph()
+    schedule = ramp.linear(2.0, 0.2, 30)
+    plain, polished = (
+        anneal_potts(
+            graph,
+            FIELD,
+            schedule,
+            np.random.default_rng(SEED),
+            move=[move],
+            recolour=Recolour.UNIFORM,
+            loop_backend=Backend.RUST,
+            polish=polish,
+        )
+        for polish in (None, Polish.ICM)
+    )
+
+    def descend(start: np.ndarray) -> Labelling:
+        return iterated_conditional_modes(
+            graph,
+            FIELD,
+            np.random.default_rng(0),
+            start=start,
+            max_iterations=graph.n_nodes,
+            backend=Backend.NUMBA,
+        )
+
+    final = descend(plain.final)
+    expected, sweeps = final, final.sweeps
+    if plain.energy < final.energy:
+        best = descend(plain.best)
+        sweeps += best.sweeps
+        if best.energy < final.energy:
+            expected = best
+    charged = sweeps * step_visits(PottsMove.SINGLE_SITE, graph)
+    np.testing.assert_array_equal(polished.final, final.labelling)
+    np.testing.assert_array_equal(polished.best, expected.labelling)
+    assert polished.polish_spent == charged
+    assert polished.spent == plain.spent + charged
+    assert polished.termination.reason is Stop.CONVERGED
+    assert polished.polished_by == Polish.ICM.value
+
+
+@pytest.mark.analytic
+def test_a_floored_polish_in_the_rust_loop_ends_at_a_floored_fixed_point() -> None:
+    """With ``min_sites``, the loop's polish draws from its own stream: held at the fixed point and the floor (#1368)."""
+    graph = _graph()
+    min_sites = 2
+    run = anneal_potts(
+        graph,
+        FIELD,
+        ramp.linear(2.0, 0.2, 30),
+        np.random.default_rng(SEED),
+        move=[PottsMove.WOLFF],
+        recolour=Recolour.UNIFORM,
+        loop_backend=Backend.RUST,
+        polish=Polish.ICM,
+        min_sites=min_sites,
+    )
+    counts = np.bincount(run.best, minlength=FIELD.shape[1])
+    assert not ((counts > 0) & (counts < min_sites)).any()
+    again = iterated_conditional_modes(
+        graph, FIELD, np.random.default_rng(0), start=run.best, min_sites=min_sites
+    )
+    assert again.sweeps == 1
+    np.testing.assert_array_equal(again.labelling, run.best)
+    assert run.termination.reason is Stop.CONVERGED

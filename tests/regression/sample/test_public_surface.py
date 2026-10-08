@@ -122,11 +122,20 @@ def test_the_public_kernels_are_exported_with_their_snapshotted_signatures() -> 
 
 
 @pytest.mark.infra
-@pytest.mark.parametrize(
-    "name", ["PottsMove", "cluster_tempering", "parallel_tempering"]
-)
+@pytest.mark.parametrize("name", ["PottsMove", "cluster_tempering"])
 def test_the_public_drivers_and_moves_are_exported(name: str) -> None:
     assert name in potts_mcmc.__all__
+
+
+@pytest.mark.infra
+@pytest.mark.parametrize(
+    "name",
+    ["parallel_tempering", "adapt_ladder_potts", "TemperedChains"],
+)
+def test_the_unsupported_tempering_is_not_exported(name: str) -> None:
+    # Moved to `sal.sandbox.potts_tempering` by the owner's decision (#1352).
+    assert name not in potts_mcmc.__all__
+    assert not hasattr(potts_mcmc, name)
 
 
 @pytest.mark.infra

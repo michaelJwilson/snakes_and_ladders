@@ -102,8 +102,10 @@ INCIDENCE_OWNER = "incidence.py"
 #: Package modules building a store through the seam, as of 048a342 plus
 #: `sample/tempered.py` and `sample/annealed.py` (#766); `search/ground_state.py`
 #: left with #858; `qa/potts_clusters.py` joined with #1041, `search/trws.py`
-#: with #1060. A PR adding or removing a consumer moves the pin.
-SEAM_CONSUMERS = 13
+#: with #1060; `sandbox/potts_tempering.py` with #1352, carrying the Potts
+#: `parallel_tempering` out of `sample/potts_mcmc/chains.py`, which keeps
+#: `cluster_tempering`. A PR adding or removing a consumer moves the pin.
+SEAM_CONSUMERS = 14
 
 #: Files this guard does not read, each against the reason, rather than an
 #: allow-list nobody can audit. The first two are measurements the
@@ -827,8 +829,21 @@ def test_the_problem_catalogue_has_one_reader() -> None:
 #: Private cross-module imports, each with its reason (#1010, CLEAN's E):
 #: `_submodules` is the lazy-import plumbing. `_HmmObjective`, which
 #: `opt.hmm.jax` narrowed on, left with the per-family objectives (#1189).
+#: The sandbox's are the supported helpers its routes ran on before they
+#: moved (#1352): the lattice exchange loop, the per-rung starts and the
+#: ground-state arm's refusals, which `cluster_tempering` and the supported
+#: arms still use, and the ramp checks the declined ramp subclassed.
 PRIVATE_IMPORTS_ADMITTED = {
     ("sal", "_submodules"),
+    ("sal.sample.potts_mcmc.chains", "_Lattice"),
+    ("sal.sample.potts_mcmc.chains", "_rung_starts"),
+    ("sal.search.ground_state", "_COMPILED_CLUSTERS"),
+    ("sal.search.ground_state", "_problem"),
+    ("sal.search.ground_state", "_refuse_start"),
+    ("sal.sample.schedule", "_InterpolatedTempSchedule"),
+    ("sal.sample.schedule", "_check_length"),
+    ("sal.sample.schedule", "_check_step"),
+    ("sal.sample.schedule", "_check_temperature"),
 }
 
 

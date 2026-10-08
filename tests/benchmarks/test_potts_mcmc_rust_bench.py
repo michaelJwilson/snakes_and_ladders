@@ -22,13 +22,9 @@ from pytest_benchmark.fixture import BenchmarkFixture
 from sal import oxisal
 from sal.backend import Backend
 from sal.sample.potts_keyed import SwendsenWangMove
-from sal.sample.potts_mcmc import (
-    PottsChain,
-    PottsMove,
-    parallel_tempering,
-    sample_potts,
-)
+from sal.sample.potts_mcmc import PottsChain, PottsMove, sample_potts
 from sal.sample.potts_mcmc.sweeps import GUARD
+from sal.sandbox.potts_tempering import parallel_tempering
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import critical_coupling, site_field
 

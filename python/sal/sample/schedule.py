@@ -60,7 +60,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 import numpy as np
 
@@ -71,21 +71,19 @@ from sal.opt.termination import Termination
 #: and no name it imports.
 __all__ = [
     "AdaptedLadder",
-    "Adaptive",
-    "AdaptiveSchedule",
     "Annealed",
     "ConstantTempSchedule",
     "CosineTempSchedule",
     "ExponentialTempSchedule",
     "FeedbackLadder",
     "HeldTempSchedule",
-    "HuangSchedule",
     "InverseLinearTempSchedule",
     "InverseTemperatures",
     "LadderTempSchedule",
     "LinearTempSchedule",
     "LogarithmicTempSchedule",
     "Monotone",
+    "Polish",
     "PowerTempSchedule",
     "Quantity",
     "Ramp",
@@ -93,11 +91,8 @@ __all__ = [
     "ScheduleShape",
     "TempSchedule",
     "Tempered",
-    "ThermodynamicPilot",
-    "ThermodynamicTempSchedule",
     "adapt_ladder",
     "adapt_ladder_by_round_trips",
-    "adaptive",
     "beta_ladder",
     "check_ladder",
     "ladder",
@@ -366,93 +361,6 @@ class LogarithmicTempSchedule(_InterpolatedTempSchedule):
         return self.start * x / (x + math.log1p(step * math.exp(-x)))
 
 
-@dataclass(frozen=True)
-class ThermodynamicPilot:
-    """``sigma_E(T)`` measured on a temperature grid, the input a constant-speed ramp is placed from.
-
-    The thermodynamic length ``L(T) = int sigma_E(T) / T^2 dT`` (Salamon &
-    Berry, 1983) is taken by the trapezoid rule at the grid's nodes and
-    linearly between them, so it is fixed once the pilot is.
-
-    Parameters
-    ----------
-    temperatures : tuple[float, ...]
-        Strictly increasing, positive, at least two.
-    sigma : tuple[float, ...]
-        The energy's standard deviation at each, positive.
-    """
-
-    temperatures: tuple[float, ...]
-    sigma: tuple[float, ...]
-
-    def __post_init__(self) -> None:
-        grid = np.asarray(self.temperatures, dtype=np.float64)
-        spread = np.asarray(self.sigma, dtype=np.float64)
-        if grid.ndim != 1 or grid.size < 2 or spread.shape != grid.shape:
-            msg = (
-                "a pilot needs at least two temperatures and one sigma each, got "
-                f"{grid.size} and {spread.size}"
-            )
-            raise ValueError(msg)
-        if not (grid[0] > 0.0 and np.all(np.diff(grid) > 0.0)):
-            msg = "a pilot's temperatures are positive and strictly increasing"
-            raise ValueError(msg)
-        if not np.all(spread > 0.0):
-            msg = "a pilot's sigma is positive at every temperature"
-            raise ValueError(msg)
-
-    def nodes(self) -> np.ndarray:
-        """``L`` at each grid temperature, ``0`` at the first."""
-        grid = np.asarray(self.temperatures, dtype=np.float64)
-        speed = np.asarray(self.sigma, dtype=np.float64) / grid**2
-        steps = 0.5 * (speed[1:] + speed[:-1]) * np.diff(grid)
-        return np.concatenate(([0.0], np.cumsum(steps)))
-
-    def length(self, temperature: float) -> float:
-        """``L(temperature)``, linear between the nodes; refused off the grid."""
-        if not self.temperatures[0] <= temperature <= self.temperatures[-1]:
-            msg = (
-                f"temperature {temperature} is outside the pilot's grid "
-                f"[{self.temperatures[0]}, {self.temperatures[-1]}]"
-            )
-            raise ValueError(msg)
-        return float(np.interp(temperature, self.temperatures, self.nodes()))
-
-
-@dataclass(frozen=True)
-class ThermodynamicTempSchedule(_InterpolatedTempSchedule):
-    """Constant thermodynamic speed from ``start`` to ``end`` (Nulton & Salamon, 1988).
-
-    ``g(T) = L(T)``, the pilot's thermodynamic length, and ``s = t``: each
-    step covers the same length, so the ramp slows where ``sigma_E / T^2``
-    peaks. ``T_k`` is ``L``'s inverse, exact on its piecewise-linear form;
-    both endpoints are returned bitwise.
-
-    Parameters
-    ----------
-    pilot : ThermodynamicPilot
-        Its grid covers ``start`` and ``end``.
-    """
-
-    pilot: ThermodynamicPilot = field(kw_only=True)
-    _values: tuple[float, ...] = field(init=False, repr=False)
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        first, last = self.pilot.length(self.start), self.pilot.length(self.end)
-        fraction = np.arange(self.n_steps) / max(self.n_steps - 1, 1)
-        targets = (1.0 - fraction) * first + fraction * last
-        values = np.interp(targets, self.pilot.nodes(), self.pilot.temperatures)
-        values[0], values[-1] = self.start, self.end
-        if self.start == self.end:
-            values[:] = self.start
-        object.__setattr__(self, "_values", tuple(float(value) for value in values))
-
-    def __call__(self, step: int) -> float:
-        _check_step(step, self.n_steps)
-        return self._values[step]
-
-
 class ScheduleShape(StrEnum):
     """The curve an annealing ramp follows between its two endpoints.
 
@@ -467,7 +375,6 @@ class ScheduleShape(StrEnum):
     INVERSE_LINEAR = "inverse_linear"
     POWER = "power"
     LOGARITHMIC = "logarithmic"
-    THERMODYNAMIC = "thermodynamic"
 
 
 class Ramp:
@@ -475,9 +382,9 @@ class Ramp:
 
     ``ramp(shape, start, end, n_steps, **keywords)`` is a ``match`` on
     ``shape`` onto the explicit call of the member's value: ``ramp.linear``,
-    ``.exponential``, ``.cosine``, ``.inverse_linear``, ``.power``,
-    ``.logarithmic`` and ``.thermodynamic``. A keyword the target does not
-    take is refused by name.
+    ``.exponential``, ``.cosine``, ``.inverse_linear``, ``.power`` and
+    ``.logarithmic``. The ``sigma_E``-placed ramp is declined and conserved
+    in the sandbox (issue #1352).
     """
 
     @staticmethod
@@ -510,32 +417,21 @@ class Ramp:
         """``g(T) = 1 / T``, ``s`` logarithmic in ``k + d``: ``c / log(k + d)``."""
         return LogarithmicTempSchedule(start, end, n_steps)
 
-    @staticmethod
-    def thermodynamic(
-        start: float, end: float, n_steps: int, *, pilot: ThermodynamicPilot
-    ) -> TempSchedule:
-        """``g(T) = L(T)`` from ``pilot``, ``s = t``: constant thermodynamic speed."""
-        return ThermodynamicTempSchedule(start, end, n_steps, pilot=pilot)
-
     def __call__(
         self,
         shape: ScheduleShape,
         start: float,
         end: float,
         n_steps: int,
-        **keywords: Any,
     ) -> TempSchedule:
         """The ramp of ``shape``, by its explicit call.
 
         Raises
         ------
         ValueError
-            If ``shape`` is not a :class:`ScheduleShape`, or a keyword is
-            handed to a call that does not take it, or one it needs is
-            missing.
+            If ``shape`` is not a :class:`ScheduleShape`.
         """
-        call: Callable[..., TempSchedule]
-        takes: tuple[str, ...] = ()
+        call: Callable[[float, float, int], TempSchedule]
         match shape:
             case ScheduleShape.LINEAR:
                 call = self.linear
@@ -549,111 +445,17 @@ class Ramp:
                 call = self.power
             case ScheduleShape.LOGARITHMIC:
                 call = self.logarithmic
-            case ScheduleShape.THERMODYNAMIC:
-                call = self.thermodynamic
-                takes = ("pilot",)
             case _:
                 msg = (
                     f"no ramp shape {shape!r}; the shapes are "
                     f"{[str(member) for member in ScheduleShape]}"
                 )
                 raise ValueError(msg)
-        foreign = sorted(set(keywords) - set(takes))
-        if foreign:
-            msg = f"ramp {shape} takes no {', '.join(foreign)}"
-            raise ValueError(msg)
-        missing = sorted(set(takes) - set(keywords))
-        if missing:
-            msg = f"ramp {shape} needs {', '.join(missing)}"
-            raise ValueError(msg)
-        return call(start, end, n_steps, **keywords)
+        return call(start, end, n_steps)
 
 
 #: The ramps: ``ramp(shape, start, end, n_steps)`` and ``ramp.<shape>(...)``.
 ramp = Ramp()
-
-
-@runtime_checkable
-class AdaptiveSchedule(Protocol):
-    """A temperature chosen from the chain as it runs, rather than declared in advance (issue #1333).
-
-    :func:`sal.sample.loop.anneal_adaptive` runs a block of steps at
-    :attr:`start`, hands :meth:`next` the block's energies, and runs the next
-    block at what it returns, until it returns ``None`` (converged) or
-    :attr:`budget` temperatures have run (budget).
-    """
-
-    #: The first temperature.
-    start: float
-    #: The most temperatures the run visits, ``>= 1``.
-    budget: int
-
-    @abstractmethod
-    def next(self, temperature: float, energies: Sequence[float]) -> float | None:
-        """The temperature after ``temperature``, or ``None`` to stop."""
-        ...  # pragma: no cover
-
-
-@dataclass(frozen=True)
-class HuangSchedule(AdaptiveSchedule):
-    """``T' = T exp(-rate T / sigma_E(T))`` (Huang, Romeo & Sangiovanni-Vincentelli, 1986).
-
-    ``sigma_E`` is the population standard deviation of the block's
-    energies. The step is clamped at ``end``, which the run then visits
-    once: :meth:`next` at ``end`` returns ``None``. A block of equal energies
-    has ``sigma_E = 0`` and steps to ``end``.
-
-    Parameters
-    ----------
-    start, end : float
-        Positive, ``start >= end``.
-    rate : float
-        ``lambda > 0``; Huang et al. take ``0.7``.
-    budget : int
-        The most temperatures visited, ``>= 1``.
-    """
-
-    start: float
-    end: float
-    rate: float
-    budget: int
-
-    def __post_init__(self) -> None:
-        _check_temperature("start", self.start)
-        _check_temperature("end", self.end)
-        if self.start < self.end:
-            msg = f"Huang's schedule cools, and start={self.start} < end={self.end}"
-            raise ValueError(msg)
-        if not self.rate > 0.0:
-            msg = f"rate must be positive, got {self.rate}"
-            raise ValueError(msg)
-        _check_length(self.budget)
-
-    def next(self, temperature: float, energies: Sequence[float]) -> float | None:
-        if temperature <= self.end:
-            return None
-        if len(energies) < 2:
-            msg = f"sigma_E needs at least two energies, got {len(energies)}"
-            raise ValueError(msg)
-        sigma = float(np.std(np.asarray(energies, dtype=np.float64)))
-        if sigma == 0.0:
-            return self.end
-        return max(temperature * math.exp(-self.rate * temperature / sigma), self.end)
-
-
-class Adaptive:
-    """:data:`adaptive`: one explicit call per online schedule (issue #1333)."""
-
-    @staticmethod
-    def huang(
-        start: float, end: float, *, rate: float, budget: int
-    ) -> AdaptiveSchedule:
-        """Huang, Romeo & Sangiovanni-Vincentelli's ``sigma_E``-driven cooling."""
-        return HuangSchedule(start, end, rate, budget)
-
-
-#: The online schedules: ``adaptive.huang(...)``.
-adaptive = Adaptive()
 
 
 @dataclass(frozen=True)
@@ -716,9 +518,6 @@ class ScheduleParams:
         ``[0, 1)`` with ``warm + hold < 1``. The held count is
         ``floor(warm * n_steps)``; ``0`` is the schedule before #1324,
         bitwise.
-    pilot : ThermodynamicPilot | None
-        The ``sigma_E`` grid :attr:`ScheduleShape.THERMODYNAMIC` is placed
-        from, and that shape's alone (issue #1333).
     """
 
     shape: ScheduleShape
@@ -726,7 +525,6 @@ class ScheduleParams:
     t_end: float
     hold: float = 0.0
     warm: float = 0.0
-    pilot: ThermodynamicPilot | None = None
 
     def __post_init__(self) -> None:
         _check_temperature("t_start", self.t_start)
@@ -754,16 +552,12 @@ class ScheduleParams:
         ------
         ValueError
             If ``n_steps < 1``, if the hold leaves a one-step ramp between
-            two different temperatures, or if :attr:`pilot` is missing for
-            :attr:`ScheduleShape.THERMODYNAMIC` or given for another shape.
+            two different temperatures.
         """
         _check_length(n_steps)
         held = math.floor(self.hold * n_steps)
         warm = math.floor(self.warm * n_steps)
-        keywords = {} if self.pilot is None else {"pilot": self.pilot}
-        built = ramp(
-            self.shape, self.t_start, self.t_end, n_steps - held - warm, **keywords
-        )
+        built = ramp(self.shape, self.t_start, self.t_end, n_steps - held - warm)
         if held == 0 and warm == 0:
             return built
         return HeldTempSchedule(built, held, warm)
@@ -814,7 +608,7 @@ def ladder(values: TempSchedule | Sequence[float]) -> tuple[float, ...]:
 
     **The order is the caller's, and the Potts temperings take it coldest
     first.** This reads the rungs as given and reorders nothing.
-    :func:`~sal.sample.potts_mcmc.parallel_tempering` and
+    :func:`~sal.sandbox.potts_tempering.parallel_tempering` and
     :func:`~sal.sample.potts_mcmc.cluster_tempering` require it strictly
     increasing, as :data:`Monotone.INCREASING` states, and refuse another
     order rather than reverse it (issue #1343); rung ``0`` is then the cold
@@ -1416,8 +1210,15 @@ class Annealed[T]:
         The unit ``spent`` is counted in, so two annealers are compared on a
         budget they both declare.
     termination : Termination
-        Why the run stopped. An annealer runs its schedule to the end, so
-        this is the schedule's length and not converged.
+        Why the run stopped. Unpolished, the schedule's length and not
+        converged. Polished (issue #1363), the polisher's own: converged at
+        its criterion, the budget where its own cap ran out, its iterations.
+    polish_spent : int
+        What the polish cost, in its own unit, inside ``spent``: site visits
+        for :attr:`Polish.ICM`, the polisher's iterations for a continuous
+        polish. ``spent - polish_spent`` is the schedule's. Zero unpolished.
+    polished_by : str | None
+        The polisher whose ``termination`` this is, ``None`` unpolished.
     """
 
     best: T
@@ -1425,6 +1226,20 @@ class Annealed[T]:
     spent: int
     unit: Cost
     termination: Termination
+    polish_spent: int = 0
+    polished_by: str | None = None
+
+
+class Polish(StrEnum):
+    """The polisher an annealer runs from its final state to the polisher's own convergence (issue #1363).
+
+    The schedule runs its full defined length, steps or a budget, with no
+    window and no extra hold; the polish then runs until its own criterion
+    holds, which is the run's convergence criterion.
+    """
+
+    ICM = "icm"
+    """:func:`~sal.search.icm.iterated_conditional_modes` in index order until a full sweep changes no label: a fixed point, each change strictly lowering the energy on a finite space."""
 
 
 @dataclass(frozen=True, kw_only=True)

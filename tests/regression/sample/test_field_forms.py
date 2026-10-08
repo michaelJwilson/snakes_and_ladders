@@ -24,14 +24,14 @@ from sal.sample.annealed import (
     simulated_tempering,
 )
 from sal.sample.potts_keyed import cluster_moves
-from sal.sample.potts_mcmc import (
-    PottsMove,
-    adapt_ladder_potts,
-    parallel_tempering,
-    sample_potts_pair,
-)
+from sal.sample.potts_mcmc import PottsMove, sample_potts_pair
 from sal.sample.schedule import InverseTemperatures
-from sal.sample.tempered import adapt_ladder_round_trips, tempered_potts_pair
+from sal.sample.tempered import tempered_potts_pair
+from sal.sandbox.potts_tempering import (
+    adapt_ladder_potts,
+    adapt_ladder_round_trips,
+    parallel_tempering,
+)
 from sal.search.ground_state import ground_state
 from sal.search.maxflow import cut_energy, ising_ground_state
 from sal.search.tightening import dual_bound
@@ -71,7 +71,7 @@ CALLS: dict[str, Callable[[PottsGraph, Any], Any]] = {
         g, f, (1.0, 2.0), _rng(), SWEEPS
     ),
     "adapt_ladder_potts": lambda g, f: adapt_ladder_potts(
-        g, f, (2.0, 0.4), _rng(), SWEEPS, (0.1, 0.9), 2, 4
+        g, f, (0.4, 2.0), _rng(), SWEEPS, (0.1, 0.9), 2, 4
     ),
     "sample_potts_pair": lambda g, f: sample_potts_pair(
         g, f, PottsMove.SINGLE_SITE, _rng(), SWEEPS, houdayer=False

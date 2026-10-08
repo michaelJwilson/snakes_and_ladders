@@ -17,7 +17,7 @@ because :func:`~sal.sample.hmc.parallel_tempering` takes a
 fixed ladder and consumes none of them: the calibration is this start's
 composition of that sampler with the adapters of
 :mod:`sal.sample.schedule`, as
-:func:`~sal.sample.potts_mcmc.adapt_ladder_potts` is the
+:func:`~sal.sandbox.potts_tempering.adapt_ladder_potts` is the
 lattice's.
 """
 
@@ -611,8 +611,8 @@ def calibrate_ladder(
     """A ladder for :func:`~sal.sample.hmc.parallel_tempering`, from its own measurements.
 
     The Hamiltonian sibling of
-    :func:`~sal.sample.potts_mcmc.adapt_ladder_potts` and
-    :func:`~sal.sample.tempered.adapt_ladder_round_trips`:
+    :func:`~sal.sandbox.potts_tempering.adapt_ladder_potts` and
+    :func:`~sal.sandbox.potts_tempering.adapt_ladder_round_trips`:
     each measurement is a run of ``calibration.rounds`` rounds on the
     candidate, drawn from ``generator`` in sequence, started at the
     lowest-valued point any earlier measurement visited (the objective's

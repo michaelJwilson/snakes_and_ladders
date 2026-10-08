@@ -48,8 +48,6 @@ STARTLESS = {
     "bifurcation",
     "field_argmax",
     "max-product",
-    "tempering",
-    "tempering-mixed",
 }
 
 #: Eight sites, the size the issue's exhaustive referee is stated at.

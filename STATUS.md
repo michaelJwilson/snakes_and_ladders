@@ -3182,6 +3182,8 @@ its children shuffled, to 1e-13.
 
 **Wolff and heat-bath Wolff in Rust** ([#1362](https://github.com/michaelJwilson/snakes_and_ladders/issues/1362)). `oxisal.wolff_sweeps` grows the cluster on a reused queue and a visited stamp, seeded by one draw of the run's generator; at `q = 3` near the critical coupling, min of 3 on a shared host, it costs 11.9 and 18.8 ns per site visit at `64 x 64` and `256 x 256` against the Python step's 307.5 and 489.2 ns, 25.8x and 26.0x (heat bath 24.5x and 25.1x), so `cluster_backend=RUST` now runs both Wolff moves by default. The Rust chain is the oracle's law, not its stream: the 2x3 enumerated law refutes neither recolouring alone or with Gibbs, and on a fixed cluster `cluster_sites` and `spent` equal the Python step's.
 
+**The Potts anneal and sample loops in Rust, and a Rust ICM** ([#1368](https://github.com/michaelJwilson/snakes_and_ladders/issues/1368), [#1372](https://github.com/michaelJwilson/snakes_and_ladders/issues/1372)). `oxisal.potts_loop` runs the schedule (or a site-visit budget), the composed moves (single-site, uniform Swendsen-Wang, both Wolff), the `step_visits` charge, the best-so-far, the recording and the ICM polish in one call with the GIL released. A full Wolff anneal at `q = 3`, min of 3 on a shared host: 254x and 26.6x the Python loop at `64 x 64` (high-temperature and near-`beta_c` ramps), 373x and 201x at `256 x 256`, the Python loop's 74 to 1,371 us per step falling to 0.3 to 6.6 us; single-site anneals 1.1x to 1.4x. So the Rust loop is the default where a step grows a single cluster, and the Python loop, kept as the oracle, elsewhere. Referees: the 2x3 enumerated law per move and composition, fixed-length and budgeted (14 fits); `spent`, the schedule index and the stop equal the Python loop's; the polish equals the `numba` descent of the same run's states bitwise. `oxisal.icm_sweeps` is the `numba` ICM bitwise (index and checkerboard orders, forbidden labels, floor) at 0.92x to 1.12x its time, and the default by the owner's decision rather than the 2x rule. Pinned in `tests/regression/sample/test_potts_loop_rust.py` and `tests/regression/search/test_icm.py`.
+
 ## Milestone 1.5 — Continuous Samplers, HMC & Parallel Tempering
 
 **Landed, and one of its two integrators was declined on measurement.** A
@@ -3263,7 +3265,10 @@ lengths and 3 endpoint pairs; Cauchy with `c` from the endpoints is
 `sigma_E` places equal length to `1e-10`. `adaptive.huang` reproduces its
 recurrence bitwise and `loop.anneal_adaptive` stops on it with a `Termination`.
 The three earlier shapes are bitwise unchanged. Pinned in
-`tests/regression/sample/test_schedule_ramps.py`.
+`tests/regression/sample/test_schedule_ramps.py`. `THERMODYNAMIC` and the Huang
+schedule are declined and moved to `sal.sandbox.adaptive_schedules`, their tests
+to `tests/regression/sandbox/test_adaptive_schedules.py`
+([#1352](https://github.com/michaelJwilson/snakes_and_ladders/issues/1352)).
 
 **One ladder order for the Potts temperings, and a start per rung**
 ([#1343](https://github.com/michaelJwilson/snakes_and_ladders/issues/1343)).
@@ -3303,6 +3308,16 @@ steps, within one step of the budget. A budgeted Wolff chain fits #1322's
 enumerated 2 x 3 law at `SIGNIFICANCE = 1e-3`; single-site and Swendsen-Wang
 under `n` steps' cost, and the step-count Wolff run, are main's bitwise. Pinned
 in `tests/regression/sample/test_potts_budget.py`.
+
+**Annealing ends with a polisher run to its own convergence**
+([#1363](https://github.com/michaelJwilson/snakes_and_ladders/issues/1363)).
+`anneal_potts(polish=Polish.ICM)` descends from the final state in index order
+until a full sweep changes no label, ending `Stop.CONVERGED`; HMC
+`anneal(polish=, polish_budget=)` runs the #1251 polisher to its tolerance,
+`Stop.BUDGET` at its cap. On the 12 planted glasses against `GLASS_OPTIMA`
+(seed 0): 400 sweeps unpolished 10/12, plus 1 to 3 polish sweeps 10/12, 398
+sweeps plus polish (399 to 401) 9/12. Pinned in
+`tests/regression/sample/test_anneal_polish.py`.
 
 ## Milestone 2.0 — RL Definition
 
