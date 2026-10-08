@@ -192,6 +192,98 @@ pub fn coded_log_emission(
         .map_err(PyValueError::new_err)
 }
 
+/// `out[k] = sum_u values[k, u] * W[k, u]`, `W` the per-state `bincount` of
+/// `weights` over `index` (`-1` contributes nothing). `weights` is `(n,)`,
+/// shared by every state, `(K, n)`, or absent (each weight 1). The bincount
+/// and the dot are sequential in `u` and `i`, so the sum's order is stated:
+/// a code with zero total weight is skipped, so `0 * -inf` never enters.
+///
+/// # Errors
+/// A shape that disagrees, or an index outside `values`' columns.
+pub fn weighted_sum(
+    n_states: usize,
+    values: &[f64],
+    index: &[i32],
+    weights: Option<&[f64]>,
+) -> Result<Vec<f64>, String> {
+    let n = index.len();
+    if n_states == 0 || values.len() % n_states != 0 {
+        return Err(format!(
+            "values hold {} entries, not a multiple of {n_states} states",
+            values.len()
+        ));
+    }
+    let m = values.len() / n_states;
+    let per_state = match weights {
+        None => false,
+        Some(w) if w.len() == n => false,
+        Some(w) if w.len() == n * n_states => true,
+        Some(w) => {
+            return Err(format!(
+                "weights are (n,) or (K, n): {} entries for n = {n}, K = {n_states}",
+                w.len()
+            ))
+        }
+    };
+    if let Some(bad) = index.iter().find(|&&u| u >= 0 && u as usize >= m) {
+        return Err(format!("index {bad} is outside {m} columns"));
+    }
+    let count = |row: usize| -> Vec<f64> {
+        let mut bins = vec![0.0_f64; m];
+        for (i, &u) in index.iter().enumerate() {
+            if u >= 0 {
+                bins[u as usize] += weights.map_or(1.0, |w| w[row * n + i]);
+            }
+        }
+        bins
+    };
+    let dot = |k: usize, bins: &[f64]| -> f64 {
+        let row = &values[k * m..(k + 1) * m];
+        let mut acc = 0.0_f64;
+        for (v, &b) in row.iter().zip(bins) {
+            if b != 0.0 {
+                acc += v * b;
+            }
+        }
+        acc
+    };
+    if per_state {
+        Ok((0..n_states)
+            .into_par_iter()
+            .map(|k| dot(k, &count(k)))
+            .collect())
+    } else {
+        let bins = count(0);
+        Ok((0..n_states).into_par_iter().map(|k| dot(k, &bins)).collect())
+    }
+}
+
+/// `coded_weighted_sum(n_states, values, index, weights=None)`: [`weighted_sum`]
+/// over borrowed, contiguous arrays with the GIL released.
+///
+/// # Errors
+/// `ValueError` naming the first violated precondition.
+#[pyfunction]
+#[pyo3(signature = (n_states, values, index, weights=None))]
+pub fn coded_weighted_sum<'py>(
+    py: Python<'py>,
+    n_states: usize,
+    values: PyReadonlyArray1<'py, f64>,
+    index: PyReadonlyArray1<'py, i32>,
+    weights: Option<PyReadonlyArray1<'py, f64>>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let values = borrowed(&values, "values")?;
+    let index = borrowed(&index, "index")?;
+    let weights = match &weights {
+        Some(w) => Some(borrowed(w, "weights")?),
+        None => None,
+    };
+    let out = py
+        .detach(|| weighted_sum(n_states, values, index, weights))
+        .map_err(PyValueError::new_err)?;
+    Ok(PyArray1::from_vec(py, out))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -264,5 +356,15 @@ mod tests {
         };
         let error = log_emission_into(2, 2, Some(&channel), None, &mut out).unwrap_err();
         assert!(error.contains("past the 1 codes"), "{error}");
+    }
+
+    #[test]
+    fn a_weighted_sum_is_the_sequential_bincount_dot() {
+        let values = [1.0, 2.0, f64::NEG_INFINITY, 4.0, 5.0, 6.0];
+        let index = [0, 1, -1, 1, 0];
+        assert_eq!(weighted_sum(2, &values, &index, None).unwrap(), vec![1.0 * 2.0 + 2.0 * 2.0, 4.0 * 2.0 + 5.0 * 2.0]);
+        let w = [0.5, 0.25, 9.0, 0.25, 0.5];
+        assert_eq!(weighted_sum(2, &values, &index, Some(&w)).unwrap(), vec![1.0 + 1.0, 4.0 + 2.5]);
+        assert!(weighted_sum(2, &values, &[3], None).is_err());
     }
 }
