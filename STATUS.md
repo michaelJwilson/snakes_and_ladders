@@ -3307,6 +3307,16 @@ enumerated 2 x 3 law at `SIGNIFICANCE = 1e-3`; single-site and Swendsen-Wang
 under `n` steps' cost, and the step-count Wolff run, are main's bitwise. Pinned
 in `tests/regression/sample/test_potts_budget.py`.
 
+**Annealing ends with a polisher run to its own convergence**
+([#1363](https://github.com/michaelJwilson/snakes_and_ladders/issues/1363)).
+`anneal_potts(polish=Polish.ICM)` descends from the final state in index order
+until a full sweep changes no label, ending `Stop.CONVERGED`; HMC
+`anneal(polish=, polish_budget=)` runs the #1251 polisher to its tolerance,
+`Stop.BUDGET` at its cap. On the 12 planted glasses against `GLASS_OPTIMA`
+(seed 0): 400 sweeps unpolished 10/12, plus 1 to 3 polish sweeps 10/12, 398
+sweeps plus polish (399 to 401) 9/12. Pinned in
+`tests/regression/sample/test_anneal_polish.py`.
+
 ## Milestone 2.0 — RL Definition
 
 **Landed as `app:rl` in the textbook**

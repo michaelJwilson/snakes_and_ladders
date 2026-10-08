@@ -48,6 +48,13 @@ draws reach it without the module importing their type.
   that does not fold --- a walker along the ladder, a re-estimated state ---
   is named in `loop`'s docstring with the reason.
 
+- **Annealing converges by its polisher, never by its schedule (#1363).**
+  The schedule runs its full defined length, steps or a `Budget`, with no
+  window and no extra hold; a `polish` then runs from the final state to its
+  own criterion (an ICM fixed point, a gradient tolerance), and the result's
+  `termination` is the polisher's. `spent` holds both, `polish_spent` the
+  polish's part. `polish=None` is the unpolished run, bitwise.
+
 - **A tuned step is chosen by a named criterion, and the criterion is not
   the outcome.** `tune_step` ranks a pilot's candidates by the ESJD per
   gradient, the lowest energy reached or the polished gap; on #1195's HMM
