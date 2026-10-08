@@ -3215,6 +3215,16 @@ recurrence bitwise and `loop.anneal_adaptive` stops on it with a `Termination`.
 The three earlier shapes are bitwise unchanged. Pinned in
 `tests/regression/sample/test_schedule_ramps.py`.
 
+**Schedule pilots race, pair and rank on the polish**
+([#1337](https://github.com/michaelJwilson/snakes_and_ladders/issues/1337)).
+`ScheduleTuning(racing=True)` runs successive halving and equals a hand-run
+halving bitwise on 3 seeds; on #1317's 3x3 `q = 3` fixture and 4-candidate grid
+it spends 1.33x less than the full grid (`4 x 20` against `4 x 5 + 2 x 10 + 1 x 20`
+sweeps) with regret `0.0` on 10 seeds. `common=True` gives every candidate
+identical starts; `Criterion.POLISHED_GAP` equals the polish applied by hand.
+`temperatures="auto"` with a `LadderTuning` is open. Pinned in
+`tests/regression/sample/test_schedule_racing.py`.
+
 ## Milestone 2.0 — RL Definition
 
 **Landed as `app:rl` in the textbook**
