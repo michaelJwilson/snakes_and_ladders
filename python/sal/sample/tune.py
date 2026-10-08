@@ -56,6 +56,7 @@ from sal.sample.loop import Moved, Step
 from sal.sample.schedule import (
     AdaptedLadder,
     LadderTempSchedule,
+    Polish,
     ScheduleParams,
     ScheduleShape,
     TempSchedule,
@@ -410,6 +411,12 @@ SCHEDULE_GRID: tuple[ScheduleParams, ...] = tuple(
     for t_end in (0.05, 0.3)
 )
 
+#: What :attr:`Criterion.POLISHED_GAP` applies to a schedule pilot's best
+#: (issue #1390): a :class:`~sal.sample.schedule.Polish` member, run by the
+#: pilot's own :func:`~sal.sample.potts_mcmc.anneal_potts` call and charged to
+#: its ``spent``, or a callable on the best labelling, charged nothing (#1337).
+type SchedulePolish = Polish | Callable[[np.ndarray], np.ndarray]
+
 #: What an annealed Potts entry point's ``schedule`` reads as "choose it": a
 #: :class:`ScheduleTuning` beside it says how.
 type Schedule = TempSchedule | Literal["auto"]
@@ -446,9 +453,17 @@ class ScheduleTuning:
         from one spawned stream per round, so the starts are identical and
         the comparison is paired. ``False``, the default, spawns one stream
         per candidate.
-    polish : Callable[[np.ndarray], np.ndarray] | None
+    polish : SchedulePolish | None
         What :attr:`Criterion.POLISHED_GAP` applies to each pilot's best
         labelling before scoring it; required with it and refused without it.
+        A :class:`~sal.sample.schedule.Polish` member is the anneal's own
+        ``polish=`` (issue #1390), so a pilot ranks under the polish its run
+        will take, in the same call, and its site visits are the pilot's
+        ``spent`` and so the tuning's. The budget sizes the schedule before
+        any pilot runs and a polish runs to its fixed point, so the tuning's
+        ``spent`` exceeds ``budget.size`` by the polishes' share, reported
+        rather than guessed. A callable runs after the anneal and is charged
+        nothing, the run before #1390 bitwise.
 
     Raises
     ------
@@ -465,7 +480,7 @@ class ScheduleTuning:
     grid: tuple[ScheduleParams, ...] = field(default=SCHEDULE_GRID)
     racing: bool = False
     common: bool = False
-    polish: Callable[[np.ndarray], np.ndarray] | None = None
+    polish: SchedulePolish | None = None
 
     def __post_init__(self) -> None:
         if self.budget.unit is not Cost.SITE_VISITS:
@@ -560,12 +575,28 @@ def _schedule_pilot(
     move: PottsMoves,
     recolour: Recolour,
     sweeps: int,
-    polish: Callable[[np.ndarray], np.ndarray] | None = None,
+    polish: SchedulePolish | None = None,
 ) -> ScheduleCandidate:
-    """One candidate's anneal on its own generator; thread-safe, it writes no shared state."""
+    """One candidate's anneal on its own generator; thread-safe, it writes no shared state.
+
+    A :class:`~sal.sample.schedule.Polish` member runs inside the anneal
+    (issue #1390): the lowest energy is the schedule's stage, the polished
+    energy the run's, and ``spent`` the run's, polish included.
+    """
     from sal.sample.potts_mcmc import anneal_potts
     from sal.sim.potts import energy
 
+    if isinstance(polish, Polish):
+        run = anneal_potts(
+            graph,
+            field,
+            params.build(sweeps),
+            rng,
+            move=move,
+            recolour=recolour,
+            polish=polish,
+        )
+        return ScheduleCandidate(params, run.stages[0].energy, run.spent, run.energy)
     run = anneal_potts(
         graph, field, params.build(sweeps), rng, move=move, recolour=recolour
     )
@@ -622,7 +653,7 @@ def tune_schedule(
     pool: Pool = "serial",
     racing: bool = False,
     common: bool = False,
-    polish: Callable[[np.ndarray], np.ndarray] | None = None,
+    polish: SchedulePolish | None = None,
 ) -> TunedSchedule:
     """The schedule of ``grid`` that ``criterion`` ranks first, from one annealing pilot per candidate.
 
@@ -635,7 +666,9 @@ def tune_schedule(
     ``rng`` by :func:`sal.parallel.map_tasks`, so a thread pool returns the
     serial result bitwise. Ranked by the lowest energy, or under
     :attr:`Criterion.POLISHED_GAP` by the energy of ``polish`` applied to each
-    pilot's best labelling, ties to grid order.
+    pilot's best labelling, ties to grid order; a
+    :class:`~sal.sample.schedule.Polish` member is the pilot anneal's own
+    ``polish=`` and is charged to the pilot (issue #1390).
     A pilot is charged its own spend, which for a Wolff move is below its
     share: Wolff's step visits one cluster, not a sweep.
 

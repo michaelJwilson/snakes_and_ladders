@@ -15,7 +15,7 @@ import pytest
 from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.sample.potts_mcmc import PottsMove, Recolour, anneal_potts
-from sal.sample.schedule import ScheduleParams, ScheduleShape
+from sal.sample.schedule import Polish, ScheduleParams, ScheduleShape
 from sal.sample.tune import Criterion, ScheduleTuning, tune_schedule
 from sal.search.icm import iterated_conditional_modes
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
@@ -199,3 +199,77 @@ def test_polished_gap_without_polish_is_refused_before_any_work() -> None:
 @pytest.mark.oracle
 def test_every_option_off_is_the_run_before_it_bitwise() -> None:
     assert _tune(9) == _tune(9, racing=False, common=False, polish=None)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("member", list(Polish))
+def test_a_polish_member_pilot_is_the_polished_anneal_bitwise(member: Polish) -> None:
+    """Each pilot's lowest, polished energy and spend are ``anneal_potts(..., polish=member)``'s, on the same spawned stream (#1390)."""
+    graph = _graph()
+    tuned = tune_schedule(
+        graph,
+        FIELD,
+        move=MOVE,
+        recolour=RECOLOUR,
+        budget=BUDGET,
+        criterion=Criterion.POLISHED_GAP,
+        rng=np.random.default_rng(13),
+        grid=GRID,
+        polish=member,
+    )
+    children = np.random.default_rng(13).spawn(len(GRID))
+    runs = [
+        anneal_potts(
+            graph,
+            FIELD,
+            params.build(20),
+            child,
+            move=MOVE,
+            recolour=RECOLOUR,
+            polish=member,
+        )
+        for params, child in zip(GRID, children, strict=True)
+    ]
+    assert [c.polished_energy for c in tuned.candidates] == [r.energy for r in runs]
+    assert [c.lowest_energy for c in tuned.candidates] == [
+        r.stages[0].energy for r in runs
+    ]
+    assert [c.spent for c in tuned.candidates] == [r.spent for r in runs]
+    assert tuned.spent == sum(r.spent for r in runs)
+    assert tuned.spent > sum(r.stages[0].spent for r in runs)
+    scores = [r.energy for r in runs]
+    assert tuned.params == GRID[min(range(len(GRID)), key=lambda k: (scores[k], k))]
+
+
+@pytest.mark.oracle
+def test_a_polish_member_leaves_the_schedule_stage_unchanged_bitwise() -> None:
+    """The schedule's lowest energy under a ``Polish`` is the unpolished pilot's: the polish draws after it (#1390)."""
+    tuned = {
+        criterion: tune_schedule(
+            _graph(),
+            FIELD,
+            move=MOVE,
+            recolour=RECOLOUR,
+            budget=BUDGET,
+            criterion=criterion,
+            rng=np.random.default_rng(17),
+            grid=GRID,
+            polish=polish,
+        )
+        for criterion, polish in (
+            (Criterion.LOWEST_ENERGY, None),
+            (Criterion.POLISHED_GAP, Polish.ICM_MERGE),
+        )
+    }
+    plain, polished = tuned.values()
+    assert [c.lowest_energy for c in plain.candidates] == [
+        c.lowest_energy for c in polished.candidates
+    ]
+
+
+@pytest.mark.patch
+@pytest.mark.analytic
+@pytest.mark.parametrize("member", list(Polish))
+def test_a_polish_member_without_polished_gap_is_refused(member: Polish) -> None:
+    with pytest.raises(ValueError, match="polish"):
+        ScheduleTuning(BUDGET, Criterion.LOWEST_ENERGY, 10, GRID, polish=member)
