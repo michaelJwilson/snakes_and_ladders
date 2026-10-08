@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 import pytest
 import scipy.sparse
+import torch
 from sal.emissions import (
     BetaBinomialEmission,
     CountPairEmission,
@@ -24,6 +25,7 @@ from sal.emissions import (
 from sal.emissions.bb import beta_binomial_log_pmf
 from sal.emissions.coded import Coded, Dense, encode, log_emission
 from sal.emissions.nb import negative_binomial_log_pmf
+from scipy.stats import binom as scipy_binom
 from scipy.stats import poisson as scipy_poisson
 
 SEED = 20261008
@@ -222,13 +224,6 @@ def test_the_limits() -> None:
     scored = log_emission(BB, encode(successes, trials))
     assert (scored[:, 1] == -np.inf).all()
     assert (scored[:, 2] == 0.0).all()
-    # tau = inf: the family scores NaN on every route (log_density, dense,
-    # coded); the binomial limit is an open item of #1340, pinned as it stands.
-    binomial = RateConcentrationBetaBinomialEmission([10.0], [0.3], [np.inf])
-    with np.errstate(invalid="ignore"):
-        limit = log_emission(binomial, encode(successes, trials))
-        dense = log_emission(binomial, Dense(successes, trials))
-    assert np.array_equal(_bits(limit), _bits(dense))
     # An invalid parameter or covariate raises.
     with pytest.raises(ValueError, match="dispersion must be positive"):
         NegativeBinomialEmission([-1.0], [6.0])
@@ -272,3 +267,36 @@ def test_the_weighted_sum_is_the_sequential_sum(name: str) -> None:
     if covariate is not None:
         observed = terms[:, coded.inverse >= 0]
         assert np.array_equal(_bits(got), _bits(np.cumsum(observed, axis=1)[:, -1]))
+
+
+@pytest.mark.oracle
+def test_infinite_concentration_is_the_binomial_on_every_route() -> None:
+    """``tau = inf`` scores ``scipy.stats.binom`` at the rate: ``log_density``, dense and coded."""
+    successes = np.array([2.0, 5.0, 4.0, 0.0, 6.0])
+    trials = np.array([6.0, 4.0, 0.0, 3.0, 6.0])
+    # tau = inf is the binomial at the rate, on every route (#1340, #1332).
+    binomial = RateConcentrationBetaBinomialEmission(
+        [10.0, 6.0], [0.3, 0.8], [np.inf, 4.0]
+    )
+    want = np.where(trials == 0.0, 0.0, scipy_binom.logpmf(successes, trials, 0.3))
+    density = binomial.log_density(
+        torch.as_tensor(successes), torch.as_tensor(trials)[:, None]
+    ).numpy()
+    routes = {
+        "log_density": density.T,
+        "coded": log_emission(binomial, encode(successes, trials)),
+        "dense": log_emission(binomial, Dense(successes, trials)),
+    }
+    plain = np.array([0.0, 3.0, 10.0, 7.0])
+    declared = scipy_binom.logpmf(plain, 10.0, 0.3)
+    for name, got in routes.items():
+        assert np.array_equal(np.isinf(got[0]), np.isinf(want)), name
+        finite = ~np.isinf(want)
+        assert np.allclose(got[0][finite], want[finite], rtol=1e-13, atol=1e-13), name
+        assert np.isfinite(got[1][finite]).all(), name
+    for got in (
+        binomial.log_density(torch.as_tensor(plain)).numpy().T,
+        log_emission(binomial, encode(plain)),
+        log_emission(binomial, Dense(plain)),
+    ):
+        assert np.allclose(got[0], declared, rtol=1e-13, atol=1e-13)

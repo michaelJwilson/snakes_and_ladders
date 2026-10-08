@@ -82,8 +82,64 @@ def trial_tables(
         success=np.ascontiguousarray(scaled_rising_table(alpha, successes).T),
         failure=np.ascontiguousarray(scaled_rising_table(beta, trials).T),
         trial=np.ascontiguousarray(scaled_rising_table(alpha + beta, trials).T),
-        log_rate=np.stack(_log_rates(alpha, beta)),
+        log_rate=np.stack(family_log_rates(family)),
     )
+
+
+def _limit_rate(family: BetaBinomialEmission) -> NDArray[np.float64] | None:
+    """The rate of each state at ``concentration = inf``, NaN elsewhere; ``None`` if no state is there.
+
+    ``a = tau p`` and ``b = tau (1 - p)`` are both infinite there, so
+    ``a / (a + b)`` is NaN and the rate is read from the family's own
+    :attr:`rate`, which only the rate--concentration reading carries.
+    """
+    alpha = family.alpha.detach().numpy()
+    beta = family.beta.detach().numpy()
+    limit = np.isinf(alpha + beta)
+    rate = getattr(family, "rate", None)
+    if not limit.any() or rate is None:
+        return None
+    return np.where(limit, np.asarray(rate.detach().numpy(), dtype=np.float64), np.nan)
+
+
+def family_log_rates(
+    family: BetaBinomialEmission,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    """``log p`` and ``log(1 - p)`` per state: :func:`_log_rates`, and at ``concentration = inf`` the family's rate.
+
+    At ``tau = inf`` the scaled rising factorials are 0, so with these rates
+    the tables sum to :func:`binomial_log_pmf`, the limit (#1340, #1332).
+    Finite rows are :func:`_log_rates`' bit for bit.
+    """
+    rate = _limit_rate(family)
+    with np.errstate(invalid="ignore"):
+        log_p, log_q = _log_rates(
+            family.alpha.detach().numpy(), family.beta.detach().numpy()
+        )
+    if rate is None:
+        return log_p, log_q
+    limit = ~np.isnan(rate)
+    with np.errstate(invalid="ignore"):
+        return (
+            np.where(limit, np.log(rate), log_p),
+            np.where(limit, np.log1p(-rate), log_q),
+        )
+
+
+def family_log_pmf(
+    family: BetaBinomialEmission, successes: ArrayLike, trials: ArrayLike
+) -> NDArray[np.float64]:
+    """:func:`beta_binomial_log_pmf` at the family's shapes, ``(..., K)``; a state at ``concentration = inf`` takes :func:`binomial_log_pmf`."""
+    alpha = family.alpha.detach().numpy()
+    beta = family.beta.detach().numpy()
+    rate = _limit_rate(family)
+    if rate is None:
+        return beta_binomial_log_pmf(successes, trials, alpha, beta)
+    limit = ~np.isnan(rate)
+    with np.errstate(invalid="ignore"):
+        mixture = beta_binomial_log_pmf(successes, trials, alpha, beta)
+    binomial = binomial_log_pmf(successes, trials, np.where(limit, rate, 0.5))
+    return np.where(limit, binomial, mixture)
 
 
 def _log_rates(
@@ -100,11 +156,10 @@ def density_table(family: BetaBinomialEmission, extent: int) -> NDArray[np.float
     The table a caller without a per-observation trial count reads (issue
     #1332); successes past a state's trials score ``-inf``.
     """
-    return beta_binomial_log_pmf(
+    return family_log_pmf(
+        family,
         np.arange(extent, dtype=np.float64)[:, None],
         family.trials.detach().numpy(),
-        family.alpha.detach().numpy(),
-        family.beta.detach().numpy(),
     )
 
 

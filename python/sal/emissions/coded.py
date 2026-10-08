@@ -33,7 +33,7 @@ import torch
 from numpy.typing import NDArray
 
 from sal import oxisal
-from sal.emissions.bb import beta_binomial_log_pmf, log_factorial, trial_tables
+from sal.emissions.bb import family_log_pmf, log_factorial, trial_tables
 from sal.emissions.counts import BetaBinomialEmission, NegativeBinomialEmission
 from sal.emissions.dense import IndependentPair, Order, checked_counts
 from sal.emissions.dense import log_emission as dense_log_emission
@@ -234,11 +234,10 @@ def _successes(
     counts = np.ascontiguousarray(codes)
     alpha = family.alpha.detach().numpy()
     if trials is None:
-        table = beta_binomial_log_pmf(
+        table = family_log_pmf(
+            family,
             counts.astype(np.float64)[:, None],
             family.trials.detach().numpy(),
-            alpha,
-            family.beta.detach().numpy(),
         )
         return {
             "successes": counts,

@@ -1305,6 +1305,36 @@ class RateConcentrationBetaBinomialEmission(BetaBinomialEmission):
         """This family: it is already the rate--concentration reading."""
         return self
 
+    def log_density(
+        self, observations: torch.Tensor, covariate: torch.Tensor | None = None
+    ) -> torch.Tensor:
+        """The beta-binomial's; a state at ``concentration = inf`` scores the binomial at its rate.
+
+        ``a = b = inf`` there, so the mixture's ``a / (a + b)`` is NaN; the
+        limit is ``log C(n, z) + z log p + (n - z) log(1 - p)`` (#1340,
+        #1332's :func:`~sal.emissions.bb.binomial_log_pmf`), with the
+        mixture's support and unobserved rules.
+        """
+        scores = super().log_density(observations, covariate)
+        limit = torch.isinf(self._tau)
+        if not bool(limit.any()):
+            return scores
+        trials = trial_count(covariate, self._trials)
+        counts = observations.unsqueeze(-1).to(self._trials.dtype)
+        inside = counts <= trials
+        z = torch.where(inside, counts, torch.zeros_like(counts))
+        rest = trials - z
+        p = torch.where(limit, self._rate, torch.full_like(self._rate, 0.5))
+        binomial = (
+            torch.lgamma(trials + 1.0)
+            - torch.lgamma(z + 1.0)
+            - torch.lgamma(rest + 1.0)
+        ) + (torch.special.xlogy(z, p) + torch.special.xlog1py(rest, -p))
+        binomial = torch.where(inside, binomial, torch.full_like(binomial, -torch.inf))
+        if covariate is not None:
+            binomial = torch.where(trials == 0.0, torch.zeros_like(binomial), binomial)
+        return torch.where(limit, binomial, scores)
+
     def reestimate(
         self,
         observations: ArrayLike,
