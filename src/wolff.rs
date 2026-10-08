@@ -60,6 +60,36 @@ pub struct Outcomes<'a> {
     pub accepts: &'a mut [bool],
 }
 
+/// One label drawn with probability proportional to `exp(beta * sums[c])`,
+/// by Gumbel-max as `heat_bath_labels`: no row is normalized and no `exp` can
+/// overflow. Draws `sums.len()` uniforms from `rng` whatever the outcome, a
+/// forbidden label's (`-inf`) included, so the stream advances by the
+/// alphabet per cluster. A cluster forbidding every label keeps `current`
+/// (#1146). Shared by the Wolff and Swendsen-Wang heat-bath kernels (#1364).
+#[inline]
+pub(crate) fn heat_bath_label(
+    sums: &[f64],
+    beta: f64,
+    current: usize,
+    rng: &mut ChaCha8Rng,
+) -> usize {
+    let mut best = (f64::NEG_INFINITY, current);
+    let mut allowed = false;
+    for (c, &s) in sums.iter().enumerate() {
+        let weight = beta * s;
+        let uniform: f64 = StandardUniform.sample(rng);
+        if weight == f64::NEG_INFINITY {
+            continue;
+        }
+        let key = weight - (-uniform.ln()).ln();
+        if !allowed || key > best.0 {
+            best = (key, c);
+            allowed = true;
+        }
+    }
+    best.1
+}
+
 /// Run `sizes.len()` Wolff steps on `state`, in place.
 ///
 /// Each step grows one cluster from `root` (or a uniform seed where `root`
@@ -225,23 +255,7 @@ pub fn wolff_sweeps_impl(
                     *s += h;
                 }
             }
-            // Gumbel-max over `beta * sums`, as `heat_bath_labels`: no row is
-            // normalized and no `exp` can overflow.
-            let mut best = (f64::NEG_INFINITY, colour as usize);
-            let mut allowed = false;
-            for (c, &s) in sums.iter().enumerate() {
-                let weight = beta * s;
-                let uniform: f64 = StandardUniform.sample(&mut rng);
-                if weight == f64::NEG_INFINITY {
-                    continue;
-                }
-                let key = weight - (-uniform.ln()).ln();
-                if !allowed || key > best.0 {
-                    best = (key, c);
-                    allowed = true;
-                }
-            }
-            let label = best.1 as i64;
+            let label = heat_bath_label(&sums, beta, colour as usize, &mut rng) as i64;
             out.proposals[step] = label != colour;
             out.accepts[step] = label != colour;
             label

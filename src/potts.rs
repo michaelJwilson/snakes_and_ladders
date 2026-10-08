@@ -40,6 +40,11 @@
 use numpy::{PyReadonlyArray1, PyReadonlyArrayDyn, PyReadwriteArray1, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
+use rand_distr::{Distribution, StandardUniform};
+
+use crate::wolff::heat_bath_label;
 
 /// Run `n_sweeps` heat-bath sweeps over `state`, in place.
 ///
@@ -375,6 +380,46 @@ pub fn bond_roots<'py>(
     Ok(numpy::PyArray1::from_vec(py, roots))
 }
 
+/// The Fortuin-Kasteleyn clusters of one pass: every node's union-find root
+/// in `roots`, once each like-coloured edge `bonded` admits is merged, edges
+/// in the graph's order. `bonded(edge)` is asked only of like edges, the
+/// oracle's two conditions in its order --- like colours first, then the
+/// draw --- so a caller that draws lazily draws once per like edge. `parent`
+/// is scratch of length `n_nodes`, reset here, so a batch reuses it. Shared
+/// by the uniform and heat-bath Swendsen-Wang kernels (#1364).
+///
+/// # Errors
+/// Returns `Err` for an edge end outside the graph; the edges before it are
+/// merged and `roots` is unwritten.
+fn like_bond_roots(
+    state: &[i64],
+    edges: &[i64],
+    parent: &mut [usize],
+    roots: &mut [i64],
+    mut bonded: impl FnMut(usize) -> bool,
+) -> Result<(), String> {
+    let n_nodes = state.len();
+    for (node, slot) in parent.iter_mut().enumerate() {
+        *slot = node;
+    }
+    for (edge, ends) in edges.chunks_exact(2).enumerate() {
+        let (left, right) = (ends[0], ends[1]);
+        if left < 0 || right < 0 || left as usize >= n_nodes || right as usize >= n_nodes {
+            return Err(format!(
+                "edge {edge} joins {left} and {right}, expected [0, {n_nodes})"
+            ));
+        }
+        let (left, right) = (left as usize, right as usize);
+        if state[left] == state[right] && bonded(edge) {
+            union(parent, left, right);
+        }
+    }
+    for (node, root) in roots.iter_mut().enumerate() {
+        *root = find(parent, node) as i64;
+    }
+    Ok(())
+}
+
 /// One Swendsen-Wang bond-and-recolour pass over `state`, in place.
 ///
 /// Ported from `sample.potts_mcmc.sweeps.swendsen_wang_sweep` and its
@@ -498,25 +543,10 @@ pub fn swendsen_wang_sweep_impl(
     }
 
     if first == 0 {
-        let mut parent: Vec<usize> = (0..n_nodes).collect();
-        for edge in 0..n_edges {
-            let left = edges[2 * edge];
-            let right = edges[2 * edge + 1];
-            if left < 0 || right < 0 || left as usize >= n_nodes || right as usize >= n_nodes {
-                return Err(format!(
-                    "edge {edge} joins {left} and {right}, expected [0, {n_nodes})"
-                ));
-            }
-            let (left, right) = (left as usize, right as usize);
-            // The oracle's two conditions in its order: like colours first,
-            // then the draw against the probability the caller evaluated.
-            if state[left] == state[right] && bond_draws[edge] < bond_probability[edge] {
-                union(&mut parent, left, right);
-            }
-        }
-        for (node, label) in labels.iter_mut().enumerate() {
-            *label = find(&mut parent, node) as i64;
-        }
+        let mut parent = vec![0usize; n_nodes];
+        like_bond_roots(state, edges, &mut parent, labels, |edge| {
+            bond_draws[edge] < bond_probability[edge]
+        })?;
     } else {
         for (node, &label) in labels.iter().enumerate() {
             if label < 0 || label as usize >= n_nodes {
@@ -700,6 +730,176 @@ pub fn swendsen_wang_sweep(
             labels,
             guard,
             first,
+        )
+    })
+    .map_err(PyValueError::new_err)
+}
+
+/// `n_clusters.len()` heat-bath Swendsen-Wang passes over `state`, in place.
+///
+/// Ported from `sample.potts_mcmc.sweeps.swendsen_wang_heat_bath_sweep`,
+/// which stays as the oracle (#1364). Each pass bonds each like edge with
+/// probability `1 - exp(-beta J)` ([`like_bond_roots`], the uniform pass's
+/// merge), sums the field per cluster and label, and draws each cluster's
+/// label from `exp(beta sum_C h[i, :])` over the labels its members allow
+/// ([`crate::wolff::heat_bath_label`], the heat-bath Wolff step's draw).
+/// The bond construction cancels from the label's conditional, so there is
+/// no accept step.
+///
+/// **The generator is the run's, through one seed**, for the reason
+/// `wolff.rs` states: the bond pass draws one uniform per *like* edge, a
+/// count the caller cannot know, so the kernel takes one draw of the run's
+/// generator as a ChaCha8 seed. The chain is of the oracle's law and is not
+/// the oracle's chain.
+///
+/// # Parameters
+/// - `field`: the unscaled log weights, `n_nodes * n_states`, row-major.
+/// - `edges`: the edge list flattened to `2 * n_edges`, in the graph's order.
+/// - `couplings`: one per edge, `>= 0`.
+/// - `n_clusters`: out, one entry per pass: how many clusters it built.
+///
+/// # Errors
+/// Returns `Err` for an empty alphabet, a field or coupling array of the
+/// wrong length, a negative or `NaN` coupling, a non-finite or negative
+/// `beta`, a site label outside the alphabet, or an edge end outside the
+/// graph. Every check but the last precedes the first pass; an edge refused
+/// leaves the passes before it standing.
+#[allow(clippy::too_many_arguments)]
+pub fn swendsen_wang_heat_bath_sweeps_impl(
+    state: &mut [i64],
+    field: &[f64],
+    n_states: usize,
+    edges: &[i64],
+    couplings: &[f64],
+    beta: f64,
+    seed: u64,
+    n_clusters: &mut [i64],
+) -> Result<(), String> {
+    let n_nodes = state.len();
+    if n_states == 0 {
+        return Err("field is empty, so there are no labels to draw".to_string());
+    }
+    if field.len() != n_nodes * n_states {
+        return Err(format!(
+            "field has {} entries, expected {n_nodes} * {n_states} (one row per site)",
+            field.len()
+        ));
+    }
+    if !edges.len().is_multiple_of(2) || couplings.len() != edges.len() / 2 {
+        return Err(format!(
+            "edges has {} entries and couplings {}; expected two ends and one coupling per edge",
+            edges.len(),
+            couplings.len()
+        ));
+    }
+    if !(beta.is_finite() && beta >= 0.0) {
+        return Err(format!("beta must be finite and >= 0, got {beta}"));
+    }
+    for (edge, &coupling) in couplings.iter().enumerate() {
+        // `NaN` is refused beside a negative coupling: neither gives a bond
+        // probability.
+        if coupling.is_nan() || coupling < 0.0 {
+            return Err(format!(
+                "coupling {coupling} at edge {edge} is negative: the cluster moves refuse it"
+            ));
+        }
+    }
+    for (node, &value) in state.iter().enumerate() {
+        if value < 0 || value as usize >= n_states {
+            return Err(format!(
+                "state at node {node} is {value}, expected [0, {n_states})"
+            ));
+        }
+    }
+
+    // Evaluated once per batch, as `wolff.rs` evaluates it per edge reached:
+    // `-expm1(-beta J)` is `1 - exp(-beta J)` without the cancellation.
+    let probability: Vec<f64> = couplings
+        .iter()
+        .map(|&coupling| -(-beta * coupling).exp_m1())
+        .collect();
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
+    // Allocated once per batch and reused by every pass.
+    let mut parent = vec![0usize; n_nodes];
+    let mut roots = vec![0i64; n_nodes];
+    let mut rank = vec![0usize; n_nodes];
+    let mut heads: Vec<usize> = Vec::with_capacity(n_nodes);
+    let mut sums: Vec<f64> = Vec::with_capacity(n_nodes * n_states);
+    let mut drawn: Vec<i64> = Vec::with_capacity(n_nodes);
+
+    for count in n_clusters.iter_mut() {
+        like_bond_roots(state, edges, &mut parent, &mut roots, |edge| {
+            let uniform: f64 = StandardUniform.sample(&mut rng);
+            uniform < probability[edge]
+        })?;
+        // Clusters ranked in increasing root order: a root labels itself,
+        // so an upward scan meets them sorted, the oracle's order.
+        heads.clear();
+        for (node, &root) in roots.iter().enumerate() {
+            if root as usize == node {
+                rank[node] = heads.len();
+                heads.push(node);
+            }
+        }
+        sums.clear();
+        sums.resize(heads.len() * n_states, 0.0);
+        for (node, &root) in roots.iter().enumerate() {
+            let cluster = rank[root as usize];
+            let row = &field[node * n_states..][..n_states];
+            for (s, &h) in sums[cluster * n_states..][..n_states].iter_mut().zip(row) {
+                *s += h;
+            }
+        }
+        drawn.clear();
+        for (cluster, &head) in heads.iter().enumerate() {
+            let own = &sums[cluster * n_states..][..n_states];
+            let label = heat_bath_label(own, beta, state[head] as usize, &mut rng);
+            drawn.push(label as i64);
+        }
+        for (site, &root) in state.iter_mut().zip(roots.iter()) {
+            *site = drawn[rank[root as usize]];
+        }
+        *count = heads.len() as i64;
+    }
+    Ok(())
+}
+
+/// PyO3 boundary for [`swendsen_wang_heat_bath_sweeps_impl`], `Err` mapped
+/// to a Python `ValueError`; the GIL is released for the batch, one crossing
+/// per `n_clusters.len()` passes.
+#[pyfunction]
+#[pyo3(signature = (state, field, edges, couplings, beta, seed, n_clusters))]
+#[allow(clippy::too_many_arguments)]
+pub fn swendsen_wang_heat_bath_sweeps(
+    py: Python<'_>,
+    mut state: PyReadwriteArray1<'_, i64>,
+    field: PyReadonlyArrayDyn<'_, f64>,
+    edges: PyReadonlyArray1<'_, i64>,
+    couplings: PyReadonlyArray1<'_, f64>,
+    beta: f64,
+    seed: u64,
+    mut n_clusters: PyReadwriteArray1<'_, i64>,
+) -> PyResult<()> {
+    let [n_rows, n_states] = *field.shape() else {
+        return Err(PyValueError::new_err(format!(
+            "field must be 2-D, (n_nodes, n_states), one row per site; got shape {:?}",
+            field.shape()
+        )));
+    };
+    if n_rows != state.len() {
+        return Err(PyValueError::new_err(format!(
+            "field has {n_rows} rows and state has {} sites; the field carries one row per site",
+            state.len()
+        )));
+    }
+    let state = state.as_slice_mut()?;
+    let field = field.as_slice()?;
+    let edges = edges.as_slice()?;
+    let couplings = couplings.as_slice()?;
+    let n_clusters = n_clusters.as_slice_mut()?;
+    py.detach(|| {
+        swendsen_wang_heat_bath_sweeps_impl(
+            state, field, n_states, edges, couplings, beta, seed, n_clusters,
         )
     })
     .map_err(PyValueError::new_err)
@@ -1109,5 +1309,119 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.contains("expected 1 each"), "{error}");
+    }
+
+    /// A 2x2 open lattice: edges 0-1, 2-3, 0-2, 1-3.
+    const SQUARE: [i64; 8] = [0, 1, 2, 3, 0, 2, 1, 3];
+
+    #[test]
+    fn certain_bonds_make_one_cluster_that_takes_the_only_allowed_label() {
+        // `1 - exp(-50)` is 1.0, so a uniform state is one cluster; label 2
+        // is the only one every site allows.
+        let mut state = vec![0i64; 4];
+        let field = [0.0, f64::NEG_INFINITY, 0.3].repeat(4);
+        let mut n_clusters = [0i64; 3];
+        swendsen_wang_heat_bath_sweeps_impl(
+            &mut state,
+            &field,
+            3,
+            &SQUARE,
+            &[50.0; 4],
+            1.0,
+            7,
+            &mut n_clusters,
+        )
+        .unwrap();
+        assert_eq!(n_clusters, [1, 1, 1]);
+        assert_eq!(state, [2, 2, 2, 2]);
+    }
+
+    #[test]
+    fn zero_couplings_draw_each_site_from_its_own_field() {
+        // No bond forms, so every site is its own cluster and draws from its
+        // own row: site 0 forbids labels 0 and 1, site 3 forbids label 2.
+        let mut field = vec![0.0f64; 12];
+        field[0] = f64::NEG_INFINITY;
+        field[1] = f64::NEG_INFINITY;
+        field[3 * 3 + 2] = f64::NEG_INFINITY;
+        let mut state = vec![2i64, 0, 0, 0];
+        let mut n_clusters = vec![0i64; 2000];
+        let mut seen = [[0usize; 3]; 4];
+        for seed in 0..10u64 {
+            swendsen_wang_heat_bath_sweeps_impl(
+                &mut state,
+                &field,
+                3,
+                &SQUARE,
+                &[0.0; 4],
+                1.0,
+                seed,
+                &mut n_clusters[..200],
+            )
+            .unwrap();
+            for (site, &label) in state.iter().enumerate() {
+                seen[site][label as usize] += 1;
+            }
+        }
+        assert!(n_clusters[..200].iter().all(|&n| n == 4));
+        assert_eq!(seen[0], [0, 0, 10]);
+        assert_eq!(seen[3][2], 0);
+    }
+
+    #[test]
+    fn a_cluster_forbidding_every_label_keeps_its_own() {
+        // Site 0 forbids 0 and 1, site 1 forbids 2; bonded, the pair forbids
+        // all three, and the pair starts at label 0, reachable only from a
+        // forbidden start.
+        let edges = [0i64, 1];
+        let mut field = vec![0.0f64; 6];
+        field[0] = f64::NEG_INFINITY;
+        field[1] = f64::NEG_INFINITY;
+        field[5] = f64::NEG_INFINITY;
+        let mut state = vec![0i64, 0];
+        let mut n_clusters = [0i64; 5];
+        swendsen_wang_heat_bath_sweeps_impl(
+            &mut state,
+            &field,
+            3,
+            &edges,
+            &[50.0],
+            1.0,
+            3,
+            &mut n_clusters,
+        )
+        .unwrap();
+        assert_eq!(n_clusters, [1; 5]);
+        assert_eq!(state, [0, 0]);
+    }
+
+    #[test]
+    fn a_negative_coupling_and_a_state_outside_the_alphabet_are_refused() {
+        let field = vec![0.0f64; 12];
+        let mut n_clusters = [0i64; 1];
+        let negative = swendsen_wang_heat_bath_sweeps_impl(
+            &mut [0, 0, 0, 0],
+            &field,
+            3,
+            &SQUARE,
+            &[1.0, -1.0, 1.0, 1.0],
+            1.0,
+            0,
+            &mut n_clusters,
+        )
+        .unwrap_err();
+        assert!(negative.contains("negative"), "{negative}");
+        let outside = swendsen_wang_heat_bath_sweeps_impl(
+            &mut [0, 3, 0, 0],
+            &field,
+            3,
+            &SQUARE,
+            &[1.0; 4],
+            1.0,
+            0,
+            &mut n_clusters,
+        )
+        .unwrap_err();
+        assert!(outside.contains("expected [0, 3)"), "{outside}");
     }
 }
