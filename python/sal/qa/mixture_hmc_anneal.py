@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import torch
@@ -182,9 +182,9 @@ class Fixture:
     scale: np.ndarray
 
 
-def fixture() -> Fixture:
-    """`mixture/ci`'s draws and objective."""
-    params = fixtures.fixture(*FIXTURE).params
+def instance(loaded: fixtures.Fixture[Any] | None = None) -> Fixture:
+    """`mixture/ci`'s draws and objective, from ``loaded`` where a caller names the fixture."""
+    params = (fixtures.fixture(*FIXTURE) if loaded is None else loaded).params
     observations = simulate_mixture(params).observations
     weights = np.asarray(params.weights)
     return Fixture(
@@ -396,8 +396,8 @@ def measure(instance: Fixture, ramp: ScheduleParams, n_starts: int) -> Measureme
 def main() -> None:
     """Tune the ramp, run the referee and the comparison, and print what `030` reports."""
     torch.set_num_threads(THREADS)
-    instance = fixture()
-    ramp, scores, tuning_seconds = tune_ramp(instance)
+    cell = instance()
+    ramp, scores, tuning_seconds = tune_ramp(cell)
     print(f"ramp search: {tuning_seconds:.1f} s over {len(scores)} ramps")
     for score in scores:
         print(
@@ -407,13 +407,13 @@ def main() -> None:
         )
     print(f"chosen: {ramp}")
     clock = time.perf_counter()
-    known = referee(instance)
+    known = referee(cell)
     print(
         f"referee ({time.perf_counter() - clock:.1f} s): best of restarts at "
         f"{REFEREE_BUDGET.size} x {REFEREE_STARTS} {known.best_of_restarts:.6f}, "
         f"truth {known.at_truth:.3f}, polished truth {known.polished_truth:.3f}"
     )
-    measurement = measure(instance, ramp, N_STARTS)
+    measurement = measure(cell, ramp, N_STARTS)
     print(measurement.table())
     stages = np.array(measurement.stage_values)
     print(
