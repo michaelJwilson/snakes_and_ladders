@@ -17,9 +17,10 @@ channel's plus the second's. The joint pair is refused: its trial count is the
 observed total, and a total of zero is a support point there where the trial
 term reads it as unobserved.
 
-**The order is the caller's.** The beta-binomial's nine tabulated terms are
-summed in the family's order and each score is its ``log_density`` bit for
-bit. The negative binomial's exposure term is completed either in the family's
+**The order is the caller's.** The beta-binomial's four tabulated terms,
+``log C + U + V - W`` of rising factorials (issue #1332), are
+:func:`~sal.emissions.bb.beta_binomial_log_pmf` bit for bit and the family's
+``log_density`` within 1e-14 ``max(|f|, 1)``. The negative binomial's exposure term is completed either in the family's
 order, ``A + r ln(r / t) + y ln(mu c / t)`` (:attr:`Order.FAMILY`, two
 logarithms a score, 2.3 ulp relative at the ci instance of
 ``spatio_sequential_counts_covariate``), or as the coupled kernel does,
@@ -162,12 +163,11 @@ def _success_arguments(
     tables = trial_tables(family, extent, trials_extent)
     return {
         "successes": counts,
-        "success_table": np.ascontiguousarray(tables.success.numpy()).reshape(-1),
+        "success_table": np.ascontiguousarray(tables.success).reshape(-1),
         "trials": per_observation,
-        "failure_table": np.ascontiguousarray(tables.failure.numpy()).reshape(-1),
-        "trial_table": np.ascontiguousarray(tables.trial.numpy()).reshape(-1),
-        "log_factorial": np.ascontiguousarray(log_factorial(trials_extent).numpy()),
-        "log_beta": np.ascontiguousarray(tables.log_beta.numpy()).reshape(-1),
+        "failure_table": np.ascontiguousarray(tables.failure).reshape(-1),
+        "trial_table": np.ascontiguousarray(tables.trial).reshape(-1),
+        "log_factorial": log_factorial(trials_extent),
     }
 
 

@@ -105,7 +105,7 @@ from sal.emissions import (
     NegativeBinomialEmission,
     validated_trials,
 )
-from sal.emissions.bb import log_factorial, trial_tables
+from sal.emissions.bb import beta_binomial_log_pmf, log_factorial, trial_tables
 from sal.emissions.nb import exposure_table
 from sal.likelihood.spatio_sequential import (
     COVARIATE_ROWS,
@@ -246,41 +246,31 @@ class TrialTerm:
         ``(S, n_nodes)`` contiguous ``uint32``; zero marks the successes
         unobserved.
     failure : np.ndarray
-        ``V[j, m, k] = lgamma(j + b_mk)``, ``(extent, M, K)`` contiguous.
+        ``V[j, m, k] = R(b_mk, j)``, ``(extent, M, K)`` contiguous.
     trial : np.ndarray
-        ``W[n, m, k] = lgamma(n + a_mk + b_mk)``, ``(extent, M, K)`` contiguous.
+        ``W[n, m, k] = R(a_mk + b_mk, n)``, ``(extent, M, K)`` contiguous.
     log_factorial : np.ndarray
         ``lgamma(j + 1)``, ``(extent,)``.
-    log_beta : np.ndarray
-        ``lgamma(a + b)``, ``lgamma(a)`` and ``lgamma(b)``, ``(3, M, K)``
-        contiguous.
     """
 
     trials: np.ndarray
     failure: np.ndarray
     trial: np.ndarray
     log_factorial: np.ndarray
-    log_beta: np.ndarray
 
     def arguments(self) -> dict[str, np.ndarray]:
-        """The kernel's five keyword arguments, flat."""
+        """The kernel's four keyword arguments, flat."""
         return {
             "trials": self.trials.reshape(-1),
             "failure_table": self.failure.reshape(-1),
             "trial_table": self.trial.reshape(-1),
             "log_factorial": self.log_factorial,
-            "log_beta": self.log_beta.reshape(-1),
         }
 
     @property
     def nbytes(self) -> int:
-        """The bytes of the four tables, the trial counts excluded."""
-        return (
-            self.failure.nbytes
-            + self.trial.nbytes
-            + self.log_factorial.nbytes
-            + self.log_beta.nbytes
-        )
+        """The bytes of the three tables, the trial counts excluded."""
+        return self.failure.nbytes + self.trial.nbytes + self.log_factorial.nbytes
 
 
 def _side(family: IndependentCountPair, channel: int) -> EmissionFamily:
@@ -332,6 +322,18 @@ def _outer_table(
     )
     table = np.empty((extent * n_levels, params.n_classes, params.n_states))
     for m, side in enumerate(sides):
+        if isinstance(side, BetaBinomialEmission):
+            # The factored layout's rising factorials, so every layout scores
+            # the same bits (issue #1332); a zero trial count is unobserved.
+            trials = covariate.numpy()
+            pmf = beta_binomial_log_pmf(
+                counts.numpy()[:, None],
+                trials,
+                side.alpha.detach().numpy(),
+                side.beta.detach().numpy(),
+            )
+            table[:, m, :] = np.where(trials == 0.0, 0.0, pmf)
+            continue
         table[:, m, :] = side.log_density(counts, covariate=covariate).numpy()
     return table
 
@@ -555,20 +557,12 @@ def _success_table(
     success = np.empty((rows.extent, *shape))
     failure = np.empty((trials_extent, *shape))
     trial = np.empty((trials_extent, *shape))
-    log_beta = np.empty((3, *shape))
     for m, side in enumerate(sides):
         tables = trial_tables(side, rows.extent, trials_extent)
-        success[:, m, :] = tables.success.numpy()
-        failure[:, m, :] = tables.failure.numpy()
-        trial[:, m, :] = tables.trial.numpy()
-        log_beta[:, m, :] = tables.log_beta.numpy()
-    term = TrialTerm(
-        rows.covariate,
-        failure,
-        trial,
-        np.ascontiguousarray(log_factorial(trials_extent).numpy()),
-        log_beta,
-    )
+        success[:, m, :] = tables.success
+        failure[:, m, :] = tables.failure
+        trial[:, m, :] = tables.trial
+    term = TrialTerm(rows.covariate, failure, trial, log_factorial(trials_extent))
     return success, term
 
 

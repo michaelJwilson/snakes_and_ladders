@@ -18,6 +18,7 @@ from sal.emissions import (
     CountPairEmission,
     NegativeBinomialEmission,
 )
+from sal.emissions.bb import beta_binomial_log_pmf
 from sal.emissions.dense import Order, log_emission
 from sal.emissions.nb import exposure_table
 from sal.sim.count_pairs import IndependentCountPair
@@ -38,6 +39,12 @@ _FAMILY_ULPS = 16
 _TABULATED_ULPS = 4
 
 EPS = float(np.finfo(np.float64).eps)
+
+#: The beta-binomial's rising-factorial tables against the family's ``lgamma``
+#: arithmetic, over ``max(|f|, 1)`` (issue #1332): the bitwise pin restated as
+#: a tolerance, the sum of the two routes' errors against ``mpmath`` at 50
+#: digits on these draws, 4.0e-14 and 2.8e-14, rounded up. Measured 6.5e-14.
+_DENSITY_TOLERANCE = 1e-13
 
 NB = NegativeBinomialEmission([4.0, 7.0, 12.0], [20.0, 80.0, 200.0])
 BB = BetaBinomialEmission([40.0, 40.0, 40.0], [2.4, 7.0, 19.5], [9.6, 7.0, 10.5])
@@ -124,13 +131,25 @@ def test_the_tabulated_order_is_the_density_within_the_factored_bound() -> None:
 
 @pytest.mark.oracle
 @pytest.mark.parametrize("order", list(Order), ids=str)
-def test_the_beta_binomial_is_its_density_bitwise(order: Order) -> None:
-    # Nine tabulated terms summed in the family's order: the same bits,
-    # including the unobserved successes and none past their trials.
+def test_the_beta_binomial_is_the_numpy_pmf_bitwise(order: Order) -> None:
+    # Four tabulated terms summed as `beta_binomial_log_pmf` sums them: the
+    # same bits, the unobserved successes zero as the family scores them; the
+    # family's `log_density` within _DENSITY_TOLERANCE (#1332).
     got = log_emission(BB, DRAWS["successes"], DRAWS["trials"], order=order)
+    trials = DRAWS["trials"][..., 0]
+    pmf = beta_binomial_log_pmf(
+        DRAWS["successes"],
+        trials,
+        BB.alpha.numpy()[:, None, None],
+        BB.beta.numpy()[:, None, None],
+    )
+    want = _density(BB, DRAWS["successes"], DRAWS["trials"])
 
-    assert (DRAWS["trials"] == 0.0).any()
-    assert np.array_equal(got, _density(BB, DRAWS["successes"], DRAWS["trials"]))
+    assert (trials == 0.0).any()
+    assert np.array_equal(got, np.where(trials == 0.0, 0.0, pmf))
+    assert np.array_equal(got[:, trials == 0.0], want[:, trials == 0.0])
+    worst = float((np.abs(got - want) / np.maximum(np.abs(want), 1.0)).max())
+    assert worst <= _DENSITY_TOLERANCE, worst
 
 
 @pytest.mark.oracle
@@ -177,9 +196,12 @@ def test_a_pair_is_its_channels_summed_as_the_family_sums_them(
 
     assert np.array_equal(got, channels)
     if order is Order.FAMILY:
+        # The exposure's 16 ulp relative plus the beta-binomial's
+        # _DENSITY_TOLERANCE over max(|f|, 1) (#1332); measured 4.2e-14
+        # relative, where the bitwise channel of #1064 held 16 ulp.
         want = _density(pair, observations, covariate)
-        worst = _worst_relative(got, want)
-        assert worst <= _FAMILY_ULPS * EPS, f"{worst / EPS:.1f} ulp"
+        worst = float((np.abs(got - want) / np.maximum(np.abs(want), 1.0)).max())
+        assert worst <= _FAMILY_ULPS * EPS + _DENSITY_TOLERANCE, worst
 
 
 @pytest.mark.smoke

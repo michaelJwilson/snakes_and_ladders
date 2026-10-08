@@ -274,35 +274,32 @@ impl ExposureTerm<'_> {
 
 /// The beta-binomial's trial count, factored out of the second channel's table.
 ///
-/// `log p(z | m, k, n) = lgamma(n + 1) - lgamma(z + 1) - lgamma(n - z + 1) +
-/// U[z, m, k] + V[n - z, m, k] - W[n, m, k] + lgamma(a + b) - lgamma(a) -
-/// lgamma(b)`, with `U[z] = lgamma(z + a)` the second channel's table, `V[j] =
-/// lgamma(j + b)` and `W[n] = lgamma(n + a + b)`: the family's nine terms, each
-/// a function of one integer or of none. A zero trial count marks the successes
-/// unobserved and they score zero; successes past their trial count score
-/// `-inf`; both as the family scores them.
+/// `log p(z | m, k, n) = log C(n, z) + U[z, m, k] + V[n - z, m, k] - W[n, m, k]`,
+/// with `U[z] = R(a, z)` the second channel's table, `V[j] = R(b, j)` and
+/// `W[n] = R(a + b, n)`, `R(x, j) = lgamma(x + j) - lgamma(x)` the log rising
+/// factorial (issue #1332): each a function of one integer, and no constant
+/// term, so nothing of size `lgamma(a + b)` is differenced. A zero trial count
+/// marks the successes unobserved and they score zero; successes past their
+/// trial count score `-inf`; both as the family scores them.
 #[derive(Clone, Copy)]
 pub struct TrialTerm<'a> {
     /// `S * V` trial counts `n`, position-major.
     pub trials: &'a [u32],
-    /// `V[j, m, k] = lgamma(j + b_mk)`, `extent * M * K`.
+    /// `V[j, m, k] = R(b_mk, j)`, `extent * M * K`.
     pub failure: &'a [f64],
-    /// `W[n, m, k] = lgamma(n + a_mk + b_mk)`, `extent * M * K`.
+    /// `W[n, m, k] = R(a_mk + b_mk, n)`, `extent * M * K`.
     pub trial: &'a [f64],
     /// `lgamma(j + 1)`, `extent` entries.
     pub log_factorial: &'a [f64],
-    /// `lgamma(a + b)`, `lgamma(a)` and `lgamma(b)`, each `M * K` row-major, in
-    /// that order.
-    pub log_beta: &'a [f64],
 }
 
 impl TrialTerm<'_> {
     /// The second channel's score at one observation, for `out.len()` columns from `from`.
     ///
     /// `table` is the row of `U` at the successes, already offset by `from`.
-    /// The sum runs in the family's order --- the three state-free terms
-    /// first, then `U`, `V`, `W` and the three `lgamma` of the Beta
-    /// function --- so each score is its `log_density` to the bit.
+    /// The sum runs as `log C + U + V - W`, the order of
+    /// `sal.emissions.bb.beta_binomial_log_pmf`, so each score is that pmf to
+    /// the bit.
     #[inline]
     pub(crate) fn score_into(
         &self,
@@ -329,14 +326,8 @@ impl TrialTerm<'_> {
             &self.failure[(n - z) * block + from..][..len],
             &self.trial[n * block + from..][..len],
         );
-        let (total, alpha, beta) = (
-            &self.log_beta[from..][..len],
-            &self.log_beta[block + from..][..len],
-            &self.log_beta[2 * block + from..][..len],
-        );
         for i in 0..len {
-            out[i] =
-                (((((free + table[i]) + failure[i]) - trial[i]) + total[i]) - alpha[i]) - beta[i];
+            out[i] = ((free + table[i]) + failure[i]) - trial[i];
         }
     }
 
@@ -350,13 +341,6 @@ impl TrialTerm<'_> {
             ));
         }
         let block = shape.block();
-        if self.log_beta.len() != 3 * block {
-            return Err(format!(
-                "log_beta has {} entries, expected 3 * M * K = {}",
-                self.log_beta.len(),
-                3 * block
-            ));
-        }
         let largest = self.trials.iter().copied().max().map_or(0, row_index);
         for (name, table, width) in [
             ("failure", self.failure, block),
@@ -1046,27 +1030,23 @@ pub(crate) fn exposure_term<'a>(
     }
 }
 
-/// The trial term from its five optional arrays: all five, or none.
+/// The trial term from its four optional arrays: all four, or none.
 pub(crate) fn trial_term<'a>(
     trials: &'a Option<PyReadonlyArray1<'_, u32>>,
     failure_table: &'a Option<PyReadonlyArray1<'_, f64>>,
     trial_table: &'a Option<PyReadonlyArray1<'_, f64>>,
     log_factorial: &'a Option<PyReadonlyArray1<'_, f64>>,
-    log_beta: &'a Option<PyReadonlyArray1<'_, f64>>,
 ) -> PyResult<Option<TrialTerm<'a>>> {
-    match (trials, failure_table, trial_table, log_factorial, log_beta) {
-        (None, None, None, None, None) => Ok(None),
-        (Some(trials), Some(failure), Some(trial), Some(log_factorial), Some(log_beta)) => {
-            Ok(Some(TrialTerm {
-                trials: borrowed(trials, "trials")?,
-                failure: borrowed(failure, "failure_table")?,
-                trial: borrowed(trial, "trial_table")?,
-                log_factorial: borrowed(log_factorial, "log_factorial")?,
-                log_beta: borrowed(log_beta, "log_beta")?,
-            }))
-        }
+    match (trials, failure_table, trial_table, log_factorial) {
+        (None, None, None, None) => Ok(None),
+        (Some(trials), Some(failure), Some(trial), Some(log_factorial)) => Ok(Some(TrialTerm {
+            trials: borrowed(trials, "trials")?,
+            failure: borrowed(failure, "failure_table")?,
+            trial: borrowed(trial, "trial_table")?,
+            log_factorial: borrowed(log_factorial, "log_factorial")?,
+        })),
         _ => Err(PyValueError::new_err(
-            "a trial term takes trials, failure_table, trial_table, log_factorial and log_beta together",
+            "a trial term takes trials, failure_table, trial_table and log_factorial together",
         )),
     }
 }
@@ -1084,7 +1064,7 @@ pub(crate) fn trial_term<'a>(
 ///
 /// `exposure`, `dispersion` and `mean`, given together, are the first
 /// channel's [`ExposureTerm`]; `total_table` is then its table `B`.
-/// `trials`, `failure_table`, `trial_table`, `log_factorial` and `log_beta`,
+/// `trials`, `failure_table`, `trial_table` and `log_factorial`,
 /// given together, are the second channel's [`TrialTerm`]; `success_table` is
 /// then its table `U`.
 ///
@@ -1096,7 +1076,7 @@ pub(crate) fn trial_term<'a>(
 /// `ValueError` naming the first violated precondition, including a count
 /// past the extent of the table that is indexed by it.
 #[pyfunction]
-#[pyo3(signature = (totals, successes, labels, total_table, success_table, log_initial, log_transition, n_positions, n_nodes, n_classes, n_states, posterior, pairwise, log_evidence, exposure=None, dispersion=None, mean=None, trials=None, failure_table=None, trial_table=None, log_factorial=None, log_beta=None))]
+#[pyo3(signature = (totals, successes, labels, total_table, success_table, log_initial, log_transition, n_positions, n_nodes, n_classes, n_states, posterior, pairwise, log_evidence, exposure=None, dispersion=None, mean=None, trials=None, failure_table=None, trial_table=None, log_factorial=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn class_posteriors(
     py: Python<'_>,
@@ -1121,7 +1101,6 @@ pub fn class_posteriors(
     failure_table: Option<PyReadonlyArray1<'_, f64>>,
     trial_table: Option<PyReadonlyArray1<'_, f64>>,
     log_factorial: Option<PyReadonlyArray1<'_, f64>>,
-    log_beta: Option<PyReadonlyArray1<'_, f64>>,
 ) -> PyResult<()> {
     let shape = CoupledShape {
         n_positions,
@@ -1165,13 +1144,7 @@ pub fn class_posteriors(
         total: total_table,
         success: success_table,
         exposure: exposure_term(&exposure, &dispersion, &mean)?,
-        trials: trial_term(
-            &trials,
-            &failure_table,
-            &trial_table,
-            &log_factorial,
-            &log_beta,
-        )?,
+        trials: trial_term(&trials, &failure_table, &trial_table, &log_factorial)?,
     };
     py.detach(|| {
         class_posteriors_into(
@@ -1229,7 +1202,7 @@ fn refuse_terms_on_one_channel(factored: bool) -> PyResult<()> {
 /// # Errors
 /// `ValueError` naming the first violated precondition.
 #[pyfunction]
-#[pyo3(signature = (totals, successes, total_table, success_table, weights, n_positions, n_nodes, n_classes, n_states, field, exposure=None, dispersion=None, mean=None, trials=None, failure_table=None, trial_table=None, log_factorial=None, log_beta=None))]
+#[pyo3(signature = (totals, successes, total_table, success_table, weights, n_positions, n_nodes, n_classes, n_states, field, exposure=None, dispersion=None, mean=None, trials=None, failure_table=None, trial_table=None, log_factorial=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn external_field(
     py: Python<'_>,
@@ -1250,7 +1223,6 @@ pub fn external_field(
     failure_table: Option<PyReadonlyArray1<'_, f64>>,
     trial_table: Option<PyReadonlyArray1<'_, f64>>,
     log_factorial: Option<PyReadonlyArray1<'_, f64>>,
-    log_beta: Option<PyReadonlyArray1<'_, f64>>,
 ) -> PyResult<()> {
     let shape = CoupledShape {
         n_positions,
@@ -1274,13 +1246,7 @@ pub fn external_field(
         total: total_table,
         success: success_table,
         exposure: exposure_term(&exposure, &dispersion, &mean)?,
-        trials: trial_term(
-            &trials,
-            &failure_table,
-            &trial_table,
-            &log_factorial,
-            &log_beta,
-        )?,
+        trials: trial_term(&trials, &failure_table, &trial_table, &log_factorial)?,
     };
     py.detach(|| external_field_into(shape, &tables, totals, successes, weights, field))
         .map_err(PyValueError::new_err)
@@ -1687,21 +1653,19 @@ mod tests {
 
     /// A one-class, two-state trial term over trial counts up to 3, its
     /// tables filled with distinct values so a wrong index shows.
-    #[allow(clippy::type_complexity)]
-    fn trial_tables() -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
+    fn trial_tables() -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
         let success: Vec<f64> = (0..8).map(|i| 0.5 + f64::from(i)).collect();
         let failure: Vec<f64> = (0..8).map(|i| 0.25 * f64::from(i)).collect();
         let trial: Vec<f64> = (0..8).map(|i| 3.0 + 0.125 * f64::from(i)).collect();
         let log_factorial = vec![0.0, 0.0, 2f64.ln(), 6f64.ln()];
-        let log_beta = vec![0.7, 0.9, 0.2, 0.3, 0.4, 0.1];
-        (success, failure, trial, log_factorial, log_beta)
+        (success, failure, trial, log_factorial)
     }
 
-    /// The trial term's nine terms written out, against the field's
+    /// The trial term's four terms written out, against the field's
     /// accumulation of them; zero trials score zero and successes past their
     /// trials score `-inf`.
     #[test]
-    fn a_trial_term_is_the_nine_terms_in_order() {
+    fn a_trial_term_is_the_four_terms_in_order() {
         let shape = CoupledShape {
             n_positions: 2,
             n_nodes: 2,
@@ -1709,7 +1673,7 @@ mod tests {
             n_states: 2,
         };
         let total = vec![0.0; 2];
-        let (success, failure, trial, log_factorial, log_beta) = trial_tables();
+        let (success, failure, trial, log_factorial) = trial_tables();
         let trials = [3u32, 0, 2, 1];
         let tables = EmissionTables {
             total: &total,
@@ -1720,7 +1684,6 @@ mod tests {
                 failure: &failure,
                 trial: &trial,
                 log_factorial: &log_factorial,
-                log_beta: &log_beta,
             }),
         };
         let successes = [1u32, 3, 2, 2];
@@ -1731,9 +1694,7 @@ mod tests {
 
         let score = |z: usize, n: usize| {
             let free = (log_factorial[n] - log_factorial[z]) - log_factorial[n - z];
-            (((((free + success[2 * z]) + failure[2 * (n - z)]) - trial[2 * n]) + log_beta[0])
-                - log_beta[2])
-                - log_beta[4]
+            ((free + success[2 * z]) + failure[2 * (n - z)]) - trial[2 * n]
         };
         // Vertex 0: one success in three trials, then two in two.
         assert_eq!(field[0], -(score(1, 3) + score(2, 2)));
@@ -1750,7 +1711,7 @@ mod tests {
     #[test]
     fn a_trial_count_past_the_tables_is_refused() {
         let (shape, total, _) = tiny();
-        let (success, failure, trial, log_factorial, log_beta) = trial_tables();
+        let (success, failure, trial, log_factorial) = trial_tables();
         let trials = [4u32, 0, 0, 0];
         let tables = EmissionTables {
             total: &total,
@@ -1761,27 +1722,9 @@ mod tests {
                 failure: &failure,
                 trial: &trial,
                 log_factorial: &log_factorial,
-                log_beta: &log_beta[..4],
             }),
         };
         let mut field = vec![0.0; 2];
-        let refused = external_field_into(
-            shape,
-            &tables,
-            &[0u32; 4],
-            &[0u32; 4],
-            &[1.0, 0.0, 1.0, 0.0],
-            &mut field,
-        );
-        assert!(refused.unwrap_err().contains("3 * M * K"));
-
-        let tables = EmissionTables {
-            trials: Some(TrialTerm {
-                log_beta: &log_beta,
-                ..tables.trials.unwrap()
-            }),
-            ..tables
-        };
         let refused = external_field_into(
             shape,
             &tables,

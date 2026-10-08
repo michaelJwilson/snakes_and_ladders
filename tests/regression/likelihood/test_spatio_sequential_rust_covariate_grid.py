@@ -26,6 +26,7 @@ from sal.emissions import (
     EmissionFamily,
     NegativeBinomialEmission,
 )
+from sal.emissions.bb import beta_binomial_log_pmf
 from sal.likelihood import spatio_sequential as gateway
 from sal.likelihood.spatio_sequential import (
     class_posteriors,
@@ -52,6 +53,12 @@ PROBLEM = "spatio_sequential_counts_covariate"
 #: instance (2.3 in the family's order, traded for speed; issue #1064).
 _ULPS = 512
 _PER_SCORE = _ULPS * np.finfo(np.float64).eps
+
+#: The beta-binomial's rising factorials against the family's ``lgamma``
+#: arithmetic, over ``max(|f|, 1)`` (issue #1332): the sum of the two routes'
+#: errors against ``mpmath`` on the dense fixture, 4.0e-14 and 2.8e-14,
+#: rounded up, as ``test_emissions_dense`` declares it.
+DENSITY_TOLERANCE = 1e-13
 
 #: Relative agreement of an evidence and a field with the NumPy oracle: the
 #: tolerance the uncovaried and the #658 covariate comparisons declare
@@ -223,10 +230,10 @@ def _success_scores(
 def test_each_trial_count_score_is_the_familys_bitwise(
     layout: gateway.CovariateRows,
 ) -> None:
-    # The factored layout sums the nine `lgamma` terms in the family's order,
-    # each tabulated at the family's own argument; the two tabulated layouts
-    # read the family's `log_density` at the pair. Measured 0 ulp at every one
-    # of the 6.4e6 scores of the ci instance, in every layout.
+    # Every layout is `beta_binomial_log_pmf` at the pair bit for bit: the
+    # factored one sums its rising-factorial tables in its order, the two
+    # tabulated ones read it (issue #1332). The family's `log_density` agrees
+    # within DENSITY_TOLERANCE over max(|f|, 1), where #1064 pinned it bitwise.
     instance = _instance()
     params, observations = instance.params, instance.observations
     covariate = params.covariate
@@ -248,7 +255,30 @@ def test_each_trial_count_score_is_the_familys_bitwise(
         ],
         axis=2,
     )
-    assert np.array_equal(got, want)
+    count = successes.numpy().reshape(n_positions, n_nodes, 1)
+    total = trials.numpy().reshape(n_positions, n_nodes, 1)
+    bb_sides = [
+        side
+        for side in _sides(params, SUCCESSES)
+        if isinstance(side, BetaBinomialEmission)
+    ]
+    assert len(bb_sides) == params.n_classes
+    pmf = np.stack(
+        [
+            np.where(
+                total == 0.0,
+                0.0,
+                beta_binomial_log_pmf(
+                    count, total, side.alpha.numpy(), side.beta.numpy()
+                ),
+            )
+            for side in bb_sides
+        ],
+        axis=2,
+    )
+    assert np.array_equal(got, pmf)
+    worst = float((np.abs(got - want) / np.maximum(np.abs(want), 1.0)).max())
+    assert worst <= DENSITY_TOLERANCE, worst
 
 
 @pytest.mark.smoke

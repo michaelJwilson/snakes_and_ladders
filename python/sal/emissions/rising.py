@@ -559,6 +559,36 @@ def log_rising(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
     return out
 
 
+def log_rising_into(
+    x: NDArray[np.float64], m: NDArray[np.float64], out: NDArray[np.float64]
+) -> None:
+    """:func:`log_rising` written into ``out``, allocating nothing (issue #1332).
+
+    ``x``, ``m`` and ``out`` are ``float64``, C-contiguous and of one shape;
+    no broadcast is taken, since a broadcast allocates. A compiled loop that
+    needs rising factorials takes them from tables built once per M step
+    with this, such as :func:`sal.emissions.bb.trial_tables`; no scalar
+    ``@njit`` form is public. ``out`` is :func:`log_rising` bit for bit.
+    """
+    for name, array in (("x", x), ("m", m), ("out", out)):
+        if array.dtype != np.float64 or not array.flags.c_contiguous:
+            msg = f"{name} is C-contiguous float64, got {array.dtype}"
+            raise ValueError(msg)
+    if not x.shape == m.shape == out.shape:
+        msg = f"x, m and out share one shape, got {x.shape}, {m.shape}, {out.shape}"
+        raise ValueError(msg)
+    _kernels()[0](
+        x.reshape(-1),
+        m.reshape(-1),
+        out.reshape(-1),
+        _SERIES_FROM,
+        _SMALL_T,
+        _PLAIN_ERROR,
+        _LOG_PROMISE,
+        _TERM_FLOOR,
+    )
+
+
 def digamma_rising(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
     """``digamma(x + m) - digamma(x)``, the derivative of :func:`log_rising` in ``x``; broadcasts.
 
@@ -588,6 +618,24 @@ def on_distinct(
     if values.dim() == 0 or values.shape[-1] != 1 or values.numel() < 64:
         return table(values)
     distinct, inverse = distinct_values(values)
+    rows = table(distinct.reshape(-1, 1))
+    return rows[inverse.reshape(-1)].reshape(*values.shape[:-1], rows.shape[-1])
+
+
+def on_distinct_array(
+    values: NDArray[np.float64],
+    table: Callable[[NDArray[np.float64]], NDArray[np.float64]],
+) -> NDArray[np.float64]:
+    """:func:`on_distinct` on NumPy arrays, for a caller that takes no derivative (issue #1332).
+
+    ``values`` ends in a singleton axis, ``(..., 1)``, and ``table`` maps a
+    ``(D, 1)`` column of them to ``(D, K)``. Elementwise, so the gathered
+    entries are ``table(values)`` bit for bit. Too few values, or no
+    singleton axis, and ``table`` takes them directly.
+    """
+    if values.ndim == 0 or values.shape[-1] != 1 or values.size < 64:
+        return table(values)
+    distinct, inverse = np.unique(values, return_inverse=True)
     rows = table(distinct.reshape(-1, 1))
     return rows[inverse.reshape(-1)].reshape(*values.shape[:-1], rows.shape[-1])
 
