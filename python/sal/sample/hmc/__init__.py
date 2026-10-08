@@ -128,6 +128,7 @@ from sal.sample.schedule import (
     Annealed,
     ConstantTempSchedule,
     Monotone,
+    Stage,
     TempSchedule,
     check_ladder,
     ladder,
@@ -668,8 +669,8 @@ class AnnealedTheta(Annealed[torch.Tensor]):
     """What one annealing run found, and what it cost (issue #1090).
 
     An :class:`~sal.sample.schedule.Annealed` over points in unconstrained
-    coordinates: ``best`` is the lowest-valued point visited, ``final``
-    where the chain ended, and ``spent`` the gradients, so the run is
+    coordinates: ``best`` is the lowest-valued point visited, polished
+    where a polish ran, and ``spent`` the gradients, so the run is
     comparable to any other optimizer at equal evaluations.
 
     Parameters
@@ -686,10 +687,15 @@ class AnnealedTheta(Annealed[torch.Tensor]):
     tuned : TunedStep[torch.Tensor] | None
         The pilot that chose the step under ``step_size="auto"`` (issue
         #1219), its gradients in ``spent``; ``None`` for a given step.
+    stages : tuple[Stage[torch.Tensor], ...]
+        ``init``, the schedule to its ``best`` with any tuning pilot's
+        gradients, then ``polish`` where one ran (issue #1373); ``value``,
+        ``best`` and ``termination`` are the last one's.
     """
 
     value: float
     acceptance_rate: float
+    stages: tuple[Stage[torch.Tensor], ...]
     step_sizes: tuple[float, ...] | None = None
     tuned: TunedStep[torch.Tensor] | None = None
 
@@ -758,13 +764,14 @@ def anneal(
         ``Backend.PYTHON``, the torch transition runs it. The compiled walk
         draws from its own ChaCha8 stream, seeded by one draw of ``rng``.
     polish, polish_budget
-        The polisher run from ``final`` once the schedule ends, to its own
+        The polisher run from the schedule's ``best`` alone once the
+        schedule ends (issue #1374), to its own
         tolerance, and its iteration cap in
         :attr:`~sal.cost.Cost.ITERATIONS`, as
         :class:`~sal.sample.tune.StepTuning` pairs them (issue #1363):
         :func:`~sal.opt.starts.polish_by_fit` is L-BFGS to its gradient
-        tolerance. Where the schedule's ``best`` scores below ``final``'s
-        polish it is polished too, and the lower is ``best``. The termination
+        tolerance. ``best`` and ``value`` are the point it reaches;
+        ``final`` is the chain's last point, unpolished. The termination
         is the polish's, :attr:`~sal.opt.termination.Stop.BUDGET` where its
         cap ran out, ``polished_by`` names it, and ``polish_spent`` its
         iterations, inside ``spent``. ``None``, the default, is the run
@@ -786,6 +793,7 @@ def anneal(
     if polish_budget is not None and polish_budget.unit is not Cost.ITERATIONS:
         msg = f"a polish budget is in {Cost.ITERATIONS}, got {polish_budget.unit}"
         raise ValueError(msg)
+    clock = time.perf_counter()
     run = _anneal(
         objective,
         schedule,
@@ -798,6 +806,15 @@ def anneal(
         tuning=tuning,
         backend=backend,
     )
+    init = Stage(
+        name="init",
+        best=run.best,
+        energy=run.value,
+        spent=run.spent,
+        seconds=time.perf_counter() - clock,
+        termination=run.termination,
+    )
+    run = dataclasses.replace(run, stages=(init,))
     if polish is None or polish_budget is None:
         return run
     return _polished(objective, run, polish, polish_budget)
@@ -806,22 +823,25 @@ def anneal(
 def _polished(
     objective: Objective, run: AnnealedTheta, polish: Polisher, budget: Budget
 ) -> AnnealedTheta:
-    """``run`` with ``polish`` from its final point, and from its best where that scores lower (issue #1363)."""
-    final = polish(objective, run.final, budget)
-    polished, iterations = final, final.iterations
-    if run.value < final.value:
-        best = polish(objective, run.best, budget)
-        iterations += best.iterations
-        if best.value < final.value:
-            polished = best
+    """``run`` with ``polish`` from its best point alone, its second stage (issues #1363, #1373, #1374)."""
+    clock = time.perf_counter()
+    polished = polish(objective, run.best, budget)
+    stage = Stage(
+        name="polish",
+        best=polished.theta,
+        energy=polished.value,
+        spent=polished.iterations,
+        seconds=time.perf_counter() - clock,
+        termination=polished.termination,
+    )
     return dataclasses.replace(
         run,
+        stages=(*run.stages, stage),
         best=polished.theta,
         value=polished.value,
-        final=final.theta,
-        spent=run.spent + iterations,
+        spent=run.spent + polished.iterations,
         termination=polished.termination,
-        polish_spent=iterations,
+        polish_spent=polished.iterations,
         polished_by=getattr(polish, "__name__", type(polish).__name__),
     )
 
@@ -876,7 +896,7 @@ def _anneal(
         return AnnealedTheta(
             best=torch.from_numpy(ran.best),
             value=ran.energy,
-            final=torch.from_numpy(ran.final),
+            stages=(),
             acceptance_rate=compiled.accepted / schedule.n_steps,
             spent=ran.spent + (0 if tuned is None else tuned.spent),
             unit=Cost.GRADIENTS,
@@ -900,7 +920,7 @@ def _anneal(
     return AnnealedTheta(
         best=walked.best,
         value=walked.energy,
-        final=walked.final,
+        stages=(),
         acceptance_rate=step.accepted / schedule.n_steps,
         spent=walked.spent + (0 if tuned is None else tuned.spent),
         unit=Cost.GRADIENTS,

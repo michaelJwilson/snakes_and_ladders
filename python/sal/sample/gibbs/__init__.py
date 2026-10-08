@@ -123,8 +123,8 @@ class AnnealedLabelling(Annealed[np.ndarray]):
     """What annealing returns: the best state visited, and the path there (issue #1090).
 
     An :class:`~sal.sample.schedule.Annealed` over states: ``best`` is the state
-    of highest log-density seen, shape ``(n_variables,)``, ``final`` where
-    the chain ended, and ``spent`` the heat-bath sweeps.
+    of highest log-density seen, shape ``(n_variables,)``, and ``spent``
+    the heat-bath sweeps.
 
     Parameters
     ----------
@@ -766,7 +766,6 @@ def anneal_factor_graph(
     return AnnealedLabelling(
         best=walked.best,
         log_density=-walked.energy,
-        final=walked.final,
         trace=-np.array(walked.energies),
         spent=walked.spent,
         unit=Cost.SWEEPS,
@@ -872,8 +871,8 @@ class AnnealedTopology(Annealed[Topology]):
     """What the topology move returns (issue #1090).
 
     An :class:`~sal.sample.schedule.Annealed` over topologies: ``best`` is the
-    topology of highest fitted log-likelihood visited, ``final`` where the
-    walk ended, and ``spent`` the topologies this run fitted, the cache
+    topology of highest fitted log-likelihood visited, and ``spent`` the
+    topologies this run fitted, the cache
     hits being free.
 
     Parameters
@@ -930,7 +929,6 @@ def anneal_topology(
     return AnnealedTopology(
         best=walked.best,
         log_likelihood=-walked.energy,
-        final=walked.final,
         trace=-np.array(walked.energies),
         acceptance=sum(moved) / schedule.n_steps,
         scores=cache,

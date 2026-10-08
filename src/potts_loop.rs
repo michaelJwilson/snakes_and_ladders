@@ -30,6 +30,8 @@ use numpy::{
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use std::time::Instant;
+
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rand_distr::{Distribution, StandardUniform, Uniform};
@@ -72,11 +74,14 @@ pub struct Plan<'a> {
     pub record: bool,
     /// Whether to keep the lowest-energy state.
     pub track_best: bool,
-    /// Whether to descend the final state, and the best where kept, by ICM
-    /// to a fixed point once the schedule ends (`Polish.ICM`, #1363).
+    /// Whether to descend the best state by ICM to a fixed point once the
+    /// schedule ends (`Polish.ICM`, #1363, #1374); it needs `track_best`.
     pub polish: bool,
     /// The polish's floor, `iterated_conditional_modes`' `min_sites`.
     pub min_sites: usize,
+    /// Whether the polish ends with the greedy whole-label merge
+    /// (`Polish.ICM_MERGE`, #1373); it needs `polish`.
+    pub merge: bool,
 }
 
 /// What one run returns beside the final state, which it leaves in place.
@@ -114,8 +119,18 @@ pub struct Ran {
     pub best_energies: Vec<f64>,
     /// The best state descended by the polish; empty unpolished.
     pub best_polished: Vec<i64>,
-    /// The polish's sweeps from the final state and from the best.
-    pub polish_sweeps: (usize, usize),
+    /// The polish's sweeps from the best.
+    pub polish_sweeps: usize,
+    /// The polished best after the greedy whole-label merge; empty unmerged.
+    pub merged: Vec<i64>,
+    /// The merge's rounds, the last finding no pair that lowers the energy.
+    pub merge_rounds: usize,
+    /// The energy of each stage's labelling: the best, the polished best,
+    /// and the merged, as far as the run went.
+    pub stage_energies: Vec<f64>,
+    /// The wall seconds of each stage, the schedule's lead included in the
+    /// first.
+    pub stage_seconds: Vec<f64>,
 }
 
 /// `E(s) = -sum_i h_i[s_i] - sum_(ij) J_ij [s_i == s_j]`, from the
@@ -170,6 +185,12 @@ pub fn potts_loop_impl(
         .find(|&&t| !(t > 0.0 && t.is_finite()))
     {
         return Err(format!("a temperature is positive and finite, got {t}"));
+    }
+    if plan.merge && !plan.polish {
+        return Err("the merge ends the polish, so it needs polish".to_string());
+    }
+    if plan.polish && !plan.track_best {
+        return Err("the polish descends the best state, so it needs track_best".to_string());
     }
     if plan.thin == 0 {
         return Err("thin is at least 1".to_string());
@@ -255,6 +276,7 @@ pub fn potts_loop_impl(
     };
     let n_temperatures = plan.temperatures.len();
     let mut step: usize = 0;
+    let mut clock = Instant::now();
     loop {
         let main = step >= plan.lead;
         let index = step.saturating_sub(plan.lead);
@@ -428,29 +450,102 @@ pub fn potts_loop_impl(
         step += 1;
     }
     ran.final_energy = energy;
+    if plan.track_best {
+        ran.stage_energies.push(ran.best_energy);
+        ran.stage_seconds.push(clock.elapsed().as_secs_f64());
+    }
     if plan.polish {
+        clock = Instant::now();
         let mut polish = Polisher::new(n_nodes, n_states, plan.min_sites);
-        ran.polish_sweeps.0 = polish.descend(
-            state,
+        ran.best_polished = ran.best.clone();
+        ran.polish_sweeps = polish.descend(
+            &mut ran.best_polished,
             lattice.field,
             &offsets_usize,
             neighbours,
             couplings,
             &mut rng,
         )?;
-        if plan.track_best {
-            ran.best_polished = ran.best.clone();
-            ran.polish_sweeps.1 = polish.descend(
-                &mut ran.best_polished,
-                lattice.field,
-                &offsets_usize,
-                neighbours,
-                couplings,
-                &mut rng,
-            )?;
-        }
+        ran.stage_energies
+            .push(energy_of(&ran.best_polished, lattice));
+        ran.stage_seconds.push(clock.elapsed().as_secs_f64());
+    }
+    if plan.merge {
+        clock = Instant::now();
+        ran.merged = ran.best_polished.clone();
+        ran.merge_rounds = merge_labels(&mut ran.merged, lattice, &offsets_usize);
+        ran.stage_energies.push(energy_of(&ran.merged, lattice));
+        ran.stage_seconds.push(clock.elapsed().as_secs_f64());
     }
     Ok(ran)
+}
+
+/// The greedy whole-label merge (#1373): relabel every site of a label `u`
+/// to another label `v` in use, at the pair whose energy change
+/// `delta(u, v) = -(U[u, v] - U[u, u]) - (B[u, v] + B[v, u]) / 2` is most
+/// negative, until no admissible pair has `delta < 0`; the rounds run, the
+/// last the one that found none.
+///
+/// `U[u, k]` sums the field at label `k` over the sites of `u`, in site
+/// order; `B[a, b]` sums the couplings over the adjacency entries from a
+/// site of `a` to a site of `b`, in entry order, so each edge counts from
+/// both ends. A pair is admissible only where `v` is allowed (a finite
+/// field) at every site of `u`. Ties go to the lowest `u`, then the lowest
+/// `v`. One round reads every site's row and every adjacency entry: O(N q
+/// + E), and q^2 to pick the pair. `chains.merge_labels` is its oracle.
+pub fn merge_labels(state: &mut [i64], lattice: &Lattice<'_>, offsets: &[usize]) -> usize {
+    let q = lattice.n_states;
+    let mut field_sums = vec![0.0f64; q * q];
+    let mut bond_sums = vec![0.0f64; q * q];
+    let mut counts = vec![0usize; q];
+    let mut allowed = vec![0usize; q * q];
+    let mut rounds = 0usize;
+    loop {
+        rounds += 1;
+        field_sums.fill(0.0);
+        bond_sums.fill(0.0);
+        counts.fill(0);
+        allowed.fill(0);
+        for (node, &label) in state.iter().enumerate() {
+            let u = label as usize;
+            counts[u] += 1;
+            let row = &lattice.field[node * q..(node + 1) * q];
+            for (k, &value) in row.iter().enumerate() {
+                field_sums[u * q + k] += value;
+                allowed[u * q + k] += usize::from(value > f64::NEG_INFINITY);
+            }
+            for position in offsets[node]..offsets[node + 1] {
+                let far = lattice.neighbours[position] as usize;
+                bond_sums[u * q + state[far] as usize] += lattice.couplings[position];
+            }
+        }
+        let mut chosen: Option<(usize, usize)> = None;
+        let mut lowest = 0.0f64;
+        for u in 0..q {
+            if counts[u] == 0 {
+                continue;
+            }
+            for v in 0..q {
+                if v == u || counts[v] == 0 || allowed[u * q + v] != counts[u] {
+                    continue;
+                }
+                let delta = -(field_sums[u * q + v] - field_sums[u * q + u])
+                    - (bond_sums[u * q + v] + bond_sums[v * q + u]) / 2.0;
+                if delta < lowest {
+                    lowest = delta;
+                    chosen = Some((u, v));
+                }
+            }
+        }
+        let Some((u, v)) = chosen else {
+            return rounds;
+        };
+        for label in state.iter_mut() {
+            if *label == u as i64 {
+                *label = v as i64;
+            }
+        }
+    }
 }
 
 /// The polish's ICM descent, in index order to a fixed point (#1363), on the
@@ -619,7 +714,7 @@ fn recoloured(
 /// PyO3 boundary for [`potts_loop_impl`]: the final state in place, and a
 /// dict of the rest, with the GIL released for the run.
 #[pyfunction]
-#[pyo3(signature = (state, field, offsets, neighbours, couplings, moves, temperatures, budget, n_main, lead, thin, record, track_best, seed, polish = false, min_sites = 0))]
+#[pyo3(signature = (state, field, offsets, neighbours, couplings, moves, temperatures, budget, n_main, lead, thin, record, track_best, seed, polish = false, min_sites = 0, merge = false))]
 #[allow(clippy::too_many_arguments)]
 pub fn potts_loop<'py>(
     py: Python<'py>,
@@ -639,6 +734,7 @@ pub fn potts_loop<'py>(
     seed: u64,
     polish: bool,
     min_sites: usize,
+    merge: bool,
 ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
     let [n_rows, n_states] = *field.shape() else {
         return Err(PyValueError::new_err(format!(
@@ -671,6 +767,7 @@ pub fn potts_loop<'py>(
         track_best,
         polish,
         min_sites,
+        merge,
     };
     let ran = py
         .detach(|| potts_loop_impl(state, &lattice, &plan, seed))
@@ -692,6 +789,10 @@ pub fn potts_loop<'py>(
     out.set_item("best_energies", PyArray1::from_vec(py, ran.best_energies))?;
     out.set_item("best_polished", PyArray1::from_vec(py, ran.best_polished))?;
     out.set_item("polish_sweeps", ran.polish_sweeps)?;
+    out.set_item("merged", PyArray1::from_vec(py, ran.merged))?;
+    out.set_item("merge_rounds", ran.merge_rounds)?;
+    out.set_item("stage_energies", PyArray1::from_vec(py, ran.stage_energies))?;
+    out.set_item("stage_seconds", PyArray1::from_vec(py, ran.stage_seconds))?;
     Ok(out)
 }
 
@@ -718,7 +819,27 @@ mod tests {
             track_best: true,
             polish: false,
             min_sites: 0,
+            merge: false,
         }
+    }
+
+    #[test]
+    fn the_merge_joins_two_labels_on_a_flat_field() {
+        let (offsets, neighbours, couplings, field) = square(3);
+        let lattice = Lattice {
+            field: &field,
+            n_states: 3,
+            offsets: &offsets,
+            neighbours: &neighbours,
+            couplings: &couplings,
+        };
+        let bounds: Vec<usize> = offsets.iter().map(|&o| o as usize).collect();
+        // Labels (0, 0, 1, 1): bonds 0-2 and 1-3 disagree, so merging 0 into
+        // 1 gains both, -2; then one label is left and the next round stops.
+        let mut state = vec![0, 0, 1, 1];
+        assert_eq!(merge_labels(&mut state, &lattice, &bounds), 2);
+        assert_eq!(state, vec![1, 1, 1, 1]);
+        assert_eq!(energy_of(&state, &lattice), -4.0);
     }
 
     #[test]
@@ -803,13 +924,16 @@ mod tests {
         let temperatures = [1.0];
         let run = |seed: u64| {
             let mut state = vec![0, 1, 2, 0];
-            potts_loop_impl(
+            let mut ran = potts_loop_impl(
                 &mut state,
                 &lattice,
                 &plan(&[WOLFF, SINGLE_SITE], &temperatures, 0, 50),
                 seed,
             )
-            .unwrap()
+            .unwrap();
+            // Wall time is the one return a seed does not fix.
+            ran.stage_seconds.clear();
+            ran
         };
         assert_eq!(run(3), run(3));
         assert_ne!(run(3).records, run(4).records);

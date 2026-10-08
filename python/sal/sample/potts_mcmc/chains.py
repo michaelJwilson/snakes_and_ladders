@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import functools
 import math
+import time
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -27,7 +28,6 @@ from sal.sample.loop import (
     Exchanging,
     Moved,
     Step,
-    Walked,
     anneal,
     anneal_spent,
     swap_log_ratio,
@@ -61,6 +61,7 @@ from sal.sample.schedule import (
     Annealed,
     Monotone,
     Polish,
+    Stage,
     Tempered,
     TempSchedule,
     check_ladder,
@@ -87,6 +88,7 @@ from sal.sim.potts import (
     critical_coupling,
     energies,
     log_weight_of,
+    owner_rows,
     site_field,
 )
 from sal.track import current as current_tracked
@@ -159,6 +161,7 @@ def run_loop(
     track_best: bool = False,
     polish: bool = False,
     min_sites: int = 0,
+    merge: bool = False,
 ) -> dict[str, Any]:
     """One ``oxisal.potts_loop`` call: the whole run in Rust, ``state`` moved in place (issue #1368).
 
@@ -185,6 +188,7 @@ def run_loop(
         int(rng.integers(0, 2**62)),
         polish,
         min_sites,
+        merge,
     )
 
 
@@ -848,8 +852,8 @@ class AnnealedPotts(Annealed[np.ndarray]):
     """What one annealing run found, and what it cost (issue #1090).
 
     An :class:`~sal.sample.schedule.Annealed` over labellings: ``best`` is the
-    lowest-energy configuration visited, shape ``(n_nodes,)``, ``final``
-    where the chain ended, and ``spent`` the site visits, the unit a budget
+    lowest-energy configuration visited, shape ``(n_nodes,)``, the last
+    stage's where a polish ran, and ``spent`` the site visits, the unit a budget
     is matched on rather than the sweep count: a Wolff sweep flips one
     cluster while a heat-bath sweep touches every site, so equal sweeps
     hand the cluster moves a free lattice per move (issue #551).
@@ -868,10 +872,15 @@ class AnnealedPotts(Annealed[np.ndarray]):
     tuned : TunedSchedule | None
         The pilots that chose the schedule under ``schedule="auto"`` (issue
         #1317), ``None`` for a given schedule; their spend is not in ``spent``.
+    stages : tuple[Stage[np.ndarray], ...]
+        One :class:`~sal.sample.schedule.Stage` per stage run (issue #1373):
+        ``init``, then ``polish`` and ``merge`` as ``polish`` names them;
+        the top-level fields are the last one's.
     """
 
     energy: float
     n_sweeps: int
+    stages: tuple[Stage[np.ndarray], ...]
     trace: tuple[ClusterCounter, ...] = ()
     tuned: TunedSchedule | None = None
 
@@ -984,22 +993,23 @@ def anneal_potts(
         the default, is the Rust loop wherever it applies (:func:`loop_codes`):
         201x to 373x the Python loop on a Wolff anneal at 256x256, 1.1x to
         1.4x on single-site, by the owner's principle that Python is not the
-        step caller. With ``polish``, the same call descends
-        ``final`` and ``best`` by the Rust ICM, on the floor's uniforms from
-        its own stream.
+        step caller. With ``polish``, the same call descends ``best`` by
+        the Rust ICM, and merges it under ``Polish.ICM_MERGE``, on the
+        floor's uniforms from its own stream, timing each stage.
     polish : Polish | None
         The polisher run once the schedule ends (issue #1363). ``None``, the
         default, is the run before the parameter existed, bitwise.
-        :attr:`~sal.sample.schedule.Polish.ICM` descends from ``final`` in
-        index order until a full sweep changes no label, honouring forbidden
-        labels, and charges a heat-bath sweep's site visits
-        (:func:`step_visits`) per sweep, the clean one included, in
-        ``polish_spent``: the update reads and writes what a sweep at
-        ``T = 0`` does. Where the schedule's ``best`` scores
-        below ``final``'s fixed point it is descended too, also charged, and
-        the lower fixed point is ``best``; ``final`` is the one from
-        ``final``. ``termination`` is the descent's: converged at the fixed
-        point, :attr:`~sal.opt.termination.Stop.INFEASIBLE` where
+        :attr:`~sal.sample.schedule.Polish.ICM` descends from the
+        schedule's ``best`` alone (issue #1374) in index order until a full
+        sweep changes no label, honouring forbidden labels, and charges a
+        heat-bath sweep's site visits (:func:`step_visits`) per sweep, the
+        clean one included, in ``polish_spent``: the update reads and writes
+        what a sweep at ``T = 0`` does. ``best`` and ``energy`` are that
+        fixed point. :attr:`~sal.sample.schedule.Polish.ICM_MERGE` then runs
+        :func:`merge_labels` on it (issue #1373), charging a sweep's site
+        visits per round. ``stages`` holds ``init``, ``polish`` and
+        ``merge`` as run. ``termination`` is the last stage's: converged at
+        the fixed point, :attr:`~sal.opt.termination.Stop.INFEASIBLE` where
         ``min_sites`` meets a site that allows no surviving label.
     min_sites : int
         The floor the polish applies (:func:`~sal.search.icm.iterated_conditional_modes`),
@@ -1049,6 +1059,7 @@ def anneal_potts(
         graph, rows, graph.compressed_adjacency(), backend, cluster_backend
     )
     codes = loop_codes(move, loop_backend, backend, cluster_backend)
+    clock = time.perf_counter()
     if codes is not None:
         ran = run_loop(
             state,
@@ -1060,32 +1071,46 @@ def anneal_potts(
             budget=0 if budget is None else budget.size,
             n_main=schedule.n_steps,
             track_best=True,
-            polish=polish is Polish.ICM,
+            polish=polish is not None,
             min_sites=min_sites,
+            merge=polish is Polish.ICM_MERGE,
         )
         best = np.asarray(ran["best"])
         _record_ran(schedule, ran, best)
-        walked = Walked(
-            best=best,
-            energy=lattice.energy(best),
-            final=state,
-            energies=(),
-            spent=int(ran["spent_total"]),
-            termination=Termination.after(int(ran["n_main"]), converged=False),
-        )
-        if polish is Polish.ICM:
-            return _polished_rust(graph, rows, walked, ran, min_sites, tuned)
-        return AnnealedPotts(
-            best=best,
-            energy=walked.energy,
-            final=state,
-            n_sweeps=int(ran["n_main"]),
-            spent=walked.spent,
-            unit=Cost.SITE_VISITS,
-            termination=walked.termination,
-            trace=(),
-            tuned=tuned,
-        )
+        seconds = [float(each) for each in ran["stage_seconds"]]
+        stages = [
+            Stage(
+                name="init",
+                best=best,
+                energy=lattice.energy(best),
+                spent=int(ran["spent_total"]),
+                seconds=seconds[0],
+                termination=Termination.after(int(ran["n_main"]), converged=False),
+            )
+        ]
+        if polish is not None:
+            descended = icm_descended(
+                graph,
+                rows,
+                np.asarray(ran["best_polished"]),
+                int(ran["polish_sweeps"]),
+                int(rows.shape[1]),
+                min_sites,
+                graph.compressed_adjacency().offsets,
+            )
+            stages.append(_icm_stage(graph, descended, seconds[1]))
+        if polish is Polish.ICM_MERGE:
+            stages.append(
+                _merge_stage(
+                    graph,
+                    lattice,
+                    np.asarray(ran["merged"]),
+                    int(ran["merge_rounds"]),
+                    stages[-1].termination,
+                    seconds[2],
+                )
+            )
+        return _annealed(stages, int(ran["n_main"]), polish, (), tuned)
     origin = Moved(state, lattice.energy(state), None, 0)
     step = lattice.rung(move, trace)
     walked = (
@@ -1093,19 +1118,34 @@ def anneal_potts(
         if budget is None
         else anneal_spent(step, schedule, origin, rng, np.copy, budget=budget.size)
     )
-    if polish is Polish.ICM:
-        return _polished(graph, rows, walked, rng, min_sites, trace, tuned)
-    return AnnealedPotts(
-        best=walked.best,
-        energy=walked.energy,
-        final=walked.final,
-        n_sweeps=walked.termination.iterations,
-        spent=walked.spent,
-        unit=Cost.SITE_VISITS,
-        termination=walked.termination,
-        trace=tuple(trace),
-        tuned=tuned,
-    )
+    stages = [
+        Stage(
+            name="init",
+            best=walked.best,
+            energy=walked.energy,
+            spent=walked.spent,
+            seconds=time.perf_counter() - clock,
+            termination=walked.termination,
+        )
+    ]
+    if polish is not None:
+        clock = time.perf_counter()
+        polished = _descend(graph, rows, walked.best, rng, min_sites)
+        stages.append(_icm_stage(graph, polished, time.perf_counter() - clock))
+    if polish is Polish.ICM_MERGE:
+        clock = time.perf_counter()
+        merged, rounds = merge_labels(graph, rows, stages[-1].best)
+        stages.append(
+            _merge_stage(
+                graph,
+                lattice,
+                merged,
+                rounds,
+                stages[-1].termination,
+                time.perf_counter() - clock,
+            )
+        )
+    return _annealed(stages, walked.termination.iterations, polish, tuple(trace), tuned)
 
 
 def _descend(
@@ -1146,37 +1186,114 @@ def _descend(
             )
 
 
-def _polished(
-    graph: PottsGraph,
-    rows: np.ndarray,
-    walked: Walked[np.ndarray],
-    rng: Generator,
-    min_sites: int,
-    trace: list[ClusterCounter],
-    tuned: TunedSchedule | None,
-) -> AnnealedPotts:
-    """``walked`` with :attr:`Polish.ICM` run from its final state, and from its best where that scores lower (issue #1363)."""
-    final = _descend(graph, rows, walked.final, rng, min_sites)
-    polished, sweeps = final, final.sweeps
-    if walked.energy < final.energy:
-        best = _descend(graph, rows, walked.best, rng, min_sites)
-        sweeps += best.sweeps
-        if best.energy < final.energy:
-            polished = best
-    charged = sweeps * step_visits(PottsMove.SINGLE_SITE, graph)
-    return AnnealedPotts(
+def _icm_stage(
+    graph: PottsGraph, polished: Labelling, seconds: float
+) -> Stage[np.ndarray]:
+    """The ``polish`` stage: the ICM fixed point from the best, a heat-bath sweep's site visits per sweep (issues #1363, #1374)."""
+    return Stage(
+        name="polish",
         best=polished.labelling,
         energy=polished.energy,
-        final=final.labelling,
-        n_sweeps=walked.termination.iterations,
-        spent=walked.spent + charged,
-        unit=Cost.SITE_VISITS,
+        spent=polished.sweeps * step_visits(PottsMove.SINGLE_SITE, graph),
+        seconds=seconds,
         termination=polished.termination,
-        polish_spent=charged,
-        polished_by=Polish.ICM.value,
-        trace=tuple(trace),
-        tuned=tuned,
     )
+
+
+def _merge_stage(
+    graph: PottsGraph,
+    lattice: _Lattice,
+    merged: np.ndarray,
+    rounds: int,
+    polished: Termination,
+    seconds: float,
+) -> Stage[np.ndarray]:
+    """The ``merge`` stage (issue #1373): a heat-bath sweep's site visits per round, converged unless the polish was not."""
+    return Stage(
+        name="merge",
+        best=merged,
+        energy=lattice.energy(merged),
+        spent=rounds * step_visits(PottsMove.SINGLE_SITE, graph),
+        seconds=seconds,
+        termination=Termination.after(rounds, converged=True)
+        if polished.converged
+        else Termination(False, rounds, polished.reason),
+    )
+
+
+def _annealed(
+    stages: list[Stage[np.ndarray]],
+    n_sweeps: int,
+    polish: Polish | None,
+    trace: tuple[ClusterCounter, ...],
+    tuned: TunedSchedule | None,
+) -> AnnealedPotts:
+    """The result of ``stages``: the last stage's point, energy and termination, every stage's cost (issues #1373, #1374)."""
+    last = stages[-1]
+    polish_spent = sum(stage.spent for stage in stages[1:])
+    return AnnealedPotts(
+        best=last.best,
+        energy=last.energy,
+        n_sweeps=n_sweeps,
+        spent=stages[0].spent + polish_spent,
+        unit=Cost.SITE_VISITS,
+        termination=last.termination,
+        polish_spent=polish_spent,
+        polished_by=None if polish is None else polish.value,
+        trace=trace,
+        tuned=tuned,
+        stages=tuple(stages),
+    )
+
+
+def merge_labels(
+    graph: PottsGraph, rows: np.ndarray, labelling: np.ndarray
+) -> tuple[np.ndarray, int]:
+    """The greedy whole-label merge (issue #1373), the NumPy oracle of the Rust loop's: the merged labelling and the rounds run.
+
+    Each round relabels every site of a label ``u`` to another label ``v`` in
+    use, at the admissible pair whose energy change
+    ``delta(u, v) = -(U[u, v] - U[u, u]) - (B[u, v] + B[v, u]) / 2`` is most
+    negative; the last round finds no pair with ``delta < 0``. ``U[u, k]``
+    sums ``rows[:, k]`` over the sites of ``u`` in site order, ``B[a, b]``
+    the couplings over the adjacency entries from a site of ``a`` to a site
+    of ``b`` in entry order, the Rust loop's orders, so the two agree
+    bitwise. A pair is admissible only where ``v`` is allowed (a finite
+    field) at every site of ``u``; ties go to the lowest ``u``, then ``v``.
+    A round reads every site's row and every adjacency entry, O(N q + E).
+    """
+    offsets, neighbours, couplings = graph.compressed_adjacency()
+    owner = owner_rows(offsets)
+    n_states = int(rows.shape[1])
+    finite = (rows > -np.inf).astype(np.int64)
+    labels = np.array(labelling, dtype=np.int64)
+    rounds = 0
+    while True:
+        rounds += 1
+        field_sums = np.zeros((n_states, n_states))
+        bond_sums = np.zeros((n_states, n_states))
+        allowed = np.zeros((n_states, n_states), dtype=np.int64)
+        # `add.at` is unbuffered and in index order: the Rust loop's sums.
+        np.add.at(field_sums, labels, rows)
+        np.add.at(allowed, labels, finite)
+        np.add.at(bond_sums, (labels[owner], labels[neighbours]), couplings)
+        counts = np.bincount(labels, minlength=n_states)
+        chosen, lowest = None, 0.0
+        for u in range(n_states):
+            if counts[u] == 0:
+                continue
+            for v in range(n_states):
+                if v == u or counts[v] == 0 or allowed[u, v] != counts[u]:
+                    continue
+                delta = (
+                    -(field_sums[u, v] - field_sums[u, u])
+                    - (bond_sums[u, v] + bond_sums[v, u]) / 2.0
+                )
+                if delta < lowest:
+                    chosen, lowest = (u, v), float(delta)
+        if chosen is None:
+            return labels, rounds
+        labels[labels == chosen[0]] = chosen[1]
 
 
 def _record_ran(schedule: TempSchedule, ran: dict[str, Any], best: np.ndarray) -> None:
@@ -1198,57 +1315,6 @@ def _record_ran(schedule: TempSchedule, ran: dict[str, Any], best: np.ndarray) -
             energy=float(energy_),
         )
     tracked.record_cost(max(last, 0), int(best.nbytes))
-
-
-def _polished_rust(
-    graph: PottsGraph,
-    rows: np.ndarray,
-    walked: Walked[np.ndarray],
-    ran: dict[str, Any],
-    min_sites: int,
-    tuned: TunedSchedule | None,
-) -> AnnealedPotts:
-    """:func:`_polished` on the descents the Rust loop ran in its call (issue #1368).
-
-    The loop descends ``final`` and ``best`` both; the best's sweeps are
-    charged, and its fixed point taken, exactly where :func:`_polished`
-    descends it, on the same energies and the same termination
-    (:func:`~sal.search.icm.descended`).
-    """
-    offsets = graph.compressed_adjacency().offsets
-    n_states = int(rows.shape[1])
-    final_sweeps, best_sweeps = (int(each) for each in ran["polish_sweeps"])
-    final = icm_descended(
-        graph, rows, walked.final, final_sweeps, n_states, min_sites, offsets
-    )
-    polished, sweeps = final, final.sweeps
-    if walked.energy < final.energy:
-        best = icm_descended(
-            graph,
-            rows,
-            np.asarray(ran["best_polished"]),
-            best_sweeps,
-            n_states,
-            min_sites,
-            offsets,
-        )
-        sweeps += best.sweeps
-        if best.energy < final.energy:
-            polished = best
-    charged = sweeps * step_visits(PottsMove.SINGLE_SITE, graph)
-    return AnnealedPotts(
-        best=polished.labelling,
-        energy=polished.energy,
-        final=final.labelling,
-        n_sweeps=walked.termination.iterations,
-        spent=walked.spent + charged,
-        unit=Cost.SITE_VISITS,
-        termination=polished.termination,
-        polish_spent=charged,
-        polished_by=Polish.ICM.value,
-        trace=(),
-        tuned=tuned,
-    )
 
 
 def _rung_starts(

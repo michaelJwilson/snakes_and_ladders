@@ -89,6 +89,7 @@ __all__ = [
     "Ramp",
     "ScheduleParams",
     "ScheduleShape",
+    "Stage",
     "TempSchedule",
     "Tempered",
     "adapt_ladder",
@@ -1185,7 +1186,7 @@ def _place(ladder: tuple[float, ...], fraction: Sequence[float]) -> tuple[float,
 
 @dataclass(frozen=True, kw_only=True)
 class Annealed[T]:
-    """What an annealing run found, where it ended, and what it cost (issue #1090).
+    """What an annealing run found and what it cost (issue #1090).
 
     Five annealers returned five shapes: the best point was ``labelling``,
     ``state``, ``theta`` or ``topology``, the cost ``site_visits``,
@@ -1201,9 +1202,6 @@ class Annealed[T]:
     best : T
         The best point visited. The *best* rather than the last: the final
         steps run cold but not at zero, so the chain can leave it.
-    final : T
-        Where the chain ended, so a caller can see whether the best was the
-        end or a point passed through.
     spent : int
         What the run cost, in ``unit``.
     unit : Cost
@@ -1222,7 +1220,6 @@ class Annealed[T]:
     """
 
     best: T
-    final: T
     spent: int
     unit: Cost
     termination: Termination
@@ -1230,8 +1227,43 @@ class Annealed[T]:
     polished_by: str | None = None
 
 
+@dataclass(frozen=True, kw_only=True)
+class Stage[T]:
+    """One stage of a polished anneal: what it left, at what cost (issues #1373, #1374).
+
+    A polished anneal runs ``init`` (the schedule, to its ``best``),
+    ``polish`` (the polisher from that best) and, under
+    :attr:`Polish.ICM_MERGE`, ``merge``; its result's ``stages`` holds one
+    per stage run, in order, and its top-level fields are the last stage's.
+
+    Parameters
+    ----------
+    name : str
+        ``"init"``, ``"polish"`` or ``"merge"``.
+    best : T
+        The point the stage left: the schedule's best, the polisher's fixed
+        point, the merged labelling.
+    energy : float
+        ``best``'s minimized value, the result's ``energy`` or ``value``.
+    spent : int
+        The stage's own cost, in the result's ``unit`` for ``init`` and in
+        its ``polish_spent``'s for the rest; the stages sum to ``spent``.
+    seconds : float
+        The stage's own wall time.
+    termination : Termination
+        Why the stage stopped.
+    """
+
+    name: str
+    best: T
+    energy: float
+    spent: int
+    seconds: float
+    termination: Termination
+
+
 class Polish(StrEnum):
-    """The polisher an annealer runs from its final state to the polisher's own convergence (issue #1363).
+    """The polisher an annealer runs from its best state to the polisher's own convergence (issues #1363, #1374).
 
     The schedule runs its full defined length, steps or a budget, with no
     window and no extra hold; the polish then runs until its own criterion
@@ -1240,6 +1272,9 @@ class Polish(StrEnum):
 
     ICM = "icm"
     """:func:`~sal.search.icm.iterated_conditional_modes` in index order until a full sweep changes no label: a fixed point, each change strictly lowering the energy on a finite space."""
+
+    ICM_MERGE = "icm_merge"
+    """:attr:`ICM`, then the greedy whole-label merge (issue #1373) until no merge lowers the energy: a move ICM cannot make, since removing a label raises the energy at each of its sites before it lowers it."""
 
 
 @dataclass(frozen=True, kw_only=True)

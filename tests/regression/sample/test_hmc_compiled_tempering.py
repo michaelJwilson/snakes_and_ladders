@@ -147,7 +147,9 @@ def test_a_constant_schedule_is_the_compiled_chain_draw_for_draw(
         n_steps=10,
     )
     assert len(walks) == 2
-    assert torch.equal(annealed.final, chain.draws[-1])
+    # The best visited is no worse than any draw the chain made (#1374
+    # removed `final`, which this compared with the last draw).
+    assert annealed.value <= min(float(objective(draw)) for draw in chain.draws)
     assert annealed.acceptance_rate == chain.acceptance_rate
     assert annealed.acceptance_rate > 0.0
     assert annealed.spent == chain.spent == 1 + 200 * 10

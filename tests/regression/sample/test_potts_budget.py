@@ -136,11 +136,10 @@ def test_a_fixed_cost_anneal_under_its_budget_is_the_step_run_bitwise(
     assert spent.n_sweeps == stepped.n_sweeps == N_STEPS
     assert spent.energy == stepped.energy
     np.testing.assert_array_equal(spent.best, stepped.best)
-    np.testing.assert_array_equal(spent.final, stepped.final)
 
 
 #: Main's step-count Wolff run (57a52f90), uniform recolouring alone and the
-#: default composition with a Gibbs sweep: ``(energy, spent, final[:8])``.
+#: default composition with a Gibbs sweep: ``(energy, spent, best[:8])``.
 WOLFF_PINS = {
     "uniform": (-280.0, 32430, (1, 1, 1, 1, 1, 1, 1, 1)),
     "default": (-272.0, 31320, (2, 2, 2, 2, 2, 2, 2, 2)),
@@ -165,7 +164,7 @@ def test_the_step_count_wolff_anneal_is_mains_bitwise(name: str) -> None:
         cluster_backend=Backend.PYTHON,
     )
     energy, spent, head = WOLFF_PINS[name]
-    assert (run.energy, run.spent, tuple(int(v) for v in run.final[:8])) == (
+    assert (run.energy, run.spent, tuple(int(v) for v in run.best[:8])) == (
         energy,
         spent,
         head,

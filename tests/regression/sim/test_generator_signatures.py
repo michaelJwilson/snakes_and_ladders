@@ -85,7 +85,7 @@ def _anneal_draw(generator: torch.Generator) -> tuple[float, ...]:
     annealed = anneal(
         GAUSSIAN, ConstantTempSchedule(1.0, 4), generator, step_size=0.2, n_steps=5
     )
-    return tuple(float(v) for v in annealed.final)
+    return tuple(float(v) for v in annealed.best)
 
 
 def _max_cut_draw(generator: torch.Generator) -> tuple[float, ...]:
