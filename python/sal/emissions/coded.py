@@ -35,6 +35,7 @@ route, bitwise.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import torch
@@ -53,6 +54,7 @@ __all__ = [
     "encode",
     "log_emission",
     "log_emission_partials",
+    "log_emission_partials_sum",
     "log_emission_sum",
 ]
 
@@ -571,19 +573,19 @@ def _bb_partials(
     }
 
 
-def log_emission_partials(
+def _partials_numpy(
     family: Family,
     coded: Coded,
     *,
     shift: NDArray[np.float64] | None = None,
 ) -> dict[str, NDArray[np.float64]]:
-    """Each parameter's partial of every observation's log-density, ``{parameter: (K, n)}``.
+    """:func:`log_emission_partials` in NumPy, the oracle the Rust route is pinned to (#1353).
 
     The negative binomial gives ``dispersion`` and ``mean``; the
     beta-binomial ``alpha`` and ``beta``, or ``rate`` and ``concentration``
     for :class:`~sal.emissions.RateConcentrationBetaBinomialEmission`; the
     independent pair both channels'. Through
-    :func:`~sal.emissions.rising.digamma_rising`, in NumPy: an unobserved
+    :func:`~sal.emissions.rising.digamma_rising`: an unobserved
     observation, or successes past their trials, have 0. ``r = inf`` and
     ``tau = inf`` take their limits' partials, and the parameter that is
     infinite has 0. Under a ``shift`` the negative binomial adds ``shift``,
@@ -611,4 +613,143 @@ def log_emission_partials(
             coded.inverse,
             None if cov is None else cov[:, 1],
         ),
+    }
+
+
+def _partial_arguments(
+    family: object, coded: Coded, shift: NDArray[np.float64] | None
+) -> tuple[dict[str, Any], list[str]]:
+    """``coded_log_emission_partials``'s inputs and the parameter names written, in order."""
+    cov = coded.covariate
+    n, pair = coded.inverse.size, coded.counts.ndim == 2
+    if isinstance(family, NegativeBinomialEmission | BetaBinomialEmission) and pair:
+        msg = "a single-channel family scores (n,) counts, got a pair's (U, 2)"
+        raise ValueError(msg)
+    nb: NegativeBinomialEmission | None = None
+    bb: BetaBinomialEmission | None = None
+    nb_counts: NDArray[np.uint32] | None = None
+    bb_counts: NDArray[np.uint32] | None = None
+    nb_cov: NDArray[np.float64] | None = None
+    bb_cov: NDArray[np.float64] | None = None
+    if isinstance(family, NegativeBinomialEmission):
+        nb, nb_counts, nb_cov = family, coded.counts, cov
+    elif isinstance(family, BetaBinomialEmission):
+        bb, bb_counts, bb_cov = family, coded.counts, cov
+    else:
+        nb, bb = _pair_channels(family)
+        if not pair:
+            msg = f"a pair's counts are (U, 2), got {coded.counts.shape}"
+            raise ValueError(msg)
+        nb_counts, bb_counts = coded.counts[:, 0], coded.counts[:, 1]
+        nb_cov = None if cov is None else cov[:, 0]
+        bb_cov = None if cov is None else cov[:, 1]
+    arguments: dict[str, Any] = {}
+    names: list[str] = []
+    k = family.n_states  # type: ignore[attr-defined]
+    if nb is not None and nb_counts is not None:
+        factor = _shift_factor(coded, shift)
+        totals, rows = _channel(nb_counts, coded.inverse)
+        arguments |= {
+            "total_rows": rows,
+            "totals": totals,
+            "exposure": None if nb_cov is None else np.ascontiguousarray(nb_cov),
+            "factor": factor,
+            "dispersion": np.ascontiguousarray(nb.dispersion.detach().numpy()),
+            "mean": np.ascontiguousarray(nb.mean.detach().numpy()),
+            "out_dispersion": np.empty(k * n),
+            "out_mean": np.empty(k * n),
+        }
+        names += ["dispersion", "mean"]
+        if factor is not None:
+            arguments["out_shift"] = np.empty(k * n)
+            names.append("shift")
+    if bb is not None and bb_counts is not None:
+        successes, rows = _channel(bb_counts, coded.inverse)
+        rate = getattr(bb, "rate", None)
+        per_state = bb.trials.detach().numpy()
+        arguments |= {
+            "success_rows": rows,
+            "successes": successes,
+            "trials": checked_counts(
+                per_state if bb_cov is None else bb_cov, "trial count"
+            ),
+            "per_observation": bb_cov is not None,
+            "alpha": np.ascontiguousarray(bb.alpha.detach().numpy()),
+            "beta": np.ascontiguousarray(bb.beta.detach().numpy()),
+            "rate": None
+            if rate is None
+            else np.ascontiguousarray(rate.detach().numpy()),
+            "out_first": np.empty(k * n),
+            "out_second": np.empty(k * n),
+        }
+        names += ["alpha", "beta"] if rate is None else ["rate", "concentration"]
+    return arguments, names
+
+
+_OUTPUTS = {
+    "dispersion": "out_dispersion",
+    "mean": "out_mean",
+    "shift": "out_shift",
+    "alpha": "out_first",
+    "beta": "out_second",
+    "rate": "out_first",
+    "concentration": "out_second",
+}
+
+
+def log_emission_partials(
+    family: Family,
+    coded: Coded,
+    *,
+    shift: NDArray[np.float64] | None = None,
+) -> dict[str, NDArray[np.float64]]:
+    """Each parameter's partial of every observation's log-density, ``{parameter: (K, n)}``.
+
+    The negative binomial gives ``dispersion`` and ``mean``, and ``shift``
+    under a shift; the beta-binomial ``alpha`` and ``beta``, or ``rate`` and
+    ``concentration`` for
+    :class:`~sal.emissions.RateConcentrationBetaBinomialEmission`; the
+    independent pair both channels'. In Rust
+    (``oxisal.coded_log_emission_partials``, issue #1353): one FFI crossing,
+    the GIL released, ``digamma(x + m) - digamma(x)`` as the compensated
+    sum of ``1 / (x + j)`` once per state and distinct count, each partial
+    completed per observation in :func:`_partials_numpy`'s order. That NumPy
+    route is the oracle; the limits and zeros are its.
+    """
+    arguments, names = _partial_arguments(family, coded, shift)
+    oxisal.coded_log_emission_partials(**arguments)
+    n = coded.inverse.size
+    return {name: arguments[_OUTPUTS[name]].reshape(-1, n) for name in names}
+
+
+def log_emission_partials_sum(
+    family: Family,
+    coded: Coded,
+    weights: NDArray[np.float64] | None = None,
+    *,
+    shift: NDArray[np.float64] | None = None,
+) -> dict[str, NDArray[np.float64]]:
+    """``sum_i w[k, i] d log f_k(x_i) / d theta_k``, ``{parameter: (K,)}``.
+
+    :func:`log_emission_partials` reduced per state by
+    ``coded_weighted_sum`` over the observed observations, sequentially in
+    ``i``, as :func:`log_emission_sum` reduces with a covariate; ``weights``
+    is ``(n,)``, ``(K, n)`` or ``None`` (each 1). An unobserved observation
+    contributes nothing. The ``shift`` entry is per state; a per-label
+    gradient sums the per-observation ``shift`` partial by label.
+    """
+    k = family.n_states
+    partials = log_emission_partials(family, coded, shift=shift)
+    inverse = coded.inverse
+    index = np.where(
+        inverse >= 0, np.arange(inverse.size, dtype=np.int32), np.int32(-1)
+    ).astype(np.int32)
+    w = (
+        None
+        if weights is None
+        else np.ascontiguousarray(weights, dtype=np.float64).reshape(-1)
+    )
+    return {
+        name: oxisal.coded_weighted_sum(k, value.reshape(-1), index, w)
+        for name, value in partials.items()
     }

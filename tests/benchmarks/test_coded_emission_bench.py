@@ -6,7 +6,8 @@ read at. ``log_emission`` is timed on a :class:`~sal.emissions.coded.Dense`
 and on its :class:`~sal.emissions.coded.Coded` form (encoded once, outside
 the timer, as a fit encodes once); ``log_emission_sum`` with ``(K, n)``
 weights against ``(w * log_emission(Dense)).sum(axis=1)``, the NumPy route
-from the same observations. ``tests/regression/test_emissions_coded.py``
+from the same observations; ``log_emission_partials`` in Rust against
+its NumPy oracle ``_partials_numpy`` (#1353). ``tests/regression/test_emissions_coded.py``
 pins each pair.
 """
 
@@ -18,9 +19,11 @@ from sal.emissions import NegativeBinomialEmission
 from sal.emissions.coded import (
     Coded,
     Dense,
+    _partials_numpy,
     encode,
     log_emission,
     log_emission_partials,
+    log_emission_partials_sum,
     log_emission_sum,
 )
 
@@ -88,7 +91,23 @@ def test_coded_bench_sum(benchmark: object, instance: Instance) -> None:
 
 @pytest.mark.release
 @pytest.mark.benchmark
+def test_coded_bench_partials_numpy(benchmark: object, instance: Instance) -> None:
+    """The oracle: ``_partials_numpy`` over ``digamma_rising``, the reference the port is read against."""
+    family, _, coded, _ = instance
+    benchmark(_partials_numpy, family, coded)  # type: ignore[operator]
+
+
+@pytest.mark.release
+@pytest.mark.benchmark
 def test_coded_bench_partials(benchmark: object, instance: Instance) -> None:
-    """``log_emission_partials`` in NumPy over ``digamma_rising``: no Rust port measured against."""
+    """``log_emission_partials`` in Rust (#1353): one crossing, the GIL released."""
     family, _, coded, _ = instance
     benchmark(log_emission_partials, family, coded)  # type: ignore[operator]
+
+
+@pytest.mark.release
+@pytest.mark.benchmark
+def test_coded_bench_partials_sum(benchmark: object, instance: Instance) -> None:
+    """``log_emission_partials_sum`` with ``(K, n)`` weights: the partials and the per-state sum."""
+    family, _, coded, weights = instance
+    benchmark(log_emission_partials_sum, family, coded, weights)  # type: ignore[operator]
