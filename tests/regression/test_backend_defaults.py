@@ -77,6 +77,9 @@ FLIPPED = {
     "sample/potts_mcmc/sweeps.py::wolff_heat_bath_sweep(backend)": (
         "25.1x per site visit, 256^2 q=3 near beta_c (#1362)"
     ),
+    "sample/potts_mcmc/sweeps.py::swendsen_wang_heat_bath_sweep(backend)": (
+        "2.3x per pass, 256^2 periodic q=3 at beta_c, against the NumPy pass (#1364)"
+    ),
     "sample/potts_mcmc/chains.py::sample_potts(cluster_backend)": "35.6x, 64^2 q=3",
     "sample/potts_mcmc/chains.py::anneal_potts(cluster_backend)": "49.1x, 64^2 q=3",
     "sample/potts_mcmc/chains.py::sample_potts_pair(cluster_backend)": "19.8x",

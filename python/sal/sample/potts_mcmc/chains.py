@@ -311,8 +311,9 @@ def sample_potts(
         :data:`~sal.backend.Backend.RUST` the default
         (:func:`sweep_at`, issue #599).
     cluster_backend : Backend
-        Which implementation runs the **Swendsen-Wang** pass and the two
-        **Wolff** steps (#1362); Niedermayer has one and ignores it. A
+        Which implementation runs the **Swendsen-Wang** pass, its heat-bath
+        relabelling (#1364) and the two **Wolff** steps (#1362); Niedermayer
+        has one and ignores it. A
         separate argument rather than the one above because the two are not the same decision: the Rust pass draws
         the same uniforms in a different order and so returns a chain of the
         same law rather than the same chain (:func:`_cluster_pass_rust`,

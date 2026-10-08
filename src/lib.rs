@@ -72,7 +72,9 @@ pub use maxflow::{ising_ground_state, ising_ground_states, max_flow};
 pub use maxflow_declined::{ising_ground_state_declined, max_flow_declined};
 pub use message_passing::tree_message_passing;
 pub use mixture_stream::{gaussian_mixture_em_step, gaussian_mixture_gradient};
-pub use potts::{bond_roots, single_site_sweeps, swendsen_wang_sweep};
+pub use potts::{
+    bond_roots, single_site_sweeps, swendsen_wang_heat_bath_sweeps, swendsen_wang_sweep,
+};
 pub use pruning::pruning_log_likelihood;
 #[cfg(feature = "sandbox")]
 pub use pruning_burn::pruning_gradient;
@@ -117,6 +119,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(single_site_sweeps, m)?)?;
     m.add_function(wrap_pyfunction!(swendsen_wang_sweep, m)?)?;
     m.add_function(wrap_pyfunction!(wolff_sweeps, m)?)?;
+    m.add_function(wrap_pyfunction!(swendsen_wang_heat_bath_sweeps, m)?)?;
     m.add_function(wrap_pyfunction!(class_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(external_field, m)?)?;
     m.add_function(wrap_pyfunction!(count_mixture_value_and_gradient, m)?)?;
