@@ -36,8 +36,10 @@ tables of :mod:`sal.emissions.nb` and :mod:`sal.emissions.bb` included.
 
 **On NumPy arrays (issue #1300),** for a caller that takes no derivative:
 :func:`log_rising` and its derivative in ``x``, :func:`digamma_rising`.
-Neither subtracts two ``lgamma``, two ``digamma`` or two of Stirling's
-tails: each power's difference is formed small by ``expm1``, and below
+:func:`log_rising` takes the plain ``lgamma`` difference wherever its own
+error bound meets the promise (issue #1329). Otherwise neither subtracts
+two ``lgamma``, two ``digamma`` or two of Stirling's tails: each power's
+difference is a positive sum times ``1 / (x + m) - 1 / x``, and below
 :data:`_SERIES_FROM` the recurrence shifts ``x`` up to the series. Measured
 against ``mpmath`` at 50 digits, ``x`` from 1e-3 to 1e16 and ``m`` from 0 to
 1e6, the error over ``max(|f|, 1)`` is 6.4e-15 for :func:`log_rising`
@@ -45,18 +47,23 @@ against 5.6e-14 for :func:`scaled_rising`'s plain route below
 :data:`LARGE_SHAPE` (1.1e-8 relative at ``x = 99.9``, ``m = 1e-6``), and
 :func:`digamma_rising` is within 4.0e-16 relative. The torch route keeps
 its own arithmetic, so no caller moves; at and above :data:`LARGE_SHAPE`
-the two agree to 7.6e-20 on the same scale.
+the two agree to 5.9e-16 on the same scale.
 """
 
 from __future__ import annotations
 
+import ctypes
+import functools
+import math
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 
 import numpy as np
+import scipy.special.cython_special
 import torch
 from numpy.typing import ArrayLike, NDArray
+from scipy.special import gammaln
 
 #: The shape at and above which the differenced series replaces ``lgamma``.
 #: Below it the plain difference is within 6e-14 of ``mpmath``; the series
@@ -184,44 +191,65 @@ def _h_array(t: NDArray[np.float64]) -> NDArray[np.float64]:
     return np.where(small, series, direct)
 
 
-def _powers_array(
-    first: NDArray[np.float64], ratio: NDArray[np.float64]
-) -> list[NDArray[np.float64]]:
-    """``first * ratio^(k - 1)`` for ``k = 1..8``, the powers both series weight."""
-    powers = [first]
-    for _ in range(len(_LGAMMA_SERIES) - 1):
-        powers.append(powers[-1] * ratio)
-    return powers
+#: The relative size below which a series term is dropped: a thousandth of
+#: :func:`digamma_rising`'s 1e-15 promise.
+_TERM_FLOOR = 1e-18
+
+
+def _terms(inverse: NDArray[np.float64]) -> int:
+    """How many of the eight series terms the largest ``1 / x`` in ``inverse`` needs.
+
+    Term ``k`` of either difference is at most ``|c_k| 2k m x^(-2k)`` over an
+    answer of at least ``m / x``, so it is dropped once
+    ``|c_k| 2k x^(1 - 2k)`` is below :data:`_TERM_FLOOR` at the smallest
+    ``x``, with every later term smaller still from ``x = 10`` up: four terms
+    from ``x = 100`` (issue #1329).
+    """
+    if inverse.size == 0:
+        return 1
+    largest = float(inverse.max())
+    for k, coefficient in enumerate(_DIGAMMA_SERIES, start=1):
+        if abs(coefficient) * 2.0 * k * largest ** (2 * k - 1) < _TERM_FLOOR:
+            return k
+    return len(_DIGAMMA_SERIES)
+
+
+def _log_tail(
+    inverse: NDArray[np.float64], gap: NDArray[np.float64]
+) -> NDArray[np.float64]:
+    """``S(x + m) - S(x) = sum_k c_k (u^(2k - 1) - v^(2k - 1))``, without subtracting.
+
+    ``inverse`` is ``v = 1 / x``, ``gap`` is ``u - v = -m / (x (x + m))``
+    and ``u = 1 / (x + m)``. Each difference is ``(u - v) P_j`` with
+    ``P_j = sum_i u^i v^(j - 1 - i)``, a sum of positive terms, and
+    ``P_(j + 2) = u^2 P_j + v^j (u + v)``: at ``x = 1.4616``, ``m = 1e-6``,
+    shifted to 11.46, the subtraction would leave 1e-18 nats of an answer of
+    3e-11, a relative 3.5e-8. The recurrence runs in place, with no list of
+    powers (issue #1329).
+    """
+    upper = inverse + gap
+    upper_square = upper * upper
+    inverse_square = inverse * inverse
+    both = upper + inverse
+    power = inverse.copy()
+    p = np.ones_like(inverse)
+    total = _LGAMMA_SERIES[0] * p
+    for coefficient in _LGAMMA_SERIES[1 : _terms(inverse)]:
+        p *= upper_square
+        p += power * both
+        total += coefficient * p
+        power *= inverse_square
+    total *= gap
+    return total
 
 
 def _log_rising_scaled_array(
     x: NDArray[np.float64], m: NDArray[np.float64]
 ) -> NDArray[np.float64]:
-    """:func:`log_rising_scaled` on arrays, with Stirling's tail differenced term by term.
-
-    ``S(x + m) - S(x)`` is ``sum_k c_k x^(1 - 2k) expm1((1 - 2k) log1p(m / x))``
-    rather than two sums subtracted: at ``x = 1.4616``, ``m = 1e-6``, shifted
-    to 11.46, the subtraction leaves 1e-18 nats of an answer of 3e-11, a
-    relative 3.5e-8.
-    """
+    """:func:`log_rising_scaled` on arrays, with Stirling's tail differenced term by term."""
     t = m / x
     step = np.log1p(t)
-    inverse = 1.0 / x
-    tail = np.zeros_like(x)
-    for k, (coefficient, power) in reversed(
-        list(
-            enumerate(
-                zip(
-                    _LGAMMA_SERIES,
-                    _powers_array(inverse, inverse * inverse),
-                    strict=True,
-                ),
-                start=1,
-            )
-        )
-    ):
-        tail = tail + coefficient * power * np.expm1((1.0 - 2.0 * k) * step)
-    return m * _h_array(t) + (m - 0.5) * step + tail
+    return m * _h_array(t) + (m - 0.5) * step + _log_tail(1.0 / x, -t / (x + m))
 
 
 def _digamma_rising_series(
@@ -229,19 +257,29 @@ def _digamma_rising_series(
 ) -> NDArray[np.float64]:
     """``digamma(x + m) - digamma(x)`` for ``x >= 10``, by the differenced series.
 
-    Each power's difference ``(x + m)^(-j) - x^(-j)`` is
-    ``x^(-j) expm1(-j log1p(m / x))``, formed small, so every term is of the
-    size of the answer.
+    With ``U = (x + m)^-2`` and ``V = x^-2``, each power's difference
+    ``U^k - V^k`` is ``(U - V) Q_k``, ``Q_(k + 1) = U Q_k + V^k`` a sum of
+    positive terms and ``U - V = (u - v)(u + v)`` formed from
+    ``u - v = -m / (x (x + m))``, so every term is of the size of the answer
+    (issue #1329).
     """
-    step = np.log1p(m / x)
-    inverse_square = 1.0 / (x * x)
-    powers = _powers_array(inverse_square, inverse_square)
-    total = np.zeros_like(x)
-    for k, (coefficient, power) in reversed(
-        list(enumerate(zip(_DIGAMMA_SERIES, powers, strict=True), start=1))
-    ):
-        total = total - coefficient * power * np.expm1(-2.0 * k * step)
-    return step - np.expm1(-step) / (2.0 * x) + total
+    t = m / x
+    step = np.log1p(t)
+    inverse = 1.0 / x
+    gap = -t / (x + m)
+    upper = inverse + gap
+    upper_square = upper * upper
+    inverse_square = inverse * inverse
+    power = inverse_square.copy()
+    q = np.ones_like(x)
+    total = _DIGAMMA_SERIES[0] * q
+    for coefficient in _DIGAMMA_SERIES[1 : _terms(inverse)]:
+        q *= upper_square
+        q += power
+        total += coefficient * q
+        power *= inverse_square
+    total *= gap * (upper + inverse)
+    return step - np.expm1(-step) / (2.0 * x) - total
 
 
 def _shifted(
@@ -261,8 +299,12 @@ def _shifted(
     )
     out = np.empty(x_.shape, dtype=np.float64)
     below = x_ < _SERIES_FROM
-    above = ~below
-    out[above] = series(x_[above], m_[above])
+    # From LARGE_SHAPE up the series needs four terms of eight: split there.
+    large = x_ >= LARGE_SHAPE
+    out[large] = series(x_[large], m_[large])
+    middle = ~(below | large)
+    if middle.any():
+        out[middle] = series(x_[middle], m_[middle])
     if below.any():
         y, n = x_[below], m_[below]
         recurrence = np.zeros_like(y)
@@ -283,20 +325,48 @@ def _log_rising_series(
     return _log_rising_scaled_array(x, m) + m * np.log(x)
 
 
-def log_rising(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
+#: :func:`log_rising`'s promise: its error over ``max(|f|, 1)``.
+_LOG_PROMISE = 1e-14
+
+#: The error of ``scipy.special.gammaln(y)`` taken as ``4 eps max(|lgamma y|, 1)``,
+#: the difference's included: against ``mpmath`` at 40 digits over 6,000 draws,
+#: ``x`` log-uniform from 1e-3 to 1e4 and ``m`` from 1e-6 to 1e6, the worst
+#: is 2.19 eps over the sum of the two ``max(|lgamma|, 1)``.
+_PLAIN_ERROR = 4.0 * float(np.finfo(np.float64).eps)
+
+
+def _log_rising_numpy(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
     """``lgamma(x + m) - lgamma(x)``, the log rising factorial, on NumPy arrays; broadcasts.
 
-    For ``x > 0`` and ``m >= 0``; ``0`` at ``m = 0``. From
-    :data:`_SERIES_FROM` up it is the differenced series plus ``m log x``;
-    below, the recurrence ``f(x, m) = f(x + 1, m) - log1p(m / x)`` shifts
-    ``x`` up to it. Within 1e-14 of ``mpmath`` over ``max(|f|, 1)``: near a
+    For ``x > 0`` and ``m >= 0``; ``0`` at ``m = 0``. Where the plain
+    ``gammaln(x + m) - gammaln(x)`` is within the promise by its own error
+    bound, ``_PLAIN_ERROR (max(|lgamma(x + m)|, 1) + max(|lgamma x|, 1))
+    <= 1e-14 max(|f|, 1)``, evaluated per entry, it is that: small ``x``, or
+    ``m`` not small against ``x``. Elsewhere, from :data:`_SERIES_FROM` up,
+    it is the differenced series plus ``m log x``; below, the recurrence
+    ``f(x, m) = f(x + 1, m) - log1p(m / x)`` shifts ``x`` up to it
+    (issue #1329). Within 1e-14 of ``mpmath`` over ``max(|f|, 1)``: near a
     zero of ``(x)_m`` --- ``x = 1``, ``m = 1`` --- the terms are of size one
     and a relative bound is not attainable.
     """
-    return _shifted(x, m, _log_rising_series, lambda y, n: -np.log1p(n / y))
+    x_, m_ = np.broadcast_arrays(
+        np.asarray(x, dtype=np.float64), np.asarray(m, dtype=np.float64)
+    )
+    rise, shape = gammaln(x_ + m_), gammaln(x_)
+    out: NDArray[np.float64] = rise - shape
+    error = np.maximum(np.abs(rise), 1.0)
+    error += np.maximum(np.abs(shape), 1.0)
+    error *= _PLAIN_ERROR / _LOG_PROMISE
+    rest = error > np.maximum(np.abs(out), 1.0)
+    rest &= m_ != 0.0
+    if rest.any():
+        out[rest] = _shifted(
+            x_[rest], m_[rest], _log_rising_series, lambda y, n: -np.log1p(n / y)
+        )
+    return out
 
 
-def digamma_rising(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
+def _digamma_rising_numpy(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
     """``digamma(x + m) - digamma(x)``, the derivative of :func:`log_rising` in ``x``; broadcasts.
 
     For ``x > 0`` and ``m >= 0``. Neither ``digamma`` is formed: from
@@ -308,6 +378,197 @@ def digamma_rising(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
     ``x = 99``, ``m = 1e-6``.
     """
     return _shifted(x, m, _digamma_rising_series, lambda y, n: n / (y * (y + n)))
+
+
+#: ``scipy.special.gammaln``'s own Cephes routine, bound on first use by
+#: :func:`_kernels`: the compiled plain route is the NumPy oracle's ``gammaln``
+#: bit for bit, where ``math.lgamma`` (``libm``) differs in the last places
+#: and took 2.55 ms against 1.82 ms at 25 x 2,829 pairs.
+_gammaln: Callable[[float], float] = math.lgamma
+
+
+def _cython_function(name: str) -> Callable[[float], float]:
+    """A ``double -> double`` function of :mod:`scipy.special.cython_special`, callable from ``njit``."""
+    capsule = scipy.special.cython_special.__pyx_capi__[name]
+    get_name = ctypes.pythonapi.PyCapsule_GetName
+    get_name.restype = ctypes.c_char_p
+    get_name.argtypes = [ctypes.py_object]
+    get_pointer = ctypes.pythonapi.PyCapsule_GetPointer
+    get_pointer.restype = ctypes.c_void_p
+    get_pointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
+    address = get_pointer(capsule, get_name(capsule))
+    return ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double)(address)
+
+
+def _log_rising_kernel(
+    x: NDArray[np.float64],
+    m: NDArray[np.float64],
+    out: NDArray[np.float64],
+    series_from: float,
+    small_t: float,
+    plain_error: float,
+    promise: float,
+    floor: float,
+) -> None:
+    """``out[i] = lgamma(x[i] + m[i]) - lgamma(x[i])`` over flat, contiguous arrays."""
+    for i in range(x.size):
+        xi = x[i]
+        mi = m[i]
+        if mi == 0.0:
+            out[i] = 0.0
+            continue
+        rise = _gammaln(xi + mi)
+        base = _gammaln(xi)
+        plain = rise - base
+        bound = plain_error * (max(abs(rise), 1.0) + max(abs(base), 1.0))
+        if bound <= promise * max(abs(plain), 1.0):
+            out[i] = plain
+            continue
+        y = xi
+        recurrence = 0.0
+        while y < series_from:
+            recurrence += -math.log1p(mi / y)
+            y += 1.0
+        t = mi / y
+        step = math.log1p(t)
+        if abs(t) < small_t:
+            h = t * (-0.5 + t * (1.0 / 3.0 + t * (-0.25 + t * 0.2)))
+        else:
+            h = (math.log1p(t) - t) / t
+        inverse = 1.0 / y
+        gap = -t / (y + mi)
+        upper = inverse + gap
+        upper_square = upper * upper
+        inverse_square = inverse * inverse
+        both = upper + inverse
+        power = inverse
+        p = 1.0
+        total = _LGAMMA_SERIES[0] * p
+        terms = 1
+        while (
+            terms < 8
+            and abs(_DIGAMMA_SERIES[terms - 1])
+            * 2.0
+            * terms
+            * inverse ** (2 * terms - 1)
+            >= floor
+        ):
+            terms += 1
+        for k in range(1, terms):
+            p = p * upper_square + power * both
+            total += _LGAMMA_SERIES[k] * p
+            power *= inverse_square
+        scaled = mi * h + (mi - 0.5) * step + total * gap
+        out[i] = (scaled + mi * math.log(y)) + recurrence
+
+
+def _digamma_rising_kernel(
+    x: NDArray[np.float64],
+    m: NDArray[np.float64],
+    out: NDArray[np.float64],
+    series_from: float,
+    floor: float,
+) -> None:
+    """``out[i] = digamma(x[i] + m[i]) - digamma(x[i])`` over flat, contiguous arrays."""
+    for i in range(x.size):
+        xi = x[i]
+        mi = m[i]
+        y = xi
+        recurrence = 0.0
+        while y < series_from:
+            recurrence += mi / (y * (y + mi))
+            y += 1.0
+        t = mi / y
+        step = math.log1p(t)
+        inverse = 1.0 / y
+        gap = -t / (y + mi)
+        upper = inverse + gap
+        upper_square = upper * upper
+        inverse_square = inverse * inverse
+        power = inverse_square
+        q = 1.0
+        total = _DIGAMMA_SERIES[0] * q
+        terms = 1
+        while (
+            terms < 8
+            and abs(_DIGAMMA_SERIES[terms - 1])
+            * 2.0
+            * terms
+            * inverse ** (2 * terms - 1)
+            >= floor
+        ):
+            terms += 1
+        for k in range(1, terms):
+            q = q * upper_square + power
+            total += _DIGAMMA_SERIES[k] * q
+            power *= inverse_square
+        total *= gap * (upper + inverse)
+        out[i] = (step - math.expm1(-step) / (2.0 * y) - total) + recurrence
+
+
+@functools.cache
+def _kernels() -> tuple[Callable[..., None], Callable[..., None]]:
+    """:func:`_log_rising_kernel` and :func:`_digamma_rising_kernel`, compiled on first use (issue #1329).
+
+    Compiled here rather than at import, so that importing this module does
+    not import ``numba``: about 0.7 s and 0.2 s in the first call of a
+    process, as the ``ctypes`` pointer to ``gammaln`` keeps the log kernel
+    out of ``numba``'s cache. Both touch no Python object and are
+    ``nogil=True``. The kernels are the NumPy oracles' arithmetic, one pass
+    per element; the plain route is the oracle bit for bit, while the series
+    counts its terms per element where the oracle counts them per subset (a
+    difference below :data:`_TERM_FLOOR` relative) and rounds in scalars.
+    """
+    from numba import njit
+
+    global _gammaln  # noqa: PLW0603 - numba reads the pointer as a global at compile time
+    _gammaln = _cython_function("gammaln")
+    return njit(nogil=True)(_log_rising_kernel), njit(nogil=True)(
+        _digamma_rising_kernel
+    )
+
+
+def _flat(x: ArrayLike, m: ArrayLike) -> tuple[NDArray[np.float64], ...]:
+    """``x`` and ``m`` broadcast, as flat contiguous ``float64``, and an output buffer."""
+    x_, m_ = np.broadcast_arrays(
+        np.asarray(x, dtype=np.float64), np.asarray(m, dtype=np.float64)
+    )
+    out = np.empty(x_.shape, dtype=np.float64)
+    return np.ascontiguousarray(x_).ravel(), np.ascontiguousarray(m_).ravel(), out
+
+
+def log_rising(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
+    """``lgamma(x + m) - lgamma(x)``, the log rising factorial, on NumPy arrays; broadcasts.
+
+    :func:`_log_rising_numpy`'s arithmetic, one compiled pass per element
+    (:func:`_log_rising_kernel`, issue #1329); that
+    function is the oracle, and the docstring there states the routes and
+    the promise: within 1e-14 of ``mpmath`` over ``max(|f|, 1)``.
+    """
+    x_, m_, out = _flat(x, m)
+    _kernels()[0](
+        x_,
+        m_,
+        out.reshape(-1),
+        _SERIES_FROM,
+        _SMALL_T,
+        _PLAIN_ERROR,
+        _LOG_PROMISE,
+        _TERM_FLOOR,
+    )
+    return out
+
+
+def digamma_rising(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
+    """``digamma(x + m) - digamma(x)``, the derivative of :func:`log_rising` in ``x``; broadcasts.
+
+    :func:`_digamma_rising_numpy`'s arithmetic, one compiled pass per element
+    (:func:`_digamma_rising_kernel`, issue #1329);
+    that function is the oracle: within 1e-15 relative of ``mpmath``.
+    """
+    x_, m_, out = _flat(x, m)
+    _kernels()[1](x_, m_, out.reshape(-1), _SERIES_FROM, _TERM_FLOOR)
+    return out
 
 
 def on_distinct(
