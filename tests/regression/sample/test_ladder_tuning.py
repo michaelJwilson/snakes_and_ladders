@@ -93,6 +93,7 @@ def test_run_tempering_auto_charges_the_pilot_and_reports_the_ladder() -> None:
 
 
 @pytest.mark.patch
+@pytest.mark.analytic
 @pytest.mark.parametrize("entry", ["parallel", "cluster"])
 def test_auto_without_tuning_is_refused_before_any_work(entry: str) -> None:
     call = parallel_tempering if entry == "parallel" else cluster_tempering
@@ -101,6 +102,7 @@ def test_auto_without_tuning_is_refused_before_any_work(entry: str) -> None:
 
 
 @pytest.mark.patch
+@pytest.mark.analytic
 def test_a_given_ladder_with_a_tuning_is_refused() -> None:
     with pytest.raises(ValueError, match="LadderTuning"):
         parallel_tempering(
@@ -114,6 +116,7 @@ def test_a_given_ladder_with_a_tuning_is_refused() -> None:
 
 
 @pytest.mark.patch
+@pytest.mark.oracle
 def test_a_given_ladder_is_unchanged_bitwise() -> None:
     first = parallel_tempering(_graph(), FIELD, START, np.random.default_rng(4), 20)
     second = parallel_tempering(

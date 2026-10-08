@@ -187,6 +187,7 @@ def test_polished_gap_equals_the_polish_applied_by_hand() -> None:
 
 
 @pytest.mark.patch
+@pytest.mark.analytic
 def test_polished_gap_without_polish_is_refused_before_any_work() -> None:
     with pytest.raises(ValueError, match="polish"):
         ScheduleTuning(BUDGET, Criterion.POLISHED_GAP, 10, GRID)
@@ -195,5 +196,6 @@ def test_polished_gap_without_polish_is_refused_before_any_work() -> None:
 
 
 @pytest.mark.patch
+@pytest.mark.oracle
 def test_every_option_off_is_the_run_before_it_bitwise() -> None:
     assert _tune(9) == _tune(9, racing=False, common=False, polish=None)
