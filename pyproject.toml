@@ -234,6 +234,12 @@ module = "numba.*"
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
+# llvmlite, numba's code generator, ships no type information; rising.py
+# registers one symbol with it (#1342).
+module = "llvmlite.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # scipy ships no py.typed marker; `scipy-stubs` is a separate package and one
 # import does not justify a fifth development dependency.
 module = "scipy.*"
