@@ -95,9 +95,6 @@ never restated. What follows is local.
   repeated across levels: `lower_bound.lp`, not `lower_bound.lp_bound`.
   `tests/regression/test_external_explicit.py` holds every `Solver` member
   to one case and each pair of calls to equal results.
-- **A transport is kept on a measurement.** `MMAP` is the default: it beat
-  `NPZ` in 13 of 15 cells of #1288's grid and trailed it in none by more than
-  the host's run-to-run spread (0.4 ms at 0.2 MB, 4 ms of 198 at 10 MB, N = 1).
-  `SHARED` (`multiprocessing.shared_memory`) was dropped, `MMAP` beating it in
-  10 of 12 cells at 10 and 128 MB. A transport that stops earning its place
-  goes.
+- **A transport is kept on a measurement.** The default is the transport
+  that won #1288's grid, and a dropped one is named with its measurement in
+  `transport`'s docstring. A transport that stops earning its place goes.
