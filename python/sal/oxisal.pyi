@@ -533,3 +533,9 @@ def count_mixture_value_and_gradient(
     grad_alpha: np.ndarray | None = None,
     grad_beta: np.ndarray | None = None,
 ) -> float: ...
+def coded_weighted_sum(
+    n_states: int,
+    values: np.ndarray,
+    index: np.ndarray,
+    weights: np.ndarray | None = None,
+) -> np.ndarray: ...
