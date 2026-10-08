@@ -3,7 +3,7 @@ id: "034"
 date: 2026-10-08
 commit: d00baaca4f4abcbbcac1f93924a8192f0820233d
 branch: claude/hmm-anneal-remeasure-1393
-pr: 0
+pr: 1404
 tickets: [1393, 1378]
 problem: hmm-path
 fixture: tests/regression/fixtures/count_hmm_reference/stress.yaml, 8,000 positions, 8 generating levels fitted by 7 states, generating log L -60,947.364
