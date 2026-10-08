@@ -3319,7 +3319,7 @@ visits on 3 seeds; the budgeted run spent 36,350 to 36,665 in 2,020 to 2,214
 steps, within one step of the budget. A budgeted Wolff chain fits #1322's
 enumerated 2 x 3 law at `SIGNIFICANCE = 1e-3`; single-site and Swendsen-Wang
 under `n` steps' cost, and the step-count Wolff run, are main's bitwise. Pinned
-in `tests/regression/sample/test_potts_budget.py`.
+in `tests/regression/sample/test_potts_budget.py`. On `potts_reference/stress` at equal visits, one long anneal is not beaten by 4 or 16 restarts or by cluster tempering on the auto ladder, and heat-bath Wolff alone ends 917.51 nats off against 0.52 composed with Gibbs ([#1390](https://github.com/michaelJwilson/snakes_and_ladders/issues/1390), [`docs/experiments/035`](docs/experiments/035-one-long-anneal-restarts-or-tempering-at-one-budget.md)).
 
 **Annealing ends with a polisher run to its own convergence**
 ([#1363](https://github.com/michaelJwilson/snakes_and_ladders/issues/1363)).

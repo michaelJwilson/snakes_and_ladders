@@ -602,6 +602,9 @@ whether or not it has members yet.
 .. automodule:: sal.sandbox.region_graph
    :members:
 
+.. automodule:: sal.sandbox.field_bond_wolff
+   :members:
+
 .. automodule:: sal.sandbox.polar_reference
    :members:
 
@@ -846,6 +849,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: sal.qa.hmc_warmup
+   :members:
+
+.. automodule:: sal.qa.budget_split
    :members:
 
 .. automodule:: sal.qa.potts_schedule
