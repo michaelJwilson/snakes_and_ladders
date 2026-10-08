@@ -51,10 +51,11 @@ def _zeros_and_counts() -> np.ndarray:
 @pytest.mark.analytic
 @pytest.mark.hmm
 def test_the_floor_is_float64_epsilon() -> None:
-    assert mstep.DISPERSION_FLOOR == float(np.finfo(np.float64).eps)
+    eps = float(np.finfo(np.float64).eps)
+    assert eps == mstep.DISPERSION_FLOOR
 
 
-@pytest.mark.bug
+@pytest.mark.analytic
 @pytest.mark.hmm
 @pytest.mark.parametrize("backend", [Backend.RUST, Backend.PYTHON])
 def test_an_underflowing_dispersion_is_degenerate_not_raised(
@@ -91,8 +92,10 @@ def test_a_planted_zero_dispersion_ends_degenerate_with_the_start(
     assert fit.termination.iterations == 1
     assert fit.unsettled is not None
     assert fit.unsettled.states == (0,)
-    assert torch.equal(fit.components.dispersion, start.dispersion)
-    assert torch.equal(fit.components.mean, start.mean)
+    fitted = fit.components
+    assert isinstance(fitted, NegativeBinomialEmission)
+    assert torch.equal(fitted.dispersion, start.dispersion)
+    assert torch.equal(fitted.mean, start.mean)
 
 
 @pytest.mark.analytic
@@ -121,7 +124,9 @@ def test_a_beta_binomial_at_one_trial_holds_its_concentration(
     assert fit.termination.reason is Stop.DEGENERATE
     assert fit.unsettled is not None
     assert fit.unsettled.states == (0, 1)
-    assert torch.equal(fit.components.concentration, start.concentration)
+    fitted = fit.components
+    assert isinstance(fitted, BetaBinomialEmission)
+    assert torch.equal(fitted.concentration, start.concentration)
     # The rate is the Bernoulli maximum at the fit's last posterior.
     step = start.reestimate(successes.reshape(-1), np.full((successes.size, 2), 0.5))
     assert step.degenerate == (0, 1)
