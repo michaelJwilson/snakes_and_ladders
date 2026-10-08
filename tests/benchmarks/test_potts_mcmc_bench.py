@@ -142,10 +142,10 @@ def test_release_rung_moves_tempering_steps_benchmark(
     # (issue #1158): heat-bath Swendsen-Wang on the two hottest rungs, it and a
     # single-site sweep on the four below, on the compiled cluster route
     # `potts_tempering.run_tempering` takes; beside the single-move rows above.
-    from sal.sample.potts_mcmc import rung_moves
     from sal.sandbox.potts_tempering import (
         N_REPLICAS,
         parallel_tempering,
+        rung_moves,
         tempering_ladder,
     )
     from sal.search.potts_starts import tiling_rung

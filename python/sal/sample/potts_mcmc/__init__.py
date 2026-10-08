@@ -115,14 +115,9 @@ from sal.sample.potts_mcmc.chains import (
     PottsChain,
     PottsPair,
     PottsStarts,
-    RungMoves,
     TemperedModel,
     anneal_potts,
     cluster_tempering,
-    critical_ratio,
-    field_ratio,
-    moves_per_rung,
-    rung_moves,
     sample_potts,
     sample_potts_pair,
     sample_potts_starts,
@@ -187,7 +182,6 @@ __all__ = [
     "PottsStarts",
     "Recolour",
     "RecolourOutcome",
-    "RungMoves",
     "TemperedModel",
     "adjacency_lists",
     "anneal_potts",
@@ -196,9 +190,7 @@ __all__ = [
     "bond_roots",
     "cluster_members",
     "cluster_tempering",
-    "critical_ratio",
     "energies",
-    "field_ratio",
     "find_root",
     "ghost_couplings",
     "ghost_spin_sweep",
@@ -207,11 +199,9 @@ __all__ = [
     "houdayer_move",
     "label_directed_sweep",
     "move_set",
-    "moves_per_rung",
     "niedermayer_sweep",
     "niedermayer_threshold",
     "refuse_negative_coupling",
-    "rung_moves",
     "sample_potts",
     "sample_potts_pair",
     "sample_potts_starts",
@@ -226,3 +216,25 @@ __all__ = [
     "wolff_heat_bath_sweep",
     "wolff_sweep",
 ]
+
+#: The names that left for :mod:`sal.sandbox` under its "unsupported" rule,
+#: and the module each went to (issue #1365).
+_SANDBOXED = {
+    "RungMoves": "sal.sandbox.potts_tempering",
+    "critical_ratio": "sal.sandbox.potts_tempering",
+    "field_ratio": "sal.sandbox.potts_tempering",
+    "moves_per_rung": "sal.sandbox.potts_tempering",
+    "rung_moves": "sal.sandbox.potts_tempering",
+}
+
+
+def __getattr__(name: str) -> object:
+    """Refuse a name that moved to :mod:`sal.sandbox`, naming where it went (issue #1365)."""
+    if name in _SANDBOXED:
+        msg = (
+            f"sal.sample.potts_mcmc.{name} is no longer supported: it moved to "
+            f"{_SANDBOXED[name]}.{name} (issue #1365)"
+        )
+        raise AttributeError(msg)
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)

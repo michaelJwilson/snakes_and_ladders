@@ -7,7 +7,10 @@ Metropolis, with ``temperatures="auto"``; :func:`adapt_ladder_potts` and
 :func:`adapt_ladder_round_trips`, which place its ladder from its own
 exchanges and round trips; and the ``tempering`` and ``tempering-mixed``
 ground-state arms, :func:`run_tempering` and :func:`run_tempering_mixed`,
-which left :data:`~sal.search.ground_state.METHODS`. The supported tempering
+which left :data:`~sal.search.ground_state.METHODS`; and the per-rung move
+rule :func:`rung_moves`, with :data:`RungMoves`, :func:`moves_per_rung`,
+:func:`critical_ratio` and :func:`field_ratio`, which only this tempering
+reads (issue #1365). The supported tempering
 on the lattice is :func:`~sal.sample.potts_mcmc.cluster_tempering`;
 :func:`sal.sample.hmc.parallel_tempering` is a different sampler and stays.
 The tests moved with it, under ``tests/regression/sandbox/``.
@@ -27,13 +30,9 @@ from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.opt.termination import Termination
 from sal.sample.loop import Exchanging
-from sal.sample.potts_mcmc import PottsMove, Recolour, RungMoves, rung_moves
-from sal.sample.potts_mcmc.chains import (
-    _Lattice,
-    _rung_starts,
-    moves_per_rung,
-)
-from sal.sample.potts_mcmc.moves import move_set, refuse_negative_coupling
+from sal.sample.potts_mcmc import PottsMove, Recolour
+from sal.sample.potts_mcmc.chains import _Lattice, _rung_starts
+from sal.sample.potts_mcmc.moves import composed, move_set, refuse_negative_coupling
 from sal.sample.schedule import (
     AdaptedLadder,
     FeedbackLadder,
@@ -59,7 +58,7 @@ from sal.search.ground_state import (
     step_cost,
 )
 from sal.sim.graph import PottsGraph
-from sal.sim.potts import SiteField, log_weight_of, site_field
+from sal.sim.potts import SiteField, critical_coupling, log_weight_of, site_field
 from sal.track import TrackedOptimization
 from sal.track import current as current_tracked
 
@@ -79,6 +78,168 @@ __all__ = [
 #: single-site entry gets and the comparison is at equal cost rather than at
 #: equal sweeps per chain.
 N_REPLICAS = 6
+
+
+#: What :func:`parallel_tempering` takes as ``move``: one move set for every
+#: rung, or per rung a move set or a sequence of them run in order (#1158).
+RungMoves = PottsMove | Sequence[PottsMove | Sequence[PottsMove]]
+
+
+def moves_per_rung(move: RungMoves, n_rungs: int) -> tuple[tuple[PottsMove, ...], ...]:
+    """``move`` as one non-empty tuple of move sets per rung (issue #1158).
+
+    A single :class:`~sal.sample.potts_mcmc.moves.PottsMove` is checked
+    first: it is a ``str``, and so a ``Sequence``, which read as one would be
+    its characters.
+
+    Raises
+    ------
+    ValueError
+        If ``move`` is a sequence whose length is not ``n_rungs``, or a
+        rung's sequence is empty.
+    TypeError
+        If an entry holds anything but a ``PottsMove``.
+    """
+    if isinstance(move, PottsMove):
+        return (composed(move),) * n_rungs
+    entries = tuple(move)
+    if len(entries) != n_rungs:
+        msg = f"move holds one entry per rung, {n_rungs}, got {len(entries)}"
+        raise ValueError(msg)
+    per_rung = []
+    for entry in entries:
+        rung = composed(entry) if isinstance(entry, PottsMove) else tuple(entry)
+        if not rung:
+            msg = "a rung's moves are a non-empty sequence"
+            raise ValueError(msg)
+        for each in rung:
+            if not isinstance(each, PottsMove):
+                msg = f"a rung's moves are PottsMove, got {each!r}"
+                raise TypeError(msg)
+        per_rung.append(rung)
+    return tuple(per_rung)
+
+
+#: :func:`rung_moves`' threshold on :func:`critical_ratio`: a rung at or
+#: above it runs a single-site sweep after its cluster move. The transition
+#: itself; the measurement brackets it between the ladder's rungs at 0.76
+#: and 1.58 (``tests/regression/sandbox/test_potts_tempering_rung_threshold.py``).
+PAIR_FROM = 1.0
+
+
+def critical_ratio(graph: PottsGraph, n_states: int, temperature: float) -> float:
+    """``beta J / K_c``: a rung's coupling against the Potts transition (issue #1158).
+
+    ``J`` is the mean coupling and ``K_c = ln(1 + sqrt(q)) * 4 / z``, with
+    ``z = 2 |E| / n`` the mean degree: the square lattice's exact self-dual
+    point (:func:`~sal.sim.potts.critical_coupling`) scaled by ``4 / z``, as
+    the mean-field transition scales with ``1 / z``. Exact for the square
+    lattice; a proxy elsewhere, ``0.951`` against the exact ``0.912`` (the
+    root of ``v^3 + 3 v^2 = q``, ``K = ln(1 + v)``) on the triangular lattice
+    at ``q = 10``, 4% high.
+
+    Returns
+    -------
+    float
+        ``0`` on a graph with no edges.
+    """
+    if not graph.edges:
+        return 0.0
+    degree = 2.0 * len(graph.edges) / graph.n_nodes
+    k_c = critical_coupling(n_states) * 4.0 / degree
+    return float(np.mean(graph.coupling)) / temperature / k_c
+
+
+def field_ratio(graph: PottsGraph, rows: np.ndarray) -> float:
+    """The median site's field spread against its coupling, ``median_i (max h_i - min h_i) / (J z)`` (issue #1158).
+
+    The spread is over each site's allowed labels, those of finite field, so
+    a forbidden label's ``-inf`` does not make it infinite; ``J`` is the mean
+    coupling and ``z = 2 |E| / n`` the mean degree, so the ratio compares the
+    field one site carries with the coupling it has to its neighbours. Both
+    scale with ``beta`` alike, so the ratio is the rung's at every rung.
+
+    Returns
+    -------
+    float
+        ``inf`` on a graph with no edges or no coupling.
+    """
+    allowed = np.isfinite(rows)
+    spread = np.where(allowed, rows, -np.inf).max(axis=1) - np.where(
+        allowed, rows, np.inf
+    ).min(axis=1)
+    bond = (
+        float(np.mean(graph.coupling)) * 2.0 * len(graph.edges) / graph.n_nodes
+        if graph.edges
+        else 0.0
+    )
+    return float(np.median(spread)) / bond if bond > 0.0 else float("inf")
+
+
+def rung_moves(
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    temperatures: TempSchedule | Sequence[float],
+) -> tuple[tuple[PottsMove, ...], ...]:
+    """The moves each rung of a ladder runs, read from its temperature (issue #1158).
+
+    A deterministic rule on :func:`critical_ratio` ``k = beta J / K_c``:
+
+    - ``k < 1`` (:data:`PAIR_FROM`), hot of the transition: heat-bath
+      Swendsen-Wang alone. Clusters span correlated regions and relabel
+      them in one step.
+    - ``k >= 1``, at the transition and colder: heat-bath Swendsen-Wang, then
+      a single-site sweep. The bonds close over whole domains, which the
+      cluster move relabels and cannot reshape; the sweep moves their
+      boundaries.
+
+    **The field enters through the label draw, not the rule.** Every cluster
+    move chosen draws its cluster's label ``~ exp(beta sum_C h)``, near
+    uniform in a weak field and on the best label in a strong one, so no
+    threshold switches between the uniform-proposal and heat-bath variants;
+    the uniform ones are reached through an explicit ``move=``.
+    :func:`field_ratio` does not change the composition either: measured at
+    field x1, x10 and x30 (ratio 0.08 to 5.3), it moved no ladder's energy
+    at x10 or x30.
+
+    **Measured** through :func:`run_tempering` at
+    1,000 sweeps' site visits, five seeds, on ``spatio_only/release`` (71 x 71
+    triangular, q = 10, J = 0.7, ``k`` = 0.36, 0.76, 1.58, 3.30, 6.91, 14.5),
+    mean energy (standard error): single-site everywhere -9,900.1 (10.9);
+    the cluster move alone on the three hottest rungs, single-site below,
+    -9,740.4 (13.2); the pair on every rung -10,215.1 (19.1); the pair on
+    the two hottest rungs and single-site below -9,820.3 (37.4); this rule
+    -10,215.9 (19.0), the same as single-site on the two hottest rungs with
+    the pair below. So the rung at 1.58 needs the pair and those at 0.36 and 0.76
+    are indifferent to their move; the threshold sits at the transition
+    between them. On ``spatio_tiling/release`` this rule -17,018.9 (0.6)
+    against single-site's -17,001.2 (5.4).
+
+    Parameters
+    ----------
+    graph : PottsGraph
+        The instance. A negative coupling refuses every cluster move, so
+        such a graph is single-site on every rung.
+    field : SiteField | np.ndarray
+        As :func:`parallel_tempering` takes it.
+    temperatures : TempSchedule | Sequence[float]
+        The ladder, in :func:`parallel_tempering`'s order.
+
+    Returns
+    -------
+    tuple[tuple[PottsMove, ...], ...]
+        One entry per rung, in the ladder's order, as ``move`` takes it.
+    """
+    rows = site_field(np.asarray(log_weight_of(field), dtype=float), graph.n_nodes)
+    n_states = int(rows.shape[1])
+    if min(graph.coupling, default=0.0) < 0.0:
+        return tuple((PottsMove.SINGLE_SITE,) for _ in ladder(temperatures))
+    return tuple(
+        (PottsMove.SWENDSEN_WANG_HEAT_BATH,)
+        if critical_ratio(graph, n_states, temperature) < PAIR_FROM
+        else (PottsMove.SWENDSEN_WANG_HEAT_BATH, PottsMove.SINGLE_SITE)
+        for temperature in ladder(temperatures)
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -153,7 +314,7 @@ def parallel_tempering(
     invariant whenever each replica's move leaves its own rung's law
     invariant, which every :class:`~sal.sample.potts_mcmc.moves.PottsMove`
     does, and so does any sequence of them run in order on one rung. Each
-    rung may therefore run its own moves (issue #1158); :func:`~sal.sample.potts_mcmc.rung_moves`
+    rung may therefore run its own moves (issue #1158); :func:`rung_moves`
     chooses them from the temperature. This is not :func:`~sal.sample.potts_mcmc.cluster_tempering`,
     which adds Houdayer moves between replicas.
 
@@ -522,7 +683,7 @@ def run_tempering_mixed(
     *,
     start: np.ndarray | None = None,
 ) -> MethodRun:
-    """:func:`run_tempering` on the moves :func:`~sal.sample.potts_mcmc.rung_moves` picks per rung (issue #1158).
+    """:func:`run_tempering` on the moves :func:`rung_moves` picks per rung (issue #1158).
 
     Heat-bath Swendsen-Wang on the rungs hot of the transition, heat-bath
     Swendsen-Wang then a single-site sweep on the rest, at equal site visits

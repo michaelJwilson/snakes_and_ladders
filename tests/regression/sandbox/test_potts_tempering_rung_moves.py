@@ -20,14 +20,13 @@ import itertools
 import numpy as np
 import pytest
 from sal.backend import Backend
-from sal.sample.potts_mcmc import (
-    PottsMove,
+from sal.sample.potts_mcmc import PottsMove, move_set
+from sal.sandbox.potts_tempering import (
     critical_ratio,
     field_ratio,
-    move_set,
+    parallel_tempering,
     rung_moves,
 )
-from sal.sandbox.potts_tempering import parallel_tempering
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.potts import critical_coupling, forbid
 

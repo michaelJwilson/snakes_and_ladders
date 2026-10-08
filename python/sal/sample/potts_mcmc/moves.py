@@ -96,7 +96,7 @@ class Recolour(StrEnum):
 
 
 #: What every Potts entry point takes as ``move``: one move set, or a
-#: sequence of them applied in order as one step, :data:`RungMoves`' per-step
+#: sequence of them applied in order as one step, :data:`~sal.sandbox.potts_tempering.RungMoves`' per-step
 #: form (issue #1317).
 PottsMoves = PottsMove | Sequence[PottsMove]
 
@@ -131,7 +131,7 @@ def move_set(
     """``move`` as a non-empty tuple applied in order, each cluster move under ``recolour``.
 
     A single :class:`PottsMove` is checked first, as
-    :func:`~sal.sample.potts_mcmc.chains.moves_per_rung` checks it: it is a
+    :func:`~sal.sandbox.potts_tempering.moves_per_rung` checks it: it is a
     ``str`` and so a ``Sequence``. Composition is read from the type (issue
     #1323): a bare ``WOLFF`` or ``SWENDSEN_WANG`` is the move composed with a
     single-site Gibbs sweep, ``(move, SINGLE_SITE)``, and a sequence is the
