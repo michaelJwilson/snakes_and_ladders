@@ -1,4 +1,4 @@
-"""Coded count observations and their log-emission (issue #1340, stage 1).
+"""Coded count observations and their log-emission (issue #1340).
 
 A count is an integer, so the integer part of a count family's log-density
 is a function of the count alone. :func:`encode` codes the observations once
@@ -10,18 +10,26 @@ only --- not at every count up to the largest (#719: 7,109 rows in place of
 154,549) --- completes the covariate term per observation in
 :mod:`sal.emissions.nb`'s and :mod:`sal.emissions.bb`'s order (#1334,
 #1336), and gathers. The kernel is ``src/dense_emission.rs``'s, read through
-the inverse, so a :class:`Coded` score is its :class:`Dense` score bitwise.
+the inverse. A :class:`Dense` is scored by coding it first: one implementation,
+so a :class:`Dense` score is its :class:`Coded` score bitwise. Each channel
+reads its own table, one row per distinct value of that channel, so a count
+shared by several labels, or a total shared by several pair codes, is one
+row.
 
 **Which families.** :class:`~sal.emissions.NegativeBinomialEmission`,
 :class:`~sal.emissions.BetaBinomialEmission` (so
 :class:`~sal.emissions.RateConcentrationBetaBinomialEmission`) and the
-independent :class:`~sal.emissions.CountPairEmission`, as
-:func:`sal.emissions.dense.log_emission` takes them.
+independent :class:`~sal.emissions.CountPairEmission`.
 
 **Labels.** ``label`` is one integer array, one value per observation,
 which the caller builds (for example ``x + Z y``); any number of distinct
-values is coded. A tuple or a 2-D label is refused. The per-label shift is
-stage 3; the weighted sum and the partials are stage 2.
+values is coded. A tuple or a 2-D label is refused.
+
+**Shift.** ``shift`` is a per-label log-rate offset on the negative binomial,
+``lambda = c mu exp(shift[label])``, indexed by the label's value. It enters
+per observation as the exposure ``c exp(shift[label])``, so no table varies
+by label and none carries a label axis; ``shift=None`` is the unshifted
+route, bitwise.
 """
 
 from __future__ import annotations
@@ -35,8 +43,7 @@ from numpy.typing import NDArray
 from sal import oxisal
 from sal.emissions.bb import family_log_pmf, log_factorial, trial_tables
 from sal.emissions.counts import BetaBinomialEmission, NegativeBinomialEmission
-from sal.emissions.dense import IndependentPair, Order, checked_counts
-from sal.emissions.dense import log_emission as dense_log_emission
+from sal.emissions.dense import IndependentPair, checked_counts
 from sal.emissions.nb import count_log_factor
 from sal.emissions.rising import digamma_rising, scaled_rising_table
 
@@ -58,11 +65,13 @@ class Dense:
 
     ``covariate`` is ``(n,)`` for one channel, the exposure or the trial
     count, or ``(n, 2)`` for a pair; ``None`` for none. A zero marks the
-    channel unobserved.
+    channel unobserved. ``label`` is ``(n,)`` integers, as :func:`encode`
+    takes it.
     """
 
     counts: NDArray[np.float64]
     covariate: NDArray[np.float64] | None = None
+    label: NDArray[np.int64] | None = None
 
 
 @dataclass(frozen=True)
@@ -292,28 +301,90 @@ def _pair_channels(
     return total, successes
 
 
-def _coded_arguments(family: object, coded: Coded) -> dict[str, NDArray[np.generic]]:
-    """The kernel's channel arguments for ``family`` over ``coded``."""
+def _channel(
+    values: NDArray[np.uint32], inverse: NDArray[np.int32]
+) -> tuple[NDArray[np.uint32], NDArray[np.int32]]:
+    """A channel's distinct values and each observation's row in them, ``-1`` kept."""
+    distinct, index = np.unique(values, return_inverse=True)
+    rows = np.where(
+        inverse >= 0, index.astype(np.int32)[np.maximum(inverse, 0)], np.int32(-1)
+    ).astype(np.int32)
+    return np.ascontiguousarray(distinct, dtype=np.uint32), rows
+
+
+def _shift_factor(
+    coded: Coded, shift: NDArray[np.float64] | None
+) -> NDArray[np.float64] | None:
+    """``exp(shift[label])`` per observation, 1 where unobserved; ``None`` without a shift."""
+    if shift is None:
+        return None
+    values = np.asarray(shift, dtype=np.float64)
+    labels = coded.label
+    if values.ndim != 1 or (
+        labels.size and (labels.min() < 0 or labels.max() >= values.size)
+    ):
+        msg = (
+            f"shift is one (L,) array indexed by label, 0 <= label < L; got "
+            f"{values.shape} for labels up to {labels.max() if labels.size else 0}"
+        )
+        raise ValueError(msg)
+    if not np.isfinite(values).all():
+        msg = "every shift must be finite"
+        raise ValueError(msg)
+    per_code = np.exp(values[labels])
+    inverse = coded.inverse
+    return np.where(inverse >= 0, per_code[np.maximum(inverse, 0)], 1.0)
+
+
+def _shifted(
+    exposure: NDArray[np.float64] | None, factor: NDArray[np.float64] | None
+) -> NDArray[np.float64] | None:
+    """The exposure ``c exp(shift[label])``; ``c`` is 1 where absent."""
+    if factor is None:
+        return exposure
+    return factor if exposure is None else exposure * factor
+
+
+def _coded_arguments(
+    family: object, coded: Coded, shift: NDArray[np.float64] | None
+) -> dict[str, NDArray[np.generic]]:
+    """The kernel's channel arguments for ``family`` over ``coded``, rows per channel."""
     cov = coded.covariate
     pair = coded.counts.ndim == 2
     if isinstance(family, NegativeBinomialEmission | BetaBinomialEmission) and pair:
         msg = "a single-channel family scores (n,) counts, got a pair's (U, 2)"
         raise ValueError(msg)
+    factor = _shift_factor(coded, shift)
     if isinstance(family, NegativeBinomialEmission):
-        return _total(family, coded.counts, cov)
+        distinct, rows = _channel(coded.counts, coded.inverse)
+        return {
+            **_total(family, distinct, _shifted(cov, factor)),
+            "total_rows": rows,
+        }
     if isinstance(family, BetaBinomialEmission):
-        return _successes(family, coded.counts, cov)
+        distinct, rows = _channel(coded.counts, coded.inverse)
+        return {**_successes(family, distinct, cov), "success_rows": rows}
     total, successes = _pair_channels(family)
     if not pair:
         msg = f"a pair's counts are (U, 2), got {coded.counts.shape}"
         raise ValueError(msg)
+    totals, total_rows = _channel(coded.counts[:, 0], coded.inverse)
+    succ, success_rows = _channel(coded.counts[:, 1], coded.inverse)
+    exposure = _shifted(None if cov is None else cov[:, 0], factor)
     return {
-        **_total(total, coded.counts[:, 0], None if cov is None else cov[:, 0]),
-        **_successes(successes, coded.counts[:, 1], None if cov is None else cov[:, 1]),
+        **_total(total, totals, exposure),
+        "total_rows": total_rows,
+        **_successes(successes, succ, None if cov is None else cov[:, 1]),
+        "success_rows": success_rows,
     }
 
 
-def log_emission(family: Family, observations: Dense | Coded) -> NDArray[np.float64]:
+def log_emission(
+    family: Family,
+    observations: Dense | Coded,
+    *,
+    shift: NDArray[np.float64] | None = None,
+) -> NDArray[np.float64]:
     """Every observation's log-density under every state, ``(K, n)``, state-major.
 
     Parameters
@@ -321,9 +392,12 @@ def log_emission(family: Family, observations: Dense | Coded) -> NDArray[np.floa
     family : NegativeBinomialEmission | BetaBinomialEmission | IndependentPair
         The family scored; a pair must be independent.
     observations : Dense | Coded
-        A :class:`Dense` is scored by :func:`sal.emissions.dense.log_emission`;
-        a :class:`Coded` from tables at its distinct counts, gathered by its
-        inverse. The two are bitwise equal on the same observations.
+        A :class:`Coded` is scored from tables at its distinct counts,
+        gathered by its inverse; a :class:`Dense` is coded by :func:`encode`
+        first, so the two are bitwise equal on the same observations.
+    shift : np.ndarray | None
+        ``(L,)`` log-rate offsets on the negative binomial, indexed by label:
+        ``lambda = c mu exp(shift[label])``. ``None`` is no offset, bitwise.
 
     Returns
     -------
@@ -338,15 +412,13 @@ def log_emission(family: Family, observations: Dense | Coded) -> NDArray[np.floa
         If a count, a covariate or a shape is refused.
     """
     if isinstance(observations, Dense):
-        counts = _counts(observations.counts)
-        given = _covariate(observations.covariate, counts)
-        single = counts.ndim == 1 and given is not None
-        covariate = given[:, None] if single and given is not None else given
-        return dense_log_emission(family, counts, covariate, order=Order.FAMILY)
+        observations = encode(
+            observations.counts, observations.covariate, label=observations.label
+        )
     if not isinstance(observations, Coded):
         msg = f"observations are Dense or Coded, got {type(observations).__name__}"
         raise TypeError(msg)
-    arguments = _coded_arguments(family, observations)
+    arguments = _coded_arguments(family, observations, shift)
     n = observations.inverse.size
     out = np.empty(family.n_states * n)
     oxisal.coded_log_emission(family.n_states, observations.inverse, out, **arguments)
@@ -354,7 +426,11 @@ def log_emission(family: Family, observations: Dense | Coded) -> NDArray[np.floa
 
 
 def log_emission_sum(
-    family: Family, coded: Coded, weights: NDArray[np.float64] | None = None
+    family: Family,
+    coded: Coded,
+    weights: NDArray[np.float64] | None = None,
+    *,
+    shift: NDArray[np.float64] | None = None,
 ) -> NDArray[np.float64]:
     """``sum_i w[k, i] log f_k(x_i)``, ``(K,)``: a per-state ``bincount`` over the inverse.
 
@@ -365,18 +441,21 @@ def log_emission_sum(
     (``coded_weighted_sum``), so the order is stated: bitwise a
     ``np.cumsum`` in that order, and within a reduction-order tolerance of
     the pairwise ``(w * log_emission).sum(axis=1)``. A code of zero total
-    weight is skipped, so ``0 * -inf`` never enters.
+    weight is skipped, so ``0 * -inf`` never enters. ``shift`` is
+    :func:`log_emission`'s.
     """
     k = family.n_states
     w = None if weights is None else np.ascontiguousarray(weights, dtype=np.float64)
     if coded.covariate is None:
         rows = np.arange(coded.weight.size, dtype=np.int32)
         table = log_emission(
-            family, Coded(coded.label, coded.counts, rows, coded.weight, None)
+            family,
+            Coded(coded.label, coded.counts, rows, coded.weight, None),
+            shift=shift,
         )
         values, index = table, coded.inverse
     else:
-        values = log_emission(family, coded)
+        values = log_emission(family, coded, shift=shift)
         n = coded.inverse.size
         index = np.where(
             coded.inverse >= 0, np.arange(n, dtype=np.int32), np.int32(-1)
@@ -403,12 +482,15 @@ def _nb_partials(
     codes: NDArray[np.uint32],
     inverse: NDArray[np.int32],
     exposure: NDArray[np.float64] | None,
+    factor: NDArray[np.float64] | None = None,
 ) -> dict[str, NDArray[np.float64]]:
-    """``d/dr`` and ``d/dmu`` of the negative binomial's log pmf, ``(K, n)`` each.
+    """``d/dr``, ``d/dmu`` and, under a shift, ``d/dshift`` of the NB log pmf, ``(K, n)``.
 
-    With ``lam = c mu`` and ``q = lam / r``: ``d/dr = (psi(r + y) - psi(r)) -
-    log1p(q) + (lam - y) / (r + lam)`` and ``d/dmu = r (y - lam) / (mu (r +
-    lam))``; at ``r = inf`` (the Poisson) ``0`` and ``y / mu - c``.
+    With ``lam = c mu exp(s)`` and ``q = lam / r``: ``d/dr = (psi(r + y) -
+    psi(r)) - log1p(q) + (lam - y) / (r + lam)``, ``d/dmu = r (y - lam) / (mu
+    (r + lam))`` and ``d/ds = r (y - lam) / (r + lam)``; at ``r = inf`` (the
+    Poisson) ``0``, ``y / mu - c exp(s)`` and ``y - lam``. ``factor`` is
+    ``exp(shift[label])`` per observation.
     """
     r = family.dispersion.detach().numpy()[:, None]
     mu = family.mean.detach().numpy()[:, None]
@@ -418,17 +500,23 @@ def _nb_partials(
     y = _gathered(np.broadcast_to(y_code, rising.shape).copy(), inverse)
     rising = _gathered(rising, inverse)
     c = np.ones(inverse.size) if exposure is None else exposure
-    lam = mu * c[None, :]
+    scale = c if factor is None else c * factor
+    lam = mu * scale[None, :]
     with np.errstate(divide="ignore", invalid="ignore"):
         dr = rising - np.log1p(lam / r) + (lam - y) / (r + lam)
         dmu = r * (y - lam) / (mu * (r + lam))
+        ds = r * (y - lam) / (r + lam)
     dr = np.where(finite, dr, 0.0)
-    dmu = np.where(finite, dmu, y / mu - c[None, :])
+    dmu = np.where(finite, dmu, y / mu - scale[None, :])
     seen = (inverse >= 0) & (c != 0.0)
-    return {
+    out = {
         "dispersion": np.ascontiguousarray(np.where(seen, dr, 0.0)),
         "mean": np.ascontiguousarray(np.where(seen, dmu, 0.0)),
     }
+    if factor is not None:
+        ds = np.where(finite, ds, y - lam)
+        out["shift"] = np.ascontiguousarray(np.where(seen, ds, 0.0))
+    return out
 
 
 def _bb_partials(
@@ -483,7 +571,10 @@ def _bb_partials(
 
 
 def log_emission_partials(
-    family: Family, coded: Coded
+    family: Family,
+    coded: Coded,
+    *,
+    shift: NDArray[np.float64] | None = None,
 ) -> dict[str, NDArray[np.float64]]:
     """Each parameter's partial of every observation's log-density, ``{parameter: (K, n)}``.
 
@@ -494,17 +585,24 @@ def log_emission_partials(
     :func:`~sal.emissions.rising.digamma_rising`, in NumPy: an unobserved
     observation, or successes past their trials, have 0. ``r = inf`` and
     ``tau = inf`` take their limits' partials, and the parameter that is
-    infinite has 0.
+    infinite has 0. Under a ``shift`` the negative binomial adds ``shift``,
+    each observation's partial with respect to its own label's offset;
+    summing it per label gives the gradient of a sum.
     """
     cov = coded.covariate
+    factor = _shift_factor(coded, shift)
     if isinstance(family, NegativeBinomialEmission):
-        return _nb_partials(family, coded.counts, coded.inverse, cov)
+        return _nb_partials(family, coded.counts, coded.inverse, cov, factor)
     if isinstance(family, BetaBinomialEmission):
         return _bb_partials(family, coded.counts, coded.inverse, cov)
     total, successes = _pair_channels(family)
     return {
         **_nb_partials(
-            total, coded.counts[:, 0], coded.inverse, None if cov is None else cov[:, 0]
+            total,
+            coded.counts[:, 0],
+            coded.inverse,
+            None if cov is None else cov[:, 0],
+            factor,
         ),
         **_bb_partials(
             successes,

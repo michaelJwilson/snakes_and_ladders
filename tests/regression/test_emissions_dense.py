@@ -1,11 +1,15 @@
-"""`emissions.dense.log_emission` against each family's own ``log_density`` (issue #1132).
+"""The dense log-emission against each family's own ``log_density`` (issues #1132, #1340).
+
+The dense route is :func:`sal.emissions.coded.log_emission` over a
+:class:`~sal.emissions.coded.Dense` since #1340 folded
+``emissions.dense.log_emission`` into it; :func:`log_emission` here flattens
+the ``(T, N)`` draws into that form and restores their shape.
 
 Draws are simulated from each family at a seeded per-observation covariate,
 shaped ``(T, N)`` as a count-HMM over replicates holds them, with a share of
 each channel unobserved. The beta-binomial and every density without a
 covariate are judged bitwise. The negative binomial's exposure term is judged
-per order: the family's within the rounding of its two logarithms, the
-tabulated within ``test_emissions_factored``'s bound on the summed terms.
+within ``test_emissions_factored``'s bound on the summed terms.
 """
 
 from __future__ import annotations
@@ -19,7 +23,8 @@ from sal.emissions import (
     NegativeBinomialEmission,
 )
 from sal.emissions.bb import beta_binomial_log_pmf, density_table
-from sal.emissions.dense import Order, log_emission
+from sal.emissions.coded import Dense
+from sal.emissions.coded import log_emission as coded_log_emission
 from sal.sim.count_pairs import IndependentCountPair
 from scipy.special import gammaln
 
@@ -75,6 +80,25 @@ def _draws() -> dict[str, np.ndarray]:
 DRAWS = _draws()
 
 
+def log_emission(
+    family: object, observations: np.ndarray, covariate: np.ndarray | None = None
+) -> np.ndarray:
+    """``(K, *batch)`` scores of ``(*batch,)`` or a pair's ``(*batch, 2)`` draws.
+
+    A single channel's covariate carries a trailing singleton, as
+    ``log_density`` takes it; both are flattened into a :class:`Dense`.
+    """
+    single = isinstance(family, NegativeBinomialEmission | BetaBinomialEmission)
+    batch = observations.shape if single else observations.shape[:-1]
+    width = () if single else (2,)
+    dense = Dense(
+        observations.reshape(-1, *width),
+        None if covariate is None else covariate.reshape(-1, *width),
+    )
+    scores = coded_log_emission(family, dense)  # type: ignore[arg-type]
+    return scores.reshape(scores.shape[0], *batch)
+
+
 def _density(
     family: object, observations: np.ndarray, covariate: np.ndarray | None
 ) -> np.ndarray:
@@ -111,17 +135,13 @@ def _nb_magnitude(counts: np.ndarray, exposure: np.ndarray) -> np.ndarray:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("order", list(Order), ids=str)
-def test_either_order_is_the_density_within_the_bound_of_its_terms(
-    order: Order,
-) -> None:
+def test_the_negative_binomial_is_the_density_within_the_bound_of_its_terms() -> None:
     counts, exposure = DRAWS["totals"], DRAWS["exposure"]
-    got = log_emission(NB, counts, exposure, order=order)
+    got = log_emission(NB, counts, exposure)
     want = _density(NB, counts, exposure)
 
     assert got.shape == (3, *SHAPE)
     assert got.flags.c_contiguous
-    assert np.array_equal(got, log_emission(NB, counts, exposure, order=Order.FAMILY))
     observed = exposure[..., 0] > 0.0
     assert np.array_equal(got[:, ~observed], want[:, ~observed])
     magnitude = _nb_magnitude(counts, exposure)
@@ -130,12 +150,11 @@ def test_either_order_is_the_density_within_the_bound_of_its_terms(
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("order", list(Order), ids=str)
-def test_the_beta_binomial_is_the_numpy_pmf_bitwise(order: Order) -> None:
+def test_the_beta_binomial_is_the_numpy_pmf_bitwise() -> None:
     # Four tabulated terms summed as `beta_binomial_log_pmf` sums them: the
     # same bits, the unobserved successes zero as the family scores them; the
     # family's `log_density` within _DENSITY_TOLERANCE (#1332).
-    got = log_emission(BB, DRAWS["successes"], DRAWS["trials"], order=order)
+    got = log_emission(BB, DRAWS["successes"], DRAWS["trials"])
     trials = DRAWS["trials"][..., 0]
     pmf = beta_binomial_log_pmf(
         DRAWS["successes"],
@@ -162,10 +181,10 @@ def test_without_a_covariate_each_channel_is_its_density_bitwise() -> None:
 
     assert (successes > 40).any()
     assert np.array_equal(
-        log_emission(NB, DRAWS["totals"], order=Order.FAMILY),
+        log_emission(NB, DRAWS["totals"]),
         _density(NB, DRAWS["totals"], None),
     )
-    got = log_emission(BB, successes, order=Order.TABULATED)
+    got = log_emission(BB, successes)
     want = _density(BB, successes, None)
     table = density_table(BB, int(successes.max()) + 1)
     assert np.array_equal(got, np.moveaxis(table[successes.astype(np.int64)], -1, 0))
@@ -190,27 +209,23 @@ def _pairs() -> list[object]:
 @pytest.mark.parametrize(
     "pair", _pairs(), ids=["CountPairEmission", "IndependentCountPair"]
 )
-@pytest.mark.parametrize("order", list(Order), ids=str)
-def test_a_pair_is_its_channels_summed_as_the_family_sums_them(
-    pair: object, order: Order
-) -> None:
+def test_a_pair_is_its_channels_summed_as_the_family_sums_them(pair: object) -> None:
     observations = np.stack([DRAWS["totals"], DRAWS["successes"]], axis=-1)
     covariate = np.concatenate([DRAWS["exposure"], DRAWS["trials"]], axis=-1)
 
-    got = log_emission(pair, observations, covariate, order=order)  # type: ignore[arg-type]
-    channels = log_emission(
-        NB, DRAWS["totals"], DRAWS["exposure"], order=order
-    ) + log_emission(BB, DRAWS["successes"], DRAWS["trials"], order=order)
+    got = log_emission(pair, observations, covariate)  # type: ignore[arg-type]
+    channels = log_emission(NB, DRAWS["totals"], DRAWS["exposure"]) + log_emission(
+        BB, DRAWS["successes"], DRAWS["trials"]
+    )
 
     assert np.array_equal(got, channels)
-    if order is Order.FAMILY:
-        # The negative binomial's _NB_ULPS of its terms' magnitudes plus the
-        # beta-binomial's _DENSITY_TOLERANCE over max(|f|, 1) (#1332, #1335).
-        want = _density(pair, observations, covariate)
-        bound = _NB_ULPS * EPS * np.moveaxis(
-            _nb_magnitude(DRAWS["totals"], DRAWS["exposure"]), -1, 0
-        ) + _DENSITY_TOLERANCE * np.maximum(np.abs(want), 1.0)
-        assert (np.abs(got - want) <= bound).all()
+    # The negative binomial's _NB_ULPS of its terms' magnitudes plus the
+    # beta-binomial's _DENSITY_TOLERANCE over max(|f|, 1) (#1332, #1335).
+    want = _density(pair, observations, covariate)
+    bound = _NB_ULPS * EPS * np.moveaxis(
+        _nb_magnitude(DRAWS["totals"], DRAWS["exposure"]), -1, 0
+    ) + _DENSITY_TOLERANCE * np.maximum(np.abs(want), 1.0)
+    assert (np.abs(got - want) <= bound).all()
 
 
 @pytest.mark.smoke
@@ -219,10 +234,10 @@ def test_what_it_does_not_score_is_refused() -> None:
     counts = DRAWS["totals"]
 
     with pytest.raises(TypeError, match="joint pair"):
-        log_emission(joint, np.zeros((4, 2)), order=Order.FAMILY)
+        log_emission(joint, np.zeros((4, 2)))
     with pytest.raises(ValueError, match="non-negative integer"):
-        log_emission(NB, counts + 0.5, order=Order.FAMILY)
-    with pytest.raises(ValueError, match="trailing singleton"):
-        log_emission(NB, counts, DRAWS["exposure"][..., 0], order=Order.FAMILY)
+        log_emission(NB, counts + 0.5)
+    with pytest.raises(ValueError, match="shaped as its counts"):
+        coded_log_emission(NB, Dense(counts.reshape(-1), DRAWS["exposure"]))
     with pytest.raises(ValueError, match="finite and non-negative"):
-        log_emission(NB, counts, -DRAWS["exposure"] - 1.0, order=Order.FAMILY)
+        log_emission(NB, counts, -DRAWS["exposure"] - 1.0)
