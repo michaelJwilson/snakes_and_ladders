@@ -207,7 +207,7 @@ pub fn weighted_sum(
     weights: Option<&[f64]>,
 ) -> Result<Vec<f64>, String> {
     let n = index.len();
-    if n_states == 0 || values.len() % n_states != 0 {
+    if n_states == 0 || !values.len().is_multiple_of(n_states) {
         return Err(format!(
             "values hold {} entries, not a multiple of {n_states} states",
             values.len()
