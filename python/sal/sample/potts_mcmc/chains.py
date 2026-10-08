@@ -314,9 +314,9 @@ def sample_potts(
         :data:`~sal.backend.Backend.RUST` the default
         (:func:`sweep_at`, issue #599).
     cluster_backend : Backend
-        Which implementation runs the **Swendsen-Wang** pass; the Wolff move
-        has one and ignores it. A separate argument rather than the one
-        above because the two are not the same decision: the Rust pass draws
+        Which implementation runs the **Swendsen-Wang** pass and the two
+        **Wolff** steps (#1362); Niedermayer has one and ignores it. A
+        separate argument rather than the one above because the two are not the same decision: the Rust pass draws
         the same uniforms in a different order and so returns a chain of the
         same law rather than the same chain (:func:`_cluster_pass_rust`,
         issue #754). :data:`~sal.backend.Backend.RUST` is the default
@@ -791,6 +791,9 @@ def anneal_potts(
         (:func:`_cluster_pass_rust`) and keeps no counter, so its steps leave
         ``trace`` empty (issue #923); :data:`~sal.backend.Backend.PYTHON`
         records every cluster's accept step in ``trace``.
+        For both Wolff moves it runs the step (:func:`_wolff_rust`, #1362),
+        a chain of the same law on a ChaCha8 stream seeded from ``rng``,
+        whose clusters ``trace`` still records.
         For the ghost-spin, label-directed and heat-bath Swendsen-Wang
         passes it merges the bonds (:func:`bond_roots`), on the same roots
         either way, and none keeps a counter (issues #1041, #1142).
@@ -1211,7 +1214,15 @@ class _Lattice:
         # The adjacency as lists, once for every cluster the closure grows (#919);
         # the ghost couplings, fixed by the field, once (#1041).
         one = move in _SINGLE_CLUSTER_MOVES
-        lists = adjacency_lists(offsets, neighbours, couplings) if one else None
+        # The two Wolff moves take `cluster_backend` (#1362); the Rust route
+        # reads the arrays and not the lists.
+        wolff = move in (PottsMove.WOLFF, PottsMove.WOLFF_HEAT_BATH)
+        compiled = wolff and cluster_backend is Backend.RUST
+        lists = (
+            adjacency_lists(offsets, neighbours, couplings)
+            if one and not compiled
+            else None
+        )
         # Read from `sweeps`, where a test replaces it.
         ghost = sweeps.ghost_couplings(rows) if move is PottsMove.GHOST_SPIN else None
         # A single cluster's growth, one signature for the three.
@@ -1220,9 +1231,9 @@ class _Lattice:
                 niedermayer_sweep, threshold=niedermayer_threshold(couplings)
             )
             if move is PottsMove.NIEDERMAYER
-            else wolff_heat_bath_sweep
+            else functools.partial(wolff_heat_bath_sweep, backend=cluster_backend)
             if move is PottsMove.WOLFF_HEAT_BATH
-            else wolff_sweep
+            else functools.partial(wolff_sweep, backend=cluster_backend)
         )
         arrays = (rows, offsets, neighbours, couplings)
         keeps = trace is not None and (

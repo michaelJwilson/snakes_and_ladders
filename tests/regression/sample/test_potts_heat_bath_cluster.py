@@ -158,6 +158,9 @@ def _empirical_row(move: PottsMove, rows: np.ndarray, seed: int) -> np.ndarray:
                 rng,
                 beta=BETA,
                 lists=lists,
+                # The oracle's route, whose `heat_bath_labels` the refutation
+                # below replaces; the Rust route has its own test (#1362).
+                backend=Backend.PYTHON,
             )
         counts[index[tuple(state.tolist())]] += 1
     return counts / DRAWS

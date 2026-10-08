@@ -84,7 +84,8 @@ BEFORE = {
     "release/anneal": "6582386d83d0024b",
     "release/swendsen-wang": "922f0038e98fe6f4",
     "release/wolff": "8628d1e1aca72bda",
-    "release/tempering": "62689b14a52e1547",
+    # Re-pinned by #1362: the ladder's Wolff rungs take the Rust step by default.
+    "release/tempering": "c2fe802f974d5680",
     "release/alpha-expansion": "a5415d349d97d72f",
     "release/alpha-beta-swap": "7d8f0bca122dcb29",
     "release/max-product": "a6c10c7ef9f08414",

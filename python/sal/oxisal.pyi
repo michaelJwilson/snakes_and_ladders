@@ -208,6 +208,22 @@ def swendsen_wang_sweep(
     guard: float,
     first: int,
 ) -> tuple[int, int]: ...
+def wolff_sweeps(
+    state: np.ndarray,
+    field: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    beta: float,
+    heat_bath: bool,
+    root: int,
+    proposed: int,
+    seed: int,
+    members: np.ndarray,
+    sizes: np.ndarray,
+    proposals: np.ndarray,
+    accepts: np.ndarray,
+) -> None: ...
 def class_posteriors(
     totals: np.ndarray,
     successes: np.ndarray | None,
