@@ -58,6 +58,7 @@ import math
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
+from typing import cast
 
 import numpy as np
 import scipy.special.cython_special
@@ -382,13 +383,21 @@ def _digamma_rising_numpy(x: ArrayLike, m: ArrayLike) -> NDArray[np.float64]:
 
 #: ``scipy.special.gammaln``'s own Cephes routine, bound on first use by
 #: :func:`_kernels`: the compiled plain route is the NumPy oracle's ``gammaln``
-#: bit for bit, where ``math.lgamma`` (``libm``) differs in the last places
-#: and took 2.55 ms against 1.82 ms at 25 x 2,829 pairs.
+#: bit for bit, where ``math.lgamma`` (``libm``) differs by up to 6.8e4 ulp
+#: near its zeros and the Lanczos form of ``special::ln_gamma`` by 4.6e5 ulp
+#: and 4.8x the time over 1e-3 to 1e16 (issue #1342). It is bound by the
+#: symbol :data:`_GAMMALN_SYMBOL`, not by a ``ctypes`` pointer: a pointer
+#: is an address fixed into the compiled object, which keeps it out of
+#: ``numba``'s cache, where a symbol is resolved at load in each process.
 _gammaln: Callable[[float], float] = math.lgamma
 
+#: The name :func:`_kernels` registers ``gammaln``'s address under with
+#: ``llvmlite``, and the cached kernels call it by.
+_GAMMALN_SYMBOL = "sal_rising_scipy_gammaln"
 
-def _cython_function(name: str) -> Callable[[float], float]:
-    """A ``double -> double`` function of :mod:`scipy.special.cython_special`, callable from ``njit``."""
+
+def _cython_address(name: str) -> int:
+    """The address of a function of :mod:`scipy.special.cython_special`, read from its capsule."""
     capsule = scipy.special.cython_special.__pyx_capi__[name]
     get_name = ctypes.pythonapi.PyCapsule_GetName
     get_name.restype = ctypes.c_char_p
@@ -396,8 +405,8 @@ def _cython_function(name: str) -> Callable[[float], float]:
     get_pointer = ctypes.pythonapi.PyCapsule_GetPointer
     get_pointer.restype = ctypes.c_void_p
     get_pointer.argtypes = [ctypes.py_object, ctypes.c_char_p]
-    address = get_pointer(capsule, get_name(capsule))
-    return ctypes.CFUNCTYPE(ctypes.c_double, ctypes.c_double)(address)
+    address: int = get_pointer(capsule, get_name(capsule))
+    return address
 
 
 def _series_terms(inverse: float, floor: float) -> int:
@@ -606,24 +615,32 @@ def _kernels() -> tuple[Callable[..., None], Callable[..., None], Callable[..., 
     """:func:`_log_rising_kernel`, :func:`_digamma_rising_kernel` and :func:`_scaled_rising_table_kernel`, compiled on first use (issue #1329).
 
     Compiled here rather than at import, so that importing this module does
-    not import ``numba``: about 0.7 s and 0.2 s in the first call of a
-    process, as the ``ctypes`` pointer to ``gammaln`` keeps the log kernel
-    out of ``numba``'s cache. Both touch no Python object and are
+    not import ``numba``. Each is ``cache=True``: ``gammaln`` is bound by the
+    symbol :data:`_GAMMALN_SYMBOL`, registered here before any kernel is
+    compiled or loaded, so a second process loads the kernels from the
+    on-disk cache rather than recompiling them, 0.97 s for the log kernel
+    before (issue #1342). All touch no Python object and are
     ``nogil=True``. The kernels are the NumPy oracles' arithmetic, one pass
     per element; the plain route is the oracle bit for bit, while the series
     counts its terms per element where the oracle counts them per subset (a
     difference below :data:`_TERM_FLOOR` relative) and rounds in scalars.
     """
-    from numba import njit
+    import llvmlite.binding
+    from numba import njit, types
 
     global _gammaln, _series_count, _series_step  # noqa: PLW0603 - numba reads these as globals at compile time
-    _gammaln = _cython_function("gammaln")
-    _series_count = njit(nogil=True)(_series_terms)
-    _series_step = njit(nogil=True)(_series_route)
+    llvmlite.binding.add_symbol(_GAMMALN_SYMBOL, _cython_address("gammaln"))
+    # A numba type that the kernels call as `float -> float`.
+    _gammaln = cast(
+        Callable[[float], float],
+        types.ExternalFunction(_GAMMALN_SYMBOL, types.float64(types.float64)),
+    )
+    _series_count = njit(nogil=True, cache=True)(_series_terms)
+    _series_step = njit(nogil=True, cache=True)(_series_route)
     return (
-        njit(nogil=True)(_log_rising_kernel),
-        njit(nogil=True)(_digamma_rising_kernel),
-        njit(nogil=True)(_scaled_rising_table_kernel),
+        njit(nogil=True, cache=True)(_log_rising_kernel),
+        njit(nogil=True, cache=True)(_digamma_rising_kernel),
+        njit(nogil=True, cache=True)(_scaled_rising_table_kernel),
     )
 
 

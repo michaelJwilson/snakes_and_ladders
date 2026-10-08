@@ -9,6 +9,13 @@ against ``m = 0`` and the recurrence ``(x)_(m + 1) = (x)_m (x + m)``.
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
 import mpmath  # type: ignore[import-untyped]
 import numpy as np
 import pytest
@@ -229,3 +236,48 @@ def test_the_kernels_keep_the_broadcast_shape() -> None:
     assert log_rising(shape, count).shape == (2, 3)
     assert digamma_rising(shape, count).shape == (2, 3)
     assert log_rising(2.0, 3.0).shape == ()
+
+
+#: Run in a fresh process: each kernel once, then what numba's cache did and
+#: the log kernel's output, as JSON.
+_CACHE_PROBE = """
+import json
+import numpy as np
+import sal.emissions.rising as rising
+x = np.geomspace(1e-3, 1e16, 64)
+m = np.arange(8.0)
+out = rising.log_rising(x[:, None], m[None, :])
+rising.digamma_rising(x[:, None], m[None, :])
+rising.scaled_rising_table(x, m)
+kernels = rising._kernels()
+print(json.dumps({
+    "hits": sum(sum(k.stats.cache_hits.values()) for k in kernels),
+    "misses": sum(sum(k.stats.cache_misses.values()) for k in kernels),
+    "out": out.ravel().view(np.int64).tolist(),
+}))
+"""
+
+
+@pytest.mark.infra
+def test_a_second_process_loads_the_kernels_from_cache(tmp_path: Path) -> None:
+    # Binding `gammaln` by symbol keeps no address in the compiled object, so
+    # the kernels enter numba's on-disk cache; a `ctypes` pointer recompiled
+    # them in every process, 0.97 s for the log kernel (issue #1342).
+    env = {**os.environ, "NUMBA_CACHE_DIR": str(tmp_path)}
+
+    def probe() -> dict[str, Any]:
+        done = subprocess.run(
+            [sys.executable, "-c", _CACHE_PROBE],
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        result: dict[str, Any] = json.loads(done.stdout.splitlines()[-1])
+        return result
+
+    first, second = probe(), probe()
+
+    assert first["misses"] == 3
+    assert (second["hits"], second["misses"]) == (3, 0)
+    assert second["out"] == first["out"]

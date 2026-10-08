@@ -757,6 +757,15 @@ beta-binomial and negative binomial tables build through it, unchanged bit for
 bit. The beta-binomial tables at K = 8, extent 2000 take 0.49 ms at `tau = 10`
 and 0.87 ms at 1e12, against 1.20 and 1.68 ms before.
 
+**The rising kernels enter numba's cache**
+([#1342](https://github.com/michaelJwilson/snakes_and_ladders/issues/1342)).
+`rising` binds scipy's Cephes `gammaln` by a registered symbol, not a `ctypes`
+pointer, and compiles its kernels `cache=True`. A second process loads
+`log_rising` in 6.8 to 7.6 ms after numba's own 0.21 to 0.28 s start, against
+0.57 s compiling; the kernels stay bitwise to the scipy route, against
+`math.lgamma` at 6.8e4 ulp and the Lanczos `ln_gamma` at 4.6e5 ulp. Checked in
+`tests/regression/test_emissions_rising_numpy.py`.
+
 **One negative-binomial construction from scaled rising factorials**
 ([#1335](https://github.com/michaelJwilson/snakes_and_ladders/issues/1335)).
 `nb.exposure_table` holds `T = S(r, y) - lgamma(y + 1)` and every route
