@@ -848,6 +848,9 @@ whether or not it has members yet.
 .. automodule:: sal.qa.hmc_warmup
    :members:
 
+.. automodule:: sal.qa.temperature_scale
+   :members:
+
 .. automodule:: sal.qa.potts_schedule
    :members:
 
