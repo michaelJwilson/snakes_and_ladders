@@ -22,6 +22,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 
+use crate::count_mixture::compensated_prefix;
 use crate::coupled::{borrowed, exposure_term, trial_term};
 use crate::dense_emission::{log_emission_into, ExposureOrder, SuccessChannel, TotalChannel};
 
@@ -313,6 +314,414 @@ pub fn coded_weighted_sum<'py>(
     Ok(PyArray1::from_vec(py, out))
 }
 
+/// Observations per tile of the partials' parallel pass, per state.
+const PARTIAL_TILE: usize = 4096;
+
+/// `D(x, m) = digamma(x + m) - digamma(x) = sum_{j < m} 1 / (x + j)` for each
+/// `x` of `shapes`, read at each of `points`: `[k * points.len() + u]`.
+///
+/// The sum is `count_mixture`'s [`compensated_prefix`], the one `Rising`'s
+/// reciprocal table is, walked once per state up to the largest point and
+/// read at the points only, so a table holds one entry per distinct count.
+fn digamma_rising_at(shapes: &[f64], points: &[u32]) -> Vec<f64> {
+    let width = points.len();
+    let extent = points.iter().copied().max().unwrap_or(0) as usize;
+    let mut out = vec![0.0; shapes.len() * width];
+    if width == 0 {
+        return out;
+    }
+    out.par_chunks_mut(width)
+        .zip(shapes.par_iter())
+        .for_each(|(row, &x)| {
+            let prefix = compensated_prefix(extent, |j| 1.0 / (x + j as f64));
+            for (value, &m) in row.iter_mut().zip(points) {
+                *value = prefix[m as usize];
+            }
+        });
+    out
+}
+
+/// `D(x, m)` for `m` in `0..=extent`, state-major: `[k * (extent + 1) + m]`.
+fn digamma_rising_dense(shapes: &[f64], extent: usize) -> Vec<f64> {
+    let width = extent + 1;
+    let mut out = vec![0.0; shapes.len() * width];
+    out.par_chunks_mut(width)
+        .zip(shapes.par_iter())
+        .for_each(|(row, &x)| {
+            row.copy_from_slice(&compensated_prefix(extent, |j| 1.0 / (x + j as f64)));
+        });
+    out
+}
+
+/// A state-major `(K, n)` output split into `(state, first observation, tile)`.
+fn tiles(out: &mut [f64], n: usize) -> Vec<(usize, usize, &mut [f64])> {
+    out.chunks_mut(n)
+        .enumerate()
+        .flat_map(|(k, row)| {
+            row.chunks_mut(PARTIAL_TILE)
+                .enumerate()
+                .map(move |(t, tile)| (k, t * PARTIAL_TILE, tile))
+        })
+        .collect()
+}
+
+/// The negative-binomial channel of the partials.
+pub struct NbPartials<'a> {
+    /// Distinct totals, one per row.
+    pub totals: &'a [u32],
+    /// `N` rows into `totals`, `-1` unobserved.
+    pub rows: &'a [i32],
+    /// `N` exposures `c`, 1 where absent; `c = 0` is unobserved.
+    pub exposure: Option<&'a [f64]>,
+    /// `N` shift factors `exp(shift[label])`, where shifted.
+    pub factor: Option<&'a [f64]>,
+    /// `K` dispersions `r`; `inf` is the Poisson.
+    pub dispersion: &'a [f64],
+    /// `K` means `mu` at unit exposure.
+    pub mean: &'a [f64],
+}
+
+/// `d/dr`, `d/dmu` and, given `shift`, `d/dshift` of the NB log pmf, `(K, N)` state-major.
+///
+/// Per observation, in `sal.emissions.coded._partials_numpy`'s order:
+/// `lam = mu (c f)`, `d/dr = (D(r, y) - log1p(lam / r)) + (lam - y) / (r + lam)`,
+/// `d/dmu = (r (y - lam)) / (mu (r + lam))`, `d/ds = (r (y - lam)) / (r + lam)`;
+/// at `r = inf`, `0`, `y / mu - c f` and `y - lam`. An unobserved observation is 0.
+///
+/// # Errors
+/// A length that disagrees, or a row past the totals.
+pub fn nb_partials_into(
+    channel: &NbPartials<'_>,
+    dispersion: &mut [f64],
+    mean: &mut [f64],
+    shift: Option<&mut [f64]>,
+) -> Result<(), String> {
+    let k = channel.dispersion.len();
+    let n = channel.rows.len();
+    if channel.mean.len() != k {
+        return Err(format!("{k} dispersions but {} means", channel.mean.len()));
+    }
+    if [channel.exposure, channel.factor]
+        .iter()
+        .flatten()
+        .any(|v| v.len() != n)
+        || dispersion.len() != k * n
+        || mean.len() != k * n
+        || shift.as_ref().is_some_and(|s| s.len() != k * n)
+    {
+        return Err(format!(
+            "the first channel's arrays are N = {n} or K * N = {}",
+            k * n
+        ));
+    }
+    let width = channel.totals.len();
+    if let Some(bad) = channel
+        .rows
+        .iter()
+        .find(|&&u| u >= 0 && u as usize >= width)
+    {
+        return Err(format!("row {bad} is past the {width} totals"));
+    }
+    if n == 0 {
+        return Ok(());
+    }
+    let shapes: Vec<f64> = channel
+        .dispersion
+        .iter()
+        .map(|&r| if r.is_finite() { r } else { 1.0 })
+        .collect();
+    let rising = digamma_rising_at(&shapes, channel.totals);
+    let third: Vec<Option<&mut [f64]>> = match shift {
+        Some(s) => tiles(s, n).into_iter().map(|(_, _, t)| Some(t)).collect(),
+        None => std::iter::repeat_with(|| None)
+            .take(k * n.div_ceil(PARTIAL_TILE))
+            .collect(),
+    };
+    tiles(dispersion, n)
+        .into_par_iter()
+        .zip(tiles(mean, n).into_par_iter())
+        .zip(third.into_par_iter())
+        .for_each(|(((state, from, dr), (_, _, dmu)), mut ds)| {
+            let r = channel.dispersion[state];
+            let mu = channel.mean[state];
+            let finite = r.is_finite();
+            let table = &rising[state * width..(state + 1) * width];
+            for j in 0..dr.len() {
+                let i = from + j;
+                let u = channel.rows[i];
+                let c = channel.exposure.map_or(1.0, |e| e[i]);
+                let (a, b, s) = if u < 0 || c == 0.0 {
+                    (0.0, 0.0, 0.0)
+                } else {
+                    let row = u as usize;
+                    let y = f64::from(channel.totals[row]);
+                    let scale = channel.factor.map_or(c, |f| c * f[i]);
+                    let lam = mu * scale;
+                    if finite {
+                        let numerator = r * (y - lam);
+                        (
+                            (table[row] - (lam / r).ln_1p()) + (lam - y) / (r + lam),
+                            numerator / (mu * (r + lam)),
+                            numerator / (r + lam),
+                        )
+                    } else {
+                        (0.0, y / mu - scale, y - lam)
+                    }
+                };
+                dr[j] = a;
+                dmu[j] = b;
+                if let Some(ds) = ds.as_deref_mut() {
+                    ds[j] = s;
+                }
+            }
+        });
+    Ok(())
+}
+
+/// The beta-binomial channel of the partials.
+pub struct BbPartials<'a> {
+    /// Distinct successes, one per row.
+    pub successes: &'a [u32],
+    /// `N` rows into `successes`, `-1` unobserved.
+    pub rows: &'a [i32],
+    /// `N` trial counts per observation, or `K` per state.
+    pub trials: &'a [u32],
+    /// Whether `trials` is per observation.
+    pub per_observation: bool,
+    /// `K` shapes `a`.
+    pub alpha: &'a [f64],
+    /// `K` shapes `b`.
+    pub beta: &'a [f64],
+    /// `K` rates `p`, where the family is rate/concentration.
+    pub rate: Option<&'a [f64]>,
+}
+
+/// The beta-binomial's partials, `(K, N)` state-major: `d/da` and `d/db`, or,
+/// given `rate`, `d/dp` and `d/dtau`.
+///
+/// Per observation, in `_partials_numpy`'s order: `da = D(a, z) - D(a + b, n)`,
+/// `db = D(b, n - z) - D(a + b, n)`, `d/dp = tau (da - db)`,
+/// `d/dtau = p da + (1 - p) db`; at `tau = inf` (the shapes read as 1),
+/// `z / p - (n - z) / (1 - p)` and `0`. An observation unobserved, with no
+/// trials or past its trials is 0.
+///
+/// # Errors
+/// A length that disagrees, or a row past the successes.
+pub fn bb_partials_into(
+    channel: &BbPartials<'_>,
+    first: &mut [f64],
+    second: &mut [f64],
+) -> Result<(), String> {
+    let k = channel.alpha.len();
+    let n = channel.rows.len();
+    let trial_len = if channel.per_observation { n } else { k };
+    if channel.beta.len() != k
+        || channel.rate.is_some_and(|p| p.len() != k)
+        || channel.trials.len() != trial_len
+        || first.len() != k * n
+        || second.len() != k * n
+    {
+        return Err(format!(
+            "the second channel's parameters are K = {k}, its trials {trial_len} and outputs K * N = {}",
+            k * n
+        ));
+    }
+    let width = channel.successes.len();
+    if let Some(bad) = channel
+        .rows
+        .iter()
+        .find(|&&u| u >= 0 && u as usize >= width)
+    {
+        return Err(format!("row {bad} is past the {width} successes"));
+    }
+    if n == 0 {
+        return Ok(());
+    }
+    let limit: Vec<bool> = channel
+        .alpha
+        .iter()
+        .zip(channel.beta)
+        .map(|(&a, &b)| (a + b).is_infinite())
+        .collect();
+    let safe = |values: &[f64]| -> Vec<f64> {
+        values
+            .iter()
+            .zip(&limit)
+            .map(|(&v, &l)| if l { 1.0 } else { v })
+            .collect()
+    };
+    let (a, b) = (safe(channel.alpha), safe(channel.beta));
+    let ab: Vec<f64> = a.iter().zip(&b).map(|(x, y)| x + y).collect();
+    let extent = channel.trials.iter().copied().max().unwrap_or(0) as usize;
+    let span = extent + 1;
+    let success = digamma_rising_at(&a, channel.successes);
+    let failure = digamma_rising_dense(&b, extent);
+    let held = digamma_rising_dense(&ab, extent);
+    tiles(first, n)
+        .into_par_iter()
+        .zip(tiles(second, n).into_par_iter())
+        .for_each(|((state, from, one), (_, _, two))| {
+            let tau = channel.alpha[state] + channel.beta[state];
+            let p = channel.rate.map(|p| p[state]);
+            for j in 0..one.len() {
+                let i = from + j;
+                let u = channel.rows[i];
+                let trials = if channel.per_observation {
+                    channel.trials[i]
+                } else {
+                    channel.trials[state]
+                };
+                let z = if u < 0 {
+                    None
+                } else {
+                    Some(channel.successes[u as usize])
+                };
+                let (x, y) = match z {
+                    Some(z) if z <= trials && trials > 0 => {
+                        let whole = held[state * span + trials as usize];
+                        let da = success[state * width + u as usize] - whole;
+                        let db = failure[state * span + (trials - z) as usize] - whole;
+                        match p {
+                            None => (da, db),
+                            Some(p) if limit[state] => {
+                                let (zf, nf) = (f64::from(z), f64::from(trials));
+                                (zf / p - (nf - zf) / (1.0 - p), 0.0)
+                            }
+                            Some(p) => (tau * (da - db), p * da + (1.0 - p) * db),
+                        }
+                    }
+                    _ => (0.0, 0.0),
+                };
+                one[j] = x;
+                two[j] = y;
+            }
+        });
+    Ok(())
+}
+
+/// Each parameter's partial of every observation's log-density, written into
+/// the `(K, N)` state-major outputs given: the first channel's into
+/// `out_dispersion`, `out_mean` and `out_shift`, the second's into
+/// `out_first` and `out_second`. Every array crosses once, contiguous and
+/// borrowed; the GIL is released for both channels.
+///
+/// # Errors
+/// `ValueError` naming the first violated precondition.
+#[pyfunction]
+#[pyo3(signature = (total_rows=None, totals=None, exposure=None, factor=None, dispersion=None, mean=None, out_dispersion=None, out_mean=None, out_shift=None, success_rows=None, successes=None, trials=None, per_observation=true, alpha=None, beta=None, rate=None, out_first=None, out_second=None))]
+#[allow(clippy::too_many_arguments)]
+pub fn coded_log_emission_partials(
+    py: Python<'_>,
+    total_rows: Option<PyReadonlyArray1<'_, i32>>,
+    totals: Option<PyReadonlyArray1<'_, u32>>,
+    exposure: Option<PyReadonlyArray1<'_, f64>>,
+    factor: Option<PyReadonlyArray1<'_, f64>>,
+    dispersion: Option<PyReadonlyArray1<'_, f64>>,
+    mean: Option<PyReadonlyArray1<'_, f64>>,
+    out_dispersion: Option<PyReadwriteArray1<'_, f64>>,
+    out_mean: Option<PyReadwriteArray1<'_, f64>>,
+    out_shift: Option<PyReadwriteArray1<'_, f64>>,
+    success_rows: Option<PyReadonlyArray1<'_, i32>>,
+    successes: Option<PyReadonlyArray1<'_, u32>>,
+    trials: Option<PyReadonlyArray1<'_, u32>>,
+    per_observation: bool,
+    alpha: Option<PyReadonlyArray1<'_, f64>>,
+    beta: Option<PyReadonlyArray1<'_, f64>>,
+    rate: Option<PyReadonlyArray1<'_, f64>>,
+    out_first: Option<PyReadwriteArray1<'_, f64>>,
+    out_second: Option<PyReadwriteArray1<'_, f64>>,
+) -> PyResult<()> {
+    fn optional<'a, T: numpy::Element>(
+        array: &'a Option<PyReadonlyArray1<'_, T>>,
+        name: &str,
+    ) -> PyResult<Option<&'a [T]>> {
+        array.as_ref().map(|a| borrowed(a, name)).transpose()
+    }
+    fn writable<'a>(
+        array: &'a mut Option<PyReadwriteArray1<'_, f64>>,
+        name: &str,
+    ) -> PyResult<Option<&'a mut [f64]>> {
+        array
+            .as_mut()
+            .map(|a| {
+                a.as_slice_mut()
+                    .map_err(|_| PyValueError::new_err(format!("{name} must be C-contiguous")))
+            })
+            .transpose()
+    }
+    let (mut out_dispersion, mut out_mean, mut out_shift) = (out_dispersion, out_mean, out_shift);
+    let (mut out_first, mut out_second) = (out_first, out_second);
+    let first = match (
+        optional(&total_rows, "total_rows")?,
+        optional(&totals, "totals")?,
+        optional(&dispersion, "dispersion")?,
+        optional(&mean, "mean")?,
+        writable(&mut out_dispersion, "out_dispersion")?,
+        writable(&mut out_mean, "out_mean")?,
+    ) {
+        (None, None, None, None, None, None) => None,
+        (Some(rows), Some(totals), Some(dispersion), Some(mean), Some(dr), Some(dmu)) => Some((
+            NbPartials {
+                totals,
+                rows,
+                exposure: optional(&exposure, "exposure")?,
+                factor: optional(&factor, "factor")?,
+                dispersion,
+                mean,
+            },
+            dr,
+            dmu,
+            writable(&mut out_shift, "out_shift")?,
+        )),
+        _ => {
+            return Err(PyValueError::new_err(
+                "the first channel takes total_rows, totals, dispersion, mean, out_dispersion and out_mean together",
+            ))
+        }
+    };
+    let second = match (
+        optional(&success_rows, "success_rows")?,
+        optional(&successes, "successes")?,
+        optional(&trials, "trials")?,
+        optional(&alpha, "alpha")?,
+        optional(&beta, "beta")?,
+        writable(&mut out_first, "out_first")?,
+        writable(&mut out_second, "out_second")?,
+    ) {
+        (None, None, None, None, None, None, None) => None,
+        (Some(rows), Some(successes), Some(trials), Some(alpha), Some(beta), Some(one), Some(two)) => {
+            Some((
+                BbPartials {
+                    successes,
+                    rows,
+                    trials,
+                    per_observation,
+                    alpha,
+                    beta,
+                    rate: optional(&rate, "rate")?,
+                },
+                one,
+                two,
+            ))
+        }
+        _ => {
+            return Err(PyValueError::new_err(
+                "the second channel takes success_rows, successes, trials, alpha, beta, out_first and out_second together",
+            ))
+        }
+    };
+    py.detach(|| -> Result<(), String> {
+        if let Some((channel, dr, dmu, ds)) = first {
+            nb_partials_into(&channel, dr, dmu, ds)?;
+        }
+        if let Some((channel, one, two)) = second {
+            bb_partials_into(&channel, one, two)?;
+        }
+        Ok(())
+    })
+    .map_err(PyValueError::new_err)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -401,5 +810,44 @@ mod tests {
             vec![1.0 + 1.0, 4.0 + 2.5]
         );
         assert!(weighted_sum(2, &values, &[3], None).is_err());
+    }
+
+    #[test]
+    fn the_rising_table_is_count_mixtures_reciprocal_bitwise() {
+        let shapes = [0.5, 7.0, 1e8];
+        let points = [0_u32, 3, 40];
+        let at = digamma_rising_at(&shapes, &points);
+        let rising = crate::count_mixture::Rising::new(&shapes, 40);
+        for (k, _) in shapes.iter().enumerate() {
+            for (u, &m) in points.iter().enumerate() {
+                let want = rising.reciprocal[m as usize * shapes.len() + k];
+                assert_eq!(at[k * points.len() + u].to_bits(), want.to_bits());
+            }
+        }
+    }
+
+    #[test]
+    fn the_poisson_limit_and_the_unobserved_take_their_own_partials() {
+        let totals = [0_u32, 4];
+        let rows = [1, -1, 0];
+        let exposure = [0.5, 1.0, 2.0];
+        let channel = NbPartials {
+            totals: &totals,
+            rows: &rows,
+            exposure: Some(&exposure),
+            factor: None,
+            dispersion: &[f64::INFINITY],
+            mean: &[6.0],
+        };
+        let (mut dr, mut dmu) = (vec![9.0; 3], vec![9.0; 3]);
+        nb_partials_into(&channel, &mut dr, &mut dmu, None).unwrap();
+        assert_eq!(dr, [0.0, 0.0, 0.0]);
+        assert_eq!(dmu, [4.0 / 6.0 - 0.5, 0.0, -2.0]);
+        let stray = [2, 0, 0];
+        let channel = NbPartials {
+            rows: &stray,
+            ..channel
+        };
+        assert!(nb_partials_into(&channel, &mut dr, &mut dmu, None).is_err());
     }
 }

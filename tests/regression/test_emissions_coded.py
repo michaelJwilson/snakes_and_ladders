@@ -611,3 +611,84 @@ def test_the_shift_partial_against_mpmath_and_central_differences() -> None:
             np.abs(base[:, mine]), 1.0
         )
         assert error.max() <= _FD_TOLERANCE, (j, error.max())
+
+
+#: Rust partials against the NumPy oracle, over ``max(|f|, 1)`` (#1353).
+_RUST_TOLERANCE = 1e-13
+
+
+def _partial_cases() -> list[tuple[str, Any, np.ndarray, Any, Any, Any]]:
+    """Every family and covariate, a shift, and the Poisson and binomial limits."""
+    limits_nb = NegativeBinomialEmission([np.inf, 1e8, 0.3], [6.0, 50.0, 2.0])
+    limits_rc = RateConcentrationBetaBinomialEmission(
+        [40.0] * 3, [0.3, 0.5, 0.6], [np.inf, 1e16, 1e4]
+    )
+    return [
+        *((name, f, c, v, None, None) for name, f, c, v in CASES),
+        ("nb-shift", NB, DRAWS["totals"], DRAWS["exposure"], LABEL, SHIFT),
+        ("pair-shift", PAIR, *CASES[-1][2:], LABEL, SHIFT),
+        ("limits-nb", limits_nb, DRAWS["totals"], DRAWS["exposure"], None, None),
+        ("limits-rc", limits_rc, DRAWS["successes"], DRAWS["trials"], None, None),
+    ]
+
+
+PARTIAL_CASES = _partial_cases()
+PARTIAL_IDS = [case[0] for case in PARTIAL_CASES]
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("name", PARTIAL_IDS)
+def test_rust_partials_are_the_numpy_oracle(name: str) -> None:
+    """Within 1e-13 ``max(|f|, 1)``; ``mean`` and ``shift`` bitwise, the order matching."""
+    from sal.emissions.coded import _partials_numpy, log_emission_partials
+
+    _, family, counts, covariate, label, shift = PARTIAL_CASES[PARTIAL_IDS.index(name)]
+    coded = encode(counts, covariate, label=label)
+    got = log_emission_partials(family, coded, shift=shift)
+    want = _partials_numpy(family, coded, shift=shift)
+    assert list(got) == list(want)
+    for parameter, value in got.items():
+        assert value.shape == want[parameter].shape
+        assert value.flags.c_contiguous
+        scale = np.maximum(np.abs(want[parameter]), 1.0)
+        assert (np.abs(value - want[parameter]) / scale).max() <= _RUST_TOLERANCE
+        if parameter in ("mean", "shift"):
+            assert np.array_equal(_bits(value), _bits(want[parameter]))
+
+
+@pytest.mark.oracle
+def test_the_compensated_rising_is_numpy_digamma_rising() -> None:
+    """At ``z = n``, ``d/dbeta = -D(a + b, n)`` exactly: the Rust table against NumPy's."""
+    from sal.emissions.coded import log_emission_partials
+    from sal.emissions.rising import digamma_rising
+
+    shapes = np.array([1e-3, 0.5, 7.0, 99.9, 1e4, 1e8, 1e16])
+    n = np.arange(1, 1001, dtype=np.float64)
+    family = BetaBinomialEmission([1.0] * shapes.size, shapes / 2, shapes / 2)
+    got = -log_emission_partials(family, encode(n, n))["beta"]
+    want = digamma_rising(shapes[:, None], n[None, :])
+    assert (np.abs(got - want) / np.abs(want)).max() <= 1e-14
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("name", ["nb-shift", "pair-covariate", "rc-trials"])
+def test_the_partials_sum_is_the_sequential_sum(name: str) -> None:
+    """Bitwise the same-order ``cumsum``; within ``n * eps * sum |terms|`` of the pairwise sum."""
+    from sal.emissions.coded import log_emission_partials, log_emission_partials_sum
+
+    _, family, counts, covariate, label, shift = PARTIAL_CASES[PARTIAL_IDS.index(name)]
+    coded = encode(counts, covariate, label=label)
+    partials = log_emission_partials(family, coded, shift=shift)
+    n, seen = coded.inverse.size, coded.inverse >= 0
+    gen = np.random.default_rng(1353)
+    for weights in (None, gen.random(n), gen.random((family.n_states, n))):
+        got = log_emission_partials_sum(family, coded, weights, shift=shift)
+        assert list(got) == list(partials)
+        w = np.ones(n) if weights is None else weights
+        for parameter, value in partials.items():
+            terms = np.where(seen, np.broadcast_to(w, value.shape) * value, 0.0)
+            pairwise = terms.sum(axis=1)
+            bound = n * np.finfo(np.float64).eps * np.abs(terms).sum(axis=1)
+            assert np.all(np.abs(got[parameter] - pairwise) <= bound)
+            ordered = np.cumsum(terms[:, seen], axis=1)[:, -1]
+            assert np.array_equal(_bits(got[parameter]), _bits(ordered))

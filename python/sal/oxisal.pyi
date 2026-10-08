@@ -537,6 +537,26 @@ def count_mixture_value_and_gradient(
     grad_alpha: np.ndarray | None = None,
     grad_beta: np.ndarray | None = None,
 ) -> float: ...
+def coded_log_emission_partials(
+    total_rows: np.ndarray | None = None,
+    totals: np.ndarray | None = None,
+    exposure: np.ndarray | None = None,
+    factor: np.ndarray | None = None,
+    dispersion: np.ndarray | None = None,
+    mean: np.ndarray | None = None,
+    out_dispersion: np.ndarray | None = None,
+    out_mean: np.ndarray | None = None,
+    out_shift: np.ndarray | None = None,
+    success_rows: np.ndarray | None = None,
+    successes: np.ndarray | None = None,
+    trials: np.ndarray | None = None,
+    per_observation: bool = True,
+    alpha: np.ndarray | None = None,
+    beta: np.ndarray | None = None,
+    rate: np.ndarray | None = None,
+    out_first: np.ndarray | None = None,
+    out_second: np.ndarray | None = None,
+) -> None: ...
 def coded_weighted_sum(
     n_states: int,
     values: np.ndarray,
