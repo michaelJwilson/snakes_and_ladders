@@ -3204,6 +3204,16 @@ backwards and costs stability rather than buying it. The order is a property of
 the method; the cost is a property of this problem, and only the second decides
 adoption.
 
+**Niedermayer does not mix under a strong per-site field**
+([#1314](https://github.com/michaelJwilson/snakes_and_ladders/issues/1314)). On a
+64 x 64 periodic lattice, q = 3, field N(0, 1) per (site, label), at 1.5 beta_c
+from the ordered start, the cluster holds 4,070 to 4,084 of 4,096 sites, so the
+transposition moves a field sum of order sigma sqrt(N); 0.0% to 0.3% of 320 moves
+are accepted over three seeds, with occupancy (0, 0, 1) against Glauber's
+(0.299, 0.313, 0.388). From a Glauber-equilibrated start the clusters hold 485 to
+503 sites and 0.3% to 3.0% are accepted. The 2 x 3 law passes (p = 0.133), so the
+move is exact and stays; the limit is the instance's.
+
 **A frozen Potts chain ends `NOT_MIXING`**
 ([#1316](https://github.com/michaelJwilson/snakes_and_ladders/issues/1316), Part
 A). On #1314's 64 x 64 instance the ordered Niedermayer chain accepts 1 of 320

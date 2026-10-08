@@ -659,7 +659,9 @@ def step_visits(move: PottsMove, graph: PottsGraph, cluster_sites: int = 0) -> i
     the budget comparable across move sets (issue #551). The gradient-informed
     sets pay ``n_nodes`` sweeps' reads a step, the ghost-spin pass one ghost
     bond per site beside the edges, and a single-cluster step reads each of
-    its ``cluster_sites`` members' neighbours and writes the members.
+    its ``cluster_sites`` members' neighbours and writes the members. A step
+    of a move sequence is charged the sum over its moves, so a composed step
+    pays both sweeps (issue #1323).
 
     Parameters
     ----------
