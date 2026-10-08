@@ -14,6 +14,15 @@ hardware, per `DEV.md`'s "No CI Profiling" rule::
 
     python tests/benchmarks/profile_hotpaths.py --tier enumerable
     python tests/benchmarks/profile_hotpaths.py --tier mid --module likelihood
+    python tests/benchmarks/profile_hotpaths.py --tier mid --module anneal
+
+``--module anneal`` (issue #1390) runs the Potts anneal and the HMC anneal on
+the `potts_reference` and `count_hmm_reference` fixtures, ``ci`` at
+``enumerable`` and ``stress`` at ``mid``, and prints beside the ranking each
+run's wall per stage, its cost per site visit or gradient, the compiled
+kernel's share of the profiled run, and the wall's scaling over the
+`potts_reference` variants at 3e3, 1e4 and 1e5 sites and the HMM at those
+positions.
 
 Each section prints the top five functions by self time with the fraction of
 the run each carries; a loop under 10% of its run is recorded and not ported
@@ -32,7 +41,9 @@ boundary that may hold one.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import sys
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -44,6 +55,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "infra"))
 from profile_harness import format_table, self_time_table
 from sal.backend import Backend
 from sal.cost import Cost
+from sal.emissions import CountPairEmission
 from sal.learn.policy import LinearPolicy
 from sal.learn.potts import PottsEnvironment
 from sal.learn.ranking import fixed_length_target, tree_examples
@@ -65,17 +77,23 @@ from sal.likelihood.turbo import decode_turbo, noise_scale, split_streams
 from sal.numerics import sample_rows
 from sal.opt.budget import Budget, Outcome, compare
 from sal.opt.fit import fit
-from sal.opt.hmm import forward_log_likelihood_from_density
+from sal.opt.hmm import EmissionHmmObjective, forward_log_likelihood_from_density
 from sal.opt.potts import PottsObjective
+from sal.opt.starts import polish_by_baum_welch
+from sal.ragged import Ragged
 from sal.sample import hmc
 from sal.sample.gibbs import sample_factor_graph
 from sal.sample.potts_keyed import SwendsenWangMove
-from sal.sample.potts_mcmc import PottsMove, sample_potts
+from sal.sample.potts_mcmc import PottsMove, Recolour, anneal_potts, sample_potts
+from sal.sample.schedule import InverseLinearTempSchedule, Polish
+from sal.sample.tune import Criterion, StepTuning
 from sal.search.alpha_expansion import alpha_expansion
+from sal.search.ground_state import ANNEAL_SCHEDULE
 from sal.search.infer import infer
 from sal.search.maxflow import ising_ground_state
 from sal.sim import fixtures
 from sal.sim.convolutional import turbo_code
+from sal.sim.count_hmm_cell import CountHmmReferenceParams
 from sal.sim.factor_graph import from_hmm, from_potts
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.ldpc import (
@@ -85,6 +103,7 @@ from sal.sim.ldpc import (
 )
 from sal.sim.potts import critical_coupling, energies
 from sal.sim.potts_chain import PottsParams, simulate_chains
+from sal.sim.potts_cell import PottsReferenceParams
 from sal.sim.simulate import simulate_alignment
 from sal.sim.topology import (
     MoveSet,
@@ -544,6 +563,149 @@ def learn_sections(mid: bool) -> list[Section]:
     ]
 
 
+#: The Potts anneal's sweeps: the downstream reference's exponential 2.0 to
+#: 0.05 (`search.ground_state.ANNEAL_SCHEDULE`) over this many sweeps' visits,
+#: Swendsen-Wang with a heat-bath recolour, polished by ICM and the merge.
+ANNEAL_SWEEPS = 200
+#: The HMC anneal: proposals, leapfrog steps each, the step pilot's gradients,
+#: its candidate steps, ``T0`` over ``|log L| / n``, and Baum-Welch iterations
+#: of the polish from its best.
+HMC_PROPOSALS, HMC_STEPS, HMC_PILOT = 50, 4, 80
+HMC_STEP_GRID = (1e-3, 3e-3, 1e-2)
+HMC_T0 = 10.0
+HMC_POLISH = 50
+#: The sizes the scaling is read at.
+SCALING = (3_000, 10_000, 100_000)
+
+
+def _potts_run(params: PottsReferenceParams) -> Callable[[], object]:
+    """One anneal of the drawn Potts cell, as a profiled closure."""
+    cell = params.instance()
+    visits = cell.graph.n_nodes + 2 * len(cell.graph.edges)
+
+    def run() -> object:
+        return anneal_potts(
+            cell.graph,
+            cell.field,
+            ANNEAL_SCHEDULE.build(ANNEAL_SWEEPS),
+            np.random.default_rng(0),
+            move=PottsMove.SWENDSEN_WANG,
+            recolour=Recolour.HEAT_BATH,
+            budget=Budget(Cost.SITE_VISITS, ANNEAL_SWEEPS * visits),
+            polish=Polish.ICM_MERGE,
+        )
+
+    return run
+
+
+def _hmm_run(params: CountHmmReferenceParams) -> Callable[[], object]:
+    """One HMC anneal of the drawn count-pair cell from a quantile start, then Baum-Welch."""
+    cell = params.instance()
+    k = params.n_fit_states
+    totals = cell.observations[:, 0] / cell.covariate[:, 0]
+    start = CountPairEmission(
+        np.full(k, 10.0),
+        np.quantile(totals, np.linspace(0.05, 0.95, k)),
+        100.0 * np.linspace(0.3, 0.7, k),
+        100.0 * (1.0 - np.linspace(0.3, 0.7, k)),
+        np.full(k, round(params.trials_mean)),
+        joint=False,
+    )
+    objective = EmissionHmmObjective(
+        Ragged(cell.observations, cell.lengths), start, covariate=cell.covariate
+    )
+    theta = objective.initial()
+    t0 = HMC_T0 * float(objective(theta)) / params.n_positions
+
+    def run() -> object:
+        return hmc.anneal(
+            objective,
+            InverseLinearTempSchedule(t0, 1.0, HMC_PROPOSALS),
+            np.random.default_rng(0),
+            step_size="auto",
+            tuning=StepTuning(
+                Budget(Cost.GRADIENTS, HMC_PILOT),
+                Criterion.LOWEST_ENERGY,
+                HMC_STEP_GRID,
+            ),
+            n_steps=HMC_STEPS,
+            start=theta,
+            polish=polish_by_baum_welch,
+            polish_budget=Budget(Cost.ITERATIONS, HMC_POLISH),
+        )
+
+    return run
+
+
+def _tier(mid: bool) -> str:
+    return "stress" if mid else "ci"
+
+
+def anneal_sections(mid: bool) -> list[Section]:
+    """The two reference cells' anneals, at ``ci`` or ``stress``."""
+    potts: PottsReferenceParams = fixtures.fixture("potts_reference", _tier(mid)).params
+    hmm: CountHmmReferenceParams = fixtures.fixture(
+        "count_hmm_reference", _tier(mid)
+    ).params
+    return [
+        (
+            f"sample.anneal_potts on potts_reference/{_tier(mid)}, "
+            f"{potts.n_nodes} sites, SW + heat bath, {ANNEAL_SWEEPS} sweeps, ICM_MERGE",
+            _potts_run(potts),
+            1,
+        ),
+        (
+            f"sample.hmc.anneal on count_hmm_reference/{_tier(mid)}, "
+            f"{hmm.n_positions} positions, K = {hmm.n_fit_states}, auto step, Baum-Welch",
+            _hmm_run(hmm),
+            1,
+        ),
+    ]
+
+
+def _stages(result: object) -> str:
+    """``name: seconds s, spent`` for each stage of an annealing result."""
+    stages = getattr(result, "stages", ())
+    return "; ".join(
+        f"{stage.name}: {stage.seconds:.3f} s, {stage.spent:,} spent ({stage.seconds / max(stage.spent, 1) * 1e9:.1f} ns each)"
+        for stage in stages
+    )
+
+
+def _compiled_share(fn: Callable[[], object]) -> float:
+    """The share of the profiled run's self time spent inside ``oxisal`` calls."""
+    rows, total = self_time_table(fn, repeats=1, top_n=100_000)
+    return sum(row.seconds for row in rows if "oxisal" in row.function) / total
+
+
+def anneal_report(mid: bool) -> str:
+    """Per-stage wall and cost, the compiled share, and the scaling in n."""
+    lines = []
+    potts = fixtures.fixture("potts_reference", _tier(mid)).params
+    hmm = fixtures.fixture("count_hmm_reference", _tier(mid)).params
+    for name, fn in (("potts", _potts_run(potts)), ("hmm", _hmm_run(hmm))):
+        started = time.perf_counter()
+        result = fn()
+        wall = time.perf_counter() - started
+        lines.append(f"{name}: wall {wall:.3f} s; {_stages(result)}")
+        lines.append(f"{name}: compiled share {_compiled_share(fn):.1%}")
+    stress = fixtures.fixture("potts_reference", "stress").params
+    hmm_stress = fixtures.fixture("count_hmm_reference", "stress").params
+    shapes = {3_000: (50, 60), 10_000: (100, 100), 100_000: (250, 400)}
+    for n in SCALING:
+        cases = {
+            "potts": _potts_run(dataclasses.replace(stress, shape=shapes[n])),
+            "hmm": _hmm_run(dataclasses.replace(hmm_stress, n_positions=n)),
+        }
+        for name, fn in cases.items():
+            started = time.perf_counter()
+            fn()
+            lines.append(
+                f"scaling {name} n={n:,}: {time.perf_counter() - started:.3f} s"
+            )
+    return "\n".join(lines)
+
+
 MODULES: dict[str, Callable[[bool], list[Section]]] = {
     "sim": sim_sections,
     "likelihood": likelihood_sections,
@@ -551,6 +713,7 @@ MODULES: dict[str, Callable[[bool], list[Section]]] = {
     "search": search_sections,
     "codes": codes_sections,
     "learn": learn_sections,
+    "anneal": anneal_sections,
 }
 
 
@@ -568,6 +731,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"=== [{arguments.tier}] {title} (x{repeats}) ===")
             print(format_table(rows, total))
             print()
+        if name == "anneal":
+            print(anneal_report(mid))
     return 0
 
 

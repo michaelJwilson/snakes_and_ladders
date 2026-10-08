@@ -124,7 +124,13 @@ whether or not it has members yet.
 .. automodule:: sal.sim.potts_chain
    :members:
 
+.. automodule:: sal.sim.potts_cell
+   :members:
+
 .. automodule:: sal.sim.hmm
+   :members:
+
+.. automodule:: sal.sim.count_hmm_cell
    :members:
 
 .. automodule:: sal.sim.mixture
@@ -846,6 +852,15 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: sal.qa.potts_clusters
+   :members:
+
+.. automodule:: sal.qa.mixture_hmc_anneal
+   :members:
+
+.. automodule:: sal.qa.count_pair_hmm_anneal
+   :members:
+
+.. automodule:: sal.qa.known_ground_states
    :members:
 
 .. automodule:: sal.scripts

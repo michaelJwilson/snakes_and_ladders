@@ -997,6 +997,21 @@ recursions, exact at every length since the chain is a tree; the release tier
 fits sequences past the enumerable length, refereed by recovery of the
 simulated parameters alone, up to the permutation of hidden states.
 
+\paragraph{A count-pair chain with one dominant level.}
+\label{par:hmm:counts}
+The emission of a position may be a pair: a total $n_t$, negative binomial
+with mean $e_t \mu_{x_t}$ at a known exposure $e_t$, and successes $y_t$,
+beta-binomial over a known trial count $m_t$ at rate $p_{x_t}$, the two
+independent given the level $x_t$. The reference instance draws $L = 8$
+levels, one holding 97\% of the stationary law and two at 1\%, with levels
+equal in one channel and never both, and hands a fit $K = 7$ states, so the
+number of states fitted is not the number generating. The chain is reversible
+with that stationary law and a dominant self-transition of $1 - 10^{-7}$; the
+data are segments, each started from the stationary law. Nothing enumerates
+$8^{8000}$ paths: the referee is the log-likelihood at the generating
+parameters, Equation~\ref{eq:hmm-ragged} at the truth, below which no fit
+ought to land.
+
 \paragraph{Chains of unequal length.}
 \label{par:hmm:ragged}
 A batch need not be rectangular. Writing $y^{(r)}_{1:T_r}$ for the $r$th

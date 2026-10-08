@@ -301,6 +301,8 @@ ORACLES: dict[str, str] = {
     "opt.mixture.optimal_clustering_cost": "independent algorithm",
     "opt.emission_mixture.enumerated_posterior": "enumeration or brute force",
     "sim.canonical.PlantedSpinGlass": "planted truth",
+    "sim.potts_cell.PlantedPotts": "planted truth",
+    "sim.count_hmm_cell.CountHmm": "planted truth",
 }
 
 

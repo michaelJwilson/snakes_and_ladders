@@ -1,0 +1,27 @@
+{
+  "libraries": [
+    "numpy==2.5.2",
+    "scipy==1.18.1",
+    "torch==2.13.0",
+    "python==3.12"
+  ],
+  "measurements": {
+    "generating_log_likelihood": {
+      "algorithm": "the forward log-likelihood of the drawn pairs at the generating initial, transition and emission parameters",
+      "budget": {
+        "levels": 8,
+        "positions": 1000,
+        "segment_length": 20
+      },
+      "rtol": 1e-12,
+      "seed": 1390,
+      "value": -7634.522861409821
+    }
+  },
+  "modules": [
+    "sal.opt.hmm",
+    "sal.sim.count_hmm_cell"
+  ],
+  "problem": "count_hmm_reference",
+  "tier": "ci"
+}
