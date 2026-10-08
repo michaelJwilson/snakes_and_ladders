@@ -314,7 +314,8 @@ def test_a_swap_of_a_label_with_itself_is_refused() -> None:
 @pytest.mark.oracle
 def test_the_rust_sweep_runs_the_per_site_field_and_matches_the_oracle() -> None:
     # The kernel once refused the per-site field (#571); it now reproduces the
-    # Python sweep on the same stream.
+    # Python sweep on the same stream. Both runs take the Python loop, so only
+    # the sweep kernel differs: the Rust loop draws its own stream (#1368).
     rung = _rung(CI, 3)
     assert not bool(np.all(rung.field == rung.field[0])), (
         "this fixture is the per-site case; a shared field tests nothing here"
@@ -327,6 +328,7 @@ def test_the_rust_sweep_runs_the_per_site_field_and_matches_the_oracle() -> None
             ExponentialTempSchedule(2.0, 0.05, 8),
             np.random.default_rng(1),
             backend=backend,
+            loop_backend=Backend.PYTHON,
         )
         for backend in (Backend.PYTHON, Backend.RUST)
     ]
