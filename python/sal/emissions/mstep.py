@@ -18,6 +18,7 @@ import numpy as np
 import torch
 
 from sal.backend import Backend
+from sal.emissions.rising import digamma_rising
 
 #: How far below :func:`identifiable_dispersion_bound` the dispersion solve's
 #: bracket reaches. Nine decades: the score diverges to ``+inf`` as ``r -> 0``,
@@ -69,17 +70,14 @@ def _beta_binomial_rate_score(
     (:class:`CountPairEmission`'s joint form); every term broadcasts either
     way.
     """
-    alpha = torch.tensor(rate * concentration, dtype=values.dtype)
-    beta = torch.tensor((1.0 - rate) * concentration, dtype=values.dtype)
+    successes, failures, weight = _score_arrays(values, weights, trials)
+    alpha = rate * concentration
+    beta = (1.0 - rate) * concentration
+    # ``digamma(z + a) - digamma(a)`` as ``digamma_rising``: the raw difference
+    # cancels to eps digamma(a) at large concentration (issue #1335).
     return float(
         (
-            weights
-            * (
-                torch.digamma(values + alpha)
-                - torch.digamma(alpha)
-                - torch.digamma(trials - values + beta)
-                + torch.digamma(beta)
-            )
+            weight * (digamma_rising(alpha, successes) - digamma_rising(beta, failures))
         ).sum()
     )
 
@@ -92,23 +90,33 @@ def _beta_binomial_concentration_score(
     concentration: float,
 ) -> float:
     """Score in the concentration ``M = a + b`` at fixed mean rate."""
-    total = torch.tensor(concentration, dtype=values.dtype)
-    alpha = torch.tensor(rate * concentration, dtype=values.dtype)
-    beta = torch.tensor((1.0 - rate) * concentration, dtype=values.dtype)
+    successes, failures, weight = _score_arrays(values, weights, trials)
+    alpha = rate * concentration
+    beta = (1.0 - rate) * concentration
     return float(
         (
-            weights
+            weight
             * (
-                rate * (torch.digamma(values + alpha) - torch.digamma(alpha))
-                + (1.0 - rate)
-                * (torch.digamma(trials - values + beta) - torch.digamma(beta))
-                - (
-                    torch.digamma(torch.as_tensor(trials, dtype=values.dtype) + total)
-                    - torch.digamma(total)
-                )
+                rate * digamma_rising(alpha, successes)
+                + (1.0 - rate) * digamma_rising(beta, failures)
+                - digamma_rising(concentration, successes + failures)
             )
         ).sum()
     )
+
+
+def _score_arrays(
+    values: torch.Tensor, weights: torch.Tensor, trials: float | torch.Tensor
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """The successes, failures and weights as NumPy arrays, broadcast; no derivative is taken."""
+    successes = values.detach().numpy().astype(np.float64, copy=False)
+    total = (
+        trials.detach().numpy().astype(np.float64, copy=False)
+        if isinstance(trials, torch.Tensor)
+        else np.float64(trials)
+    )
+    weight = weights.detach().numpy().astype(np.float64, copy=False)
+    return successes, total - successes, weight
 
 
 def _rate_score_at(

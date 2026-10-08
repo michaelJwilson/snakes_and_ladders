@@ -37,9 +37,10 @@ const TILE: usize = 4096;
 /// The order the negative binomial's exposure term is completed in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExposureOrder {
-    /// `A + r ln(r / t) + y ln(mu c / t)`, the family's own: two `ln` a score.
+    /// Read as [`ExposureOrder::Tabulated`]: one order on every route since
+    /// issue #1335, `sal.emissions.nb`'s.
     Family,
-    /// `B + y ln c - (y + r) ln t`, the coupled kernel's: one `ln` a score.
+    /// `(T + y ln(lambda / (1 + q))) - r ln_1p(q)`, [`ExposureTerm`]'s order.
     Tabulated,
 }
 
@@ -48,8 +49,7 @@ pub struct TotalChannel<'a> {
     /// `N` counts.
     pub counts: &'a [u32],
     /// `extent * K`, row `y` the count `y`: the density itself without an
-    /// exposure, `A` with one in [`ExposureOrder::Family`], `B` in
-    /// [`ExposureOrder::Tabulated`].
+    /// exposure, `T = S(r, y) - lgamma(y + 1)` with one, in either order.
     pub table: &'a [f64],
     /// The exposure per observation and the family's `r` and `mu`, where it
     /// carries one.
@@ -153,12 +153,8 @@ fn total_scores(channel: &TotalChannel<'_>, i: usize, out: &mut [f64]) {
     let row = &channel.table[count as usize * n_states..][..n_states];
     match (&channel.exposure, channel.order) {
         (None, _) => out.copy_from_slice(row),
-        (Some(term), ExposureOrder::Tabulated) => {
-            term.score_into(row, count, term.exposure[i], 0, out);
-        }
-        (Some(term), ExposureOrder::Family) => {
-            term.score_family_into(row, count, term.exposure[i], 0, out);
-        }
+        // One order on every route (issue #1335); `order` is read by no arm.
+        (Some(term), _) => term.score_into(row, count, term.exposure[i], 0, out),
     }
 }
 
@@ -236,7 +232,7 @@ pub fn log_emission_into(
 /// `dispersion` and `mean`, given together, its exposure; `family_order`
 /// says which order that term is completed in. `successes` and
 /// `success_table` name the second, and `trials`, `failure_table`,
-/// `trial_table`, `log_factorial` and `log_beta`, given together, its trial
+/// `trial_table`, `log_factorial` and `log_rate`, given together, its trial
 /// count, as `class_posteriors` takes them. Every array crosses once,
 /// contiguous and borrowed; the GIL is released for the whole pass.
 ///
@@ -246,7 +242,7 @@ pub fn log_emission_into(
 /// # Errors
 /// `ValueError` naming the first violated precondition.
 #[pyfunction]
-#[pyo3(signature = (n_states, family_order, out, totals=None, total_table=None, exposure=None, dispersion=None, mean=None, successes=None, success_table=None, trials=None, failure_table=None, trial_table=None, log_factorial=None, log_beta=None))]
+#[pyo3(signature = (n_states, family_order, out, totals=None, total_table=None, exposure=None, dispersion=None, mean=None, successes=None, success_table=None, trials=None, failure_table=None, trial_table=None, log_factorial=None, log_rate=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn dense_log_emission(
     py: Python<'_>,
@@ -264,7 +260,7 @@ pub fn dense_log_emission(
     failure_table: Option<PyReadonlyArray1<'_, f64>>,
     trial_table: Option<PyReadonlyArray1<'_, f64>>,
     log_factorial: Option<PyReadonlyArray1<'_, f64>>,
-    log_beta: Option<PyReadonlyArray1<'_, f64>>,
+    log_rate: Option<PyReadonlyArray1<'_, f64>>,
 ) -> PyResult<()> {
     let total = match (&totals, &total_table) {
         (None, None) => None,
@@ -294,7 +290,7 @@ pub fn dense_log_emission(
                 &failure_table,
                 &trial_table,
                 &log_factorial,
-                &log_beta,
+                &log_rate,
             )?,
         }),
         _ => {

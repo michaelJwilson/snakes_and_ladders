@@ -45,15 +45,13 @@
 //! Under a per-observation exposure `c` the total's density is a function of
 //! the count and a real number, and a table by count and distinct exposure has
 //! as many rows as there are observations. It splits instead:
-//! `log p(y | m, k, c) = A[y, m, k] + r ln(r / t) + y ln(mu c / t)` with
-//! `t = r + mu c`, `A` the `lgamma` terms the caller tabulates by count through
-//! the family, and the two exposure terms computed here in the pass that
-//! already sums the member scores. The kernel gains `ln` and no special
-//! function, and nothing of size `S x V x M x K` is built. The terms are the
-//! family's own, in its order: written as `y ln c - (y + r) ln t` with
-//! `r ln r + y ln mu` moved into `A`, one `ln` per score fewer, the per-score
-//! difference from the family was 263 ulp at the ci instance, the cancellation
-//! of terms near `y ln mu`; in the family's order it is 2.3 ulp.
+//! `log p(y | m, k, c) = ((T[y, m, k] + y ln(lambda / (1 + q))) - r ln_1p(q))`
+//! with `lambda = mu c`, `q = lambda / r`, `T = S(r, y) - lgamma(y + 1)` the
+//! scaled rising factorial the caller tabulates by count, and the two exposure
+//! terms computed here in the pass that already sums the member scores. The
+//! kernel gains `ln` and `ln_1p` and no special function, and nothing of size
+//! `S x V x M x K` is built. The order is `sal.emissions.nb`'s, the same on
+//! every route; it forms no term of size `r ln r` to cancel (issue #1335).
 //!
 //! **A beta-binomial trial count may be factored too** (issue #1064). Under a
 //! per-observation trial count `n` the second channel's density splits into
@@ -151,11 +149,14 @@ pub struct EmissionTables<'a> {
 
 /// The negative binomial's exposure, factored out of the first channel's table.
 ///
-/// `log p(y | m, k, c) = B[y, m, k] + y ln c - (y + r) ln t`, with
-/// `t = r_mk + mu_mk c` and `B[y, m, k] = lgamma(y + r) - lgamma(r) -
-/// lgamma(y + 1) + r ln r + y ln mu` the first channel's table. A zero exposure marks the count
-/// unobserved and it scores zero under every class and state, as the family
-/// scores it.
+/// `log p(y | m, k, c) = ((T[y, m, k] + y ln(lambda / (1 + q))) - D)`, summed
+/// in that order, with `lambda = mu_mk c`, `q = lambda / r_mk`, `D = r ln_1p(q)`
+/// (`D = lambda` where `q` is zero, the Poisson at `r = inf`) and
+/// `T[y, m, k] = S(r, y) - lgamma(y + 1)` the first channel's table, `S` the
+/// scaled log rising factorial (`sal.emissions.nb`, issue #1335): no term of
+/// size `r ln r` or `y ln r` is formed and cancelled. A zero exposure marks
+/// the count unobserved and it scores zero under every class and state, as
+/// the family scores it.
 #[derive(Clone, Copy)]
 pub struct ExposureTerm<'a> {
     /// `S * V` exposures, position-major, each non-negative.
@@ -166,13 +167,25 @@ pub struct ExposureTerm<'a> {
     pub mean: &'a [f64],
 }
 
+/// One score of [`ExposureTerm`], in its order: `sal.emissions.nb`'s
+/// `negative_binomial_log_pmf` on the same numbers.
+#[inline]
+pub(crate) fn exposure_score(table: f64, y: f64, r: f64, rate: f64) -> f64 {
+    let q = rate / r;
+    let decay = if q == 0.0 { rate } else { r * q.ln_1p() };
+    let rated = if y == 0.0 {
+        0.0
+    } else {
+        y * (rate / (1.0 + q)).ln()
+    };
+    (table + rated) - decay
+}
+
 impl ExposureTerm<'_> {
     /// The first channel's score at one observation, for every state of class `m`.
     ///
-    /// One logarithm per class and state, `ln t`, and `ln c` once per call:
-    /// the form chosen for speed over the family's order of operations, which
-    /// costs two logarithms and two divisions per score and agrees to fewer
-    /// ulp (issue #1064).
+    /// One `ln`, one `ln_1p` and two divisions per class and state, in the
+    /// order [`ExposureTerm`] states (issue #1335).
     #[inline]
     pub(crate) fn score_into(
         &self,
@@ -187,60 +200,14 @@ impl ExposureTerm<'_> {
             return;
         }
         let y = f64::from(count);
-        let y_log_c = y * c.ln();
-        // Pre-sliced rows, walked in three passes: `t`, `ln t`, the score. It
-        // is the same arithmetic in the same order, so bitwise to indexing
-        // `from + k`; the stress kernel's E step measured 0.88 s against
-        // 1.07 s indexed (issue #1064).
         let n = out.len();
         let (dispersion, mean, table) = (
             &self.dispersion[from..][..n],
             &self.mean[from..][..n],
             &table[..n],
         );
-        for ((cell, &r), &mu) in out.iter_mut().zip(dispersion).zip(mean) {
-            *cell = r + c * mu;
-        }
-        for cell in out.iter_mut() {
-            *cell = cell.ln();
-        }
-        for ((cell, &r), &b) in out.iter_mut().zip(dispersion).zip(table) {
-            *cell = b + y_log_c - (y + r) * *cell;
-        }
-    }
-
-    /// The same score in the family's order of operations, `table` the row of `A`.
-    ///
-    /// `A[y] + r ln(r / t) + y ln(mu c / t)`, `t = r + mu c`, `A[y] = lgamma(y +
-    /// r) - lgamma(r) - lgamma(y + 1)` (`sal.emissions.nb.count_log_factor`):
-    /// the operations of `NegativeBinomialEmission.log_density` on the same
-    /// numbers, so each score differs from it by the rounding of the two `ln`
-    /// alone. Two logarithms and two divisions per score where
-    /// [`Self::score_into`] takes one logarithm (issue #1132).
-    #[inline]
-    pub(crate) fn score_family_into(
-        &self,
-        table: &[f64],
-        count: u32,
-        c: f64,
-        from: usize,
-        out: &mut [f64],
-    ) {
-        if c == 0.0 {
-            out.fill(0.0);
-            return;
-        }
-        let y = f64::from(count);
-        let n = out.len();
-        let (dispersion, mean, table) = (
-            &self.dispersion[from..][..n],
-            &self.mean[from..][..n],
-            &table[..n],
-        );
-        for (((cell, &r), &mu), &a) in out.iter_mut().zip(dispersion).zip(mean).zip(table) {
-            let rate = c * mu;
-            let t = r + rate;
-            *cell = (a + r * (r / t).ln()) + y * (rate / t).ln();
+        for (((cell, &r), &mu), &t) in out.iter_mut().zip(dispersion).zip(mean).zip(table) {
+            *cell = exposure_score(t, y, r, c * mu);
         }
     }
 
@@ -274,35 +241,36 @@ impl ExposureTerm<'_> {
 
 /// The beta-binomial's trial count, factored out of the second channel's table.
 ///
-/// `log p(z | m, k, n) = lgamma(n + 1) - lgamma(z + 1) - lgamma(n - z + 1) +
-/// U[z, m, k] + V[n - z, m, k] - W[n, m, k] + lgamma(a + b) - lgamma(a) -
-/// lgamma(b)`, with `U[z] = lgamma(z + a)` the second channel's table, `V[j] =
-/// lgamma(j + b)` and `W[n] = lgamma(n + a + b)`: the family's nine terms, each
-/// a function of one integer or of none. A zero trial count marks the successes
-/// unobserved and they score zero; successes past their trial count score
-/// `-inf`; both as the family scores them.
+/// `log p(z | m, k, n) = ((((log C(n, z) + z log p) + (n - z) log q) +
+/// U[z, m, k]) + V[n - z, m, k]) - W[n, m, k]`, summed in that order, with `U[z] = S(a, z)`
+/// the second channel's table, `V[j] = S(b, j)`, `W[n] = S(a + b, n)`,
+/// `S(x, j) = lgamma(x + j) - lgamma(x) - j log x` the scaled log rising
+/// factorial and `log p`, `log q` the logs of `a / (a + b)` and `b / (a + b)`
+/// (issue #1332): no term of size `n log(a + b)` is formed and cancelled. A
+/// zero trial count marks the successes unobserved and they score zero;
+/// successes past their trial count score `-inf`; both as the family scores
+/// them.
 #[derive(Clone, Copy)]
 pub struct TrialTerm<'a> {
     /// `S * V` trial counts `n`, position-major.
     pub trials: &'a [u32],
-    /// `V[j, m, k] = lgamma(j + b_mk)`, `extent * M * K`.
+    /// `V[j, m, k] = S(b_mk, j)`, `extent * M * K`.
     pub failure: &'a [f64],
-    /// `W[n, m, k] = lgamma(n + a_mk + b_mk)`, `extent * M * K`.
+    /// `W[n, m, k] = S(a_mk + b_mk, n)`, `extent * M * K`.
     pub trial: &'a [f64],
     /// `lgamma(j + 1)`, `extent` entries.
     pub log_factorial: &'a [f64],
-    /// `lgamma(a + b)`, `lgamma(a)` and `lgamma(b)`, each `M * K` row-major, in
-    /// that order.
-    pub log_beta: &'a [f64],
+    /// `log p` then `log q`, each `M * K` row-major.
+    pub log_rate: &'a [f64],
 }
 
 impl TrialTerm<'_> {
     /// The second channel's score at one observation, for `out.len()` columns from `from`.
     ///
     /// `table` is the row of `U` at the successes, already offset by `from`.
-    /// The sum runs in the family's order --- the three state-free terms
-    /// first, then `U`, `V`, `W` and the three `lgamma` of the Beta
-    /// function --- so each score is its `log_density` to the bit.
+    /// The sum runs in the order the type states, that of
+    /// `sal.emissions.bb.beta_binomial_log_pmf`, so each score is that pmf to
+    /// the bit.
     #[inline]
     pub(crate) fn score_into(
         &self,
@@ -329,14 +297,14 @@ impl TrialTerm<'_> {
             &self.failure[(n - z) * block + from..][..len],
             &self.trial[n * block + from..][..len],
         );
-        let (total, alpha, beta) = (
-            &self.log_beta[from..][..len],
-            &self.log_beta[block + from..][..len],
-            &self.log_beta[2 * block + from..][..len],
+        let (log_p, log_q) = (
+            &self.log_rate[from..][..len],
+            &self.log_rate[block + from..][..len],
         );
+        let (hits, misses) = (f64::from(successes), f64::from(trials - successes));
         for i in 0..len {
-            out[i] =
-                (((((free + table[i]) + failure[i]) - trial[i]) + total[i]) - alpha[i]) - beta[i];
+            let binomial = (free + hits * log_p[i]) + misses * log_q[i];
+            out[i] = ((binomial + table[i]) + failure[i]) - trial[i];
         }
     }
 
@@ -350,11 +318,11 @@ impl TrialTerm<'_> {
             ));
         }
         let block = shape.block();
-        if self.log_beta.len() != 3 * block {
+        if self.log_rate.len() != 2 * block {
             return Err(format!(
-                "log_beta has {} entries, expected 3 * M * K = {}",
-                self.log_beta.len(),
-                3 * block
+                "log_rate has {} entries, expected 2 * M * K = {}",
+                self.log_rate.len(),
+                2 * block
             ));
         }
         let largest = self.trials.iter().copied().max().map_or(0, row_index);
@@ -1052,21 +1020,21 @@ pub(crate) fn trial_term<'a>(
     failure_table: &'a Option<PyReadonlyArray1<'_, f64>>,
     trial_table: &'a Option<PyReadonlyArray1<'_, f64>>,
     log_factorial: &'a Option<PyReadonlyArray1<'_, f64>>,
-    log_beta: &'a Option<PyReadonlyArray1<'_, f64>>,
+    log_rate: &'a Option<PyReadonlyArray1<'_, f64>>,
 ) -> PyResult<Option<TrialTerm<'a>>> {
-    match (trials, failure_table, trial_table, log_factorial, log_beta) {
+    match (trials, failure_table, trial_table, log_factorial, log_rate) {
         (None, None, None, None, None) => Ok(None),
-        (Some(trials), Some(failure), Some(trial), Some(log_factorial), Some(log_beta)) => {
+        (Some(trials), Some(failure), Some(trial), Some(log_factorial), Some(log_rate)) => {
             Ok(Some(TrialTerm {
                 trials: borrowed(trials, "trials")?,
                 failure: borrowed(failure, "failure_table")?,
                 trial: borrowed(trial, "trial_table")?,
                 log_factorial: borrowed(log_factorial, "log_factorial")?,
-                log_beta: borrowed(log_beta, "log_beta")?,
+                log_rate: borrowed(log_rate, "log_rate")?,
             }))
         }
         _ => Err(PyValueError::new_err(
-            "a trial term takes trials, failure_table, trial_table, log_factorial and log_beta together",
+            "a trial term takes trials, failure_table, trial_table, log_factorial and log_rate together",
         )),
     }
 }
@@ -1084,7 +1052,7 @@ pub(crate) fn trial_term<'a>(
 ///
 /// `exposure`, `dispersion` and `mean`, given together, are the first
 /// channel's [`ExposureTerm`]; `total_table` is then its table `B`.
-/// `trials`, `failure_table`, `trial_table`, `log_factorial` and `log_beta`,
+/// `trials`, `failure_table`, `trial_table`, `log_factorial` and `log_rate`,
 /// given together, are the second channel's [`TrialTerm`]; `success_table` is
 /// then its table `U`.
 ///
@@ -1096,7 +1064,7 @@ pub(crate) fn trial_term<'a>(
 /// `ValueError` naming the first violated precondition, including a count
 /// past the extent of the table that is indexed by it.
 #[pyfunction]
-#[pyo3(signature = (totals, successes, labels, total_table, success_table, log_initial, log_transition, n_positions, n_nodes, n_classes, n_states, posterior, pairwise, log_evidence, exposure=None, dispersion=None, mean=None, trials=None, failure_table=None, trial_table=None, log_factorial=None, log_beta=None))]
+#[pyo3(signature = (totals, successes, labels, total_table, success_table, log_initial, log_transition, n_positions, n_nodes, n_classes, n_states, posterior, pairwise, log_evidence, exposure=None, dispersion=None, mean=None, trials=None, failure_table=None, trial_table=None, log_factorial=None, log_rate=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn class_posteriors(
     py: Python<'_>,
@@ -1121,7 +1089,7 @@ pub fn class_posteriors(
     failure_table: Option<PyReadonlyArray1<'_, f64>>,
     trial_table: Option<PyReadonlyArray1<'_, f64>>,
     log_factorial: Option<PyReadonlyArray1<'_, f64>>,
-    log_beta: Option<PyReadonlyArray1<'_, f64>>,
+    log_rate: Option<PyReadonlyArray1<'_, f64>>,
 ) -> PyResult<()> {
     let shape = CoupledShape {
         n_positions,
@@ -1170,7 +1138,7 @@ pub fn class_posteriors(
             &failure_table,
             &trial_table,
             &log_factorial,
-            &log_beta,
+            &log_rate,
         )?,
     };
     py.detach(|| {
@@ -1229,7 +1197,7 @@ fn refuse_terms_on_one_channel(factored: bool) -> PyResult<()> {
 /// # Errors
 /// `ValueError` naming the first violated precondition.
 #[pyfunction]
-#[pyo3(signature = (totals, successes, total_table, success_table, weights, n_positions, n_nodes, n_classes, n_states, field, exposure=None, dispersion=None, mean=None, trials=None, failure_table=None, trial_table=None, log_factorial=None, log_beta=None))]
+#[pyo3(signature = (totals, successes, total_table, success_table, weights, n_positions, n_nodes, n_classes, n_states, field, exposure=None, dispersion=None, mean=None, trials=None, failure_table=None, trial_table=None, log_factorial=None, log_rate=None))]
 #[allow(clippy::too_many_arguments)]
 pub fn external_field(
     py: Python<'_>,
@@ -1250,7 +1218,7 @@ pub fn external_field(
     failure_table: Option<PyReadonlyArray1<'_, f64>>,
     trial_table: Option<PyReadonlyArray1<'_, f64>>,
     log_factorial: Option<PyReadonlyArray1<'_, f64>>,
-    log_beta: Option<PyReadonlyArray1<'_, f64>>,
+    log_rate: Option<PyReadonlyArray1<'_, f64>>,
 ) -> PyResult<()> {
     let shape = CoupledShape {
         n_positions,
@@ -1279,7 +1247,7 @@ pub fn external_field(
             &failure_table,
             &trial_table,
             &log_factorial,
-            &log_beta,
+            &log_rate,
         )?,
     };
     py.detach(|| external_field_into(shape, &tables, totals, successes, weights, field))
@@ -1516,7 +1484,7 @@ mod tests {
         assert!(refused.unwrap_err().contains("past the table's extent"));
     }
 
-    /// `A[y] + r ln(r / t) + y ln(mu c / t)` written out for one class and
+    /// `(T[y] + y ln(lambda / (1 + q))) - r ln_1p(q)` written out for one class and
     /// two states, against the kernel's accumulation of it.
     #[test]
     fn an_exposure_term_is_added_to_the_count_table_and_zero_exposure_scores_zero() {
@@ -1543,7 +1511,9 @@ mod tests {
 
         let score = |b: f64, y: f64, c: f64| {
             let r = dispersion[0];
-            b + y * c.ln() - (y + r) * (r + mean[0] * c).ln()
+            let rate = mean[0] * c;
+            let q = rate / r;
+            (b + y * (rate / (1.0 + q)).ln()) - r * q.ln_1p()
         };
         // Vertex 0: count 0 at exposure 0.5, then count 1 at exposure 0,
         // which is unobserved and scores zero.
@@ -1693,15 +1663,15 @@ mod tests {
         let failure: Vec<f64> = (0..8).map(|i| 0.25 * f64::from(i)).collect();
         let trial: Vec<f64> = (0..8).map(|i| 3.0 + 0.125 * f64::from(i)).collect();
         let log_factorial = vec![0.0, 0.0, 2f64.ln(), 6f64.ln()];
-        let log_beta = vec![0.7, 0.9, 0.2, 0.3, 0.4, 0.1];
-        (success, failure, trial, log_factorial, log_beta)
+        let log_rate = vec![-0.7, -0.9, -0.2, -0.3];
+        (success, failure, trial, log_factorial, log_rate)
     }
 
-    /// The trial term's nine terms written out, against the field's
+    /// The trial term's four terms written out, against the field's
     /// accumulation of them; zero trials score zero and successes past their
     /// trials score `-inf`.
     #[test]
-    fn a_trial_term_is_the_nine_terms_in_order() {
+    fn a_trial_term_is_the_four_terms_in_order() {
         let shape = CoupledShape {
             n_positions: 2,
             n_nodes: 2,
@@ -1709,7 +1679,7 @@ mod tests {
             n_states: 2,
         };
         let total = vec![0.0; 2];
-        let (success, failure, trial, log_factorial, log_beta) = trial_tables();
+        let (success, failure, trial, log_factorial, log_rate) = trial_tables();
         let trials = [3u32, 0, 2, 1];
         let tables = EmissionTables {
             total: &total,
@@ -1720,7 +1690,7 @@ mod tests {
                 failure: &failure,
                 trial: &trial,
                 log_factorial: &log_factorial,
-                log_beta: &log_beta,
+                log_rate: &log_rate,
             }),
         };
         let successes = [1u32, 3, 2, 2];
@@ -1731,9 +1701,8 @@ mod tests {
 
         let score = |z: usize, n: usize| {
             let free = (log_factorial[n] - log_factorial[z]) - log_factorial[n - z];
-            (((((free + success[2 * z]) + failure[2 * (n - z)]) - trial[2 * n]) + log_beta[0])
-                - log_beta[2])
-                - log_beta[4]
+            let binomial = (free + z as f64 * log_rate[0]) + (n - z) as f64 * log_rate[2];
+            ((binomial + success[2 * z]) + failure[2 * (n - z)]) - trial[2 * n]
         };
         // Vertex 0: one success in three trials, then two in two.
         assert_eq!(field[0], -(score(1, 3) + score(2, 2)));
@@ -1750,7 +1719,7 @@ mod tests {
     #[test]
     fn a_trial_count_past_the_tables_is_refused() {
         let (shape, total, _) = tiny();
-        let (success, failure, trial, log_factorial, log_beta) = trial_tables();
+        let (success, failure, trial, log_factorial, log_rate) = trial_tables();
         let trials = [4u32, 0, 0, 0];
         let tables = EmissionTables {
             total: &total,
@@ -1761,27 +1730,10 @@ mod tests {
                 failure: &failure,
                 trial: &trial,
                 log_factorial: &log_factorial,
-                log_beta: &log_beta[..4],
+                log_rate: &log_rate,
             }),
         };
         let mut field = vec![0.0; 2];
-        let refused = external_field_into(
-            shape,
-            &tables,
-            &[0u32; 4],
-            &[0u32; 4],
-            &[1.0, 0.0, 1.0, 0.0],
-            &mut field,
-        );
-        assert!(refused.unwrap_err().contains("3 * M * K"));
-
-        let tables = EmissionTables {
-            trials: Some(TrialTerm {
-                log_beta: &log_beta,
-                ..tables.trials.unwrap()
-            }),
-            ..tables
-        };
         let refused = external_field_into(
             shape,
             &tables,

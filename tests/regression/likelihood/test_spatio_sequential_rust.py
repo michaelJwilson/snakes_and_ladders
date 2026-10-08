@@ -16,7 +16,8 @@ import pytest
 import torch
 from sal import oxisal
 from sal.backend import Backend
-from sal.emissions import CategoricalEmission
+from sal.emissions import BetaBinomialEmission, CategoricalEmission
+from sal.emissions.bb import density_table
 from sal.likelihood import spatio_sequential
 from sal.likelihood.spatio_sequential import (
     class_posteriors,
@@ -138,10 +139,21 @@ def test_the_tables_are_the_families_own_log_density() -> None:
         np.testing.assert_array_equal(
             totals[:, m, :], family.total.log_density(counts).numpy()
         )
-        counts = torch.arange(successes.shape[0], dtype=torch.float64)
+        # The beta-binomial's table is the NumPy pmf, `bb.density_table`,
+        # bitwise; torch's density within 1e-13 over max(|f|, 1), the bound
+        # #1332 derives from log C's rounding; measured 1.5e-14.
+        side = family.successes
+        assert isinstance(side, BetaBinomialEmission)
         np.testing.assert_array_equal(
-            successes[:, m, :], family.successes.log_density(counts).numpy()
+            successes[:, m, :], density_table(side, successes.shape[0])
         )
+        counts = torch.arange(successes.shape[0], dtype=torch.float64)
+        want = side.log_density(counts).numpy()
+        finite = np.isfinite(want)
+        got = successes[:, m, :]
+        assert np.array_equal(np.isfinite(got), finite)
+        scale = np.maximum(np.abs(want[finite]), 1.0)
+        assert float((np.abs(got[finite] - want[finite]) / scale).max()) <= 1e-13
 
 
 @pytest.mark.smoke

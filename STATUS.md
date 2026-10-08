@@ -731,6 +731,31 @@ comparison.
 
 **Modules.** The evaluators and the oracle they are pinned to: `likelihood.brute_force`, `likelihood.parsimony`, `likelihood.algebraic`, `likelihood.polar` (successive cancellation and the list, #826), `likelihood.css`, `likelihood.mixture_assignments`, `likelihood.schedule`, `likelihood.spatio_sequential.rust`, and `likelihood.device`, which owns the cross-device tolerance this milestone's claims are stated against. `likelihood.ragged` is the gateway of the ragged path and its oracle, and `likelihood.ragged.rust` the compiled kernel behind it, conserved beside `sandbox.rectangular_hmm` (#666).
 
+**One beta-binomial construction from scaled rising factorials**
+([#1332](https://github.com/michaelJwilson/snakes_and_ladders/issues/1332)).
+`bb.trial_tables` holds `S(x, m) = R(x, m) - m log x` at `a`, `b` and
+`a + b` and the two log rates, with no `lgamma(a + b) - lgamma(a) -
+lgamma(b)`; the dense, coupled and spatio_sequential kernels sum them in one
+stated order. Against `mpmath` at 50 digits the pmf is within 1e-11 nats for
+`tau` from 10 to 1e16 (5e-3 at 1e12 before), 1.4e-14 to 1.6e-14 over
+`max(|f|, 1)` at `n <= 40`, and sums to 1 within 1e-12 over `n <= 100` at
+1e16 (e^132 before). The tables are `bb.beta_binomial_log_pmf` bitwise; torch
+and the Rust count kernel agree within 1e-13, derived from `log C`'s rounding,
+measured 1.1e-14 to 4.6e-14; the trial-free tables read the same pmf. Checked in
+`tests/regression/test_emissions_beta_binomial_rising.py`.
+
+**One negative-binomial construction from scaled rising factorials**
+([#1335](https://github.com/michaelJwilson/snakes_and_ladders/issues/1335)).
+`nb.exposure_table` holds `T = S(r, y) - lgamma(y + 1)` and every route
+completes `(T + y log(lambda / (1 + q))) - r log1p(q)`, `q = lambda / r`, in
+one stated order (Python, `coupled.rs`, `dense_emission.rs`). Against `mpmath`
+at 50 digits, `y < 200`, the pmf is within 1.8e-14 over `max(|f|, 1)` for `r`
+from 10 to 1e16 (raw `lgamma`: 2.2e-3 at 1e12, 25 at 1e16), the Poisson at
+`r = inf`; tables are `nb.negative_binomial_log_pmf` bitwise, Rust within
+7.8e-15. The beta-binomial M step's concentration score via `digamma_rising`:
+1.1e-8 relative at `M = 1e8` (3.7 before). Checked in
+`tests/regression/test_emissions_negative_binomial_rising.py`.
+
 **Polar codes are a row, and the CRC-aided list is built and measured**
 ([#826](https://github.com/michaelJwilson/snakes_and_ladders/issues/826)).
 `sandbox.polar` and `sandbox.polar_decoding` --- 711 lines conserved since #593

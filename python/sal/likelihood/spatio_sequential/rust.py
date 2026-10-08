@@ -31,10 +31,11 @@ density is then a function of the count *and* the exposure or trial count.
 - The negative binomial's exposure is continuous, and a table by count and
   distinct exposure has a row per observation: 2.3 GB per channel at the ci
   instance of ``spatio_sequential_counts_covariate``. It is factored: the
-  table is :func:`~sal.emissions.nb.exposure_table`, ``B_k(y)``, and the
-  kernel adds ``y log c - (y + r) log t``, ``t = r_k + mu_k c``: one
-  logarithm per score, chosen for speed over the family's order of
-  operations, 262.9 ulp relative at that instance rather than 2.3.
+  table is :func:`~sal.emissions.nb.exposure_table`, ``T_k(y) = S(r_k, y) -
+  lgamma(y + 1)``, and the kernel completes it in :mod:`sal.emissions.nb`'s
+  order, ``(T + y log(lambda / (1 + q))) - r log1p(q)``, ``lambda = mu_k c``,
+  ``q = lambda / r_k``: one ``log`` and one ``log1p`` per score, no term of
+  size ``r log r`` cancelled (issue #1335).
 - The beta-binomial's trial count is an integer, and its rows take one of
   three exact layouts, :data:`CovariateRows`, bitwise to one another.
   ``range`` and ``distinct`` tabulate every ``(successes, trial count)`` pair
@@ -105,7 +106,12 @@ from sal.emissions import (
     NegativeBinomialEmission,
     validated_trials,
 )
-from sal.emissions.bb import log_factorial, trial_tables
+from sal.emissions.bb import (
+    beta_binomial_log_pmf,
+    density_table,
+    log_factorial,
+    trial_tables,
+)
 from sal.emissions.nb import exposure_table
 from sal.likelihood.spatio_sequential import (
     COVARIATE_ROWS,
@@ -246,21 +252,20 @@ class TrialTerm:
         ``(S, n_nodes)`` contiguous ``uint32``; zero marks the successes
         unobserved.
     failure : np.ndarray
-        ``V[j, m, k] = lgamma(j + b_mk)``, ``(extent, M, K)`` contiguous.
+        ``V[j, m, k] = S(b_mk, j)``, ``(extent, M, K)`` contiguous.
     trial : np.ndarray
-        ``W[n, m, k] = lgamma(n + a_mk + b_mk)``, ``(extent, M, K)`` contiguous.
+        ``W[n, m, k] = S(a_mk + b_mk, n)``, ``(extent, M, K)`` contiguous.
     log_factorial : np.ndarray
         ``lgamma(j + 1)``, ``(extent,)``.
-    log_beta : np.ndarray
-        ``lgamma(a + b)``, ``lgamma(a)`` and ``lgamma(b)``, ``(3, M, K)``
-        contiguous.
+    log_rate : np.ndarray
+        ``log(a / (a + b))`` and ``log(b / (a + b))``, ``(2, M, K)`` contiguous.
     """
 
     trials: np.ndarray
     failure: np.ndarray
     trial: np.ndarray
     log_factorial: np.ndarray
-    log_beta: np.ndarray
+    log_rate: np.ndarray
 
     def arguments(self) -> dict[str, np.ndarray]:
         """The kernel's five keyword arguments, flat."""
@@ -269,7 +274,7 @@ class TrialTerm:
             "failure_table": self.failure.reshape(-1),
             "trial_table": self.trial.reshape(-1),
             "log_factorial": self.log_factorial,
-            "log_beta": self.log_beta.reshape(-1),
+            "log_rate": self.log_rate.reshape(-1),
         }
 
     @property
@@ -279,7 +284,7 @@ class TrialTerm:
             self.failure.nbytes
             + self.trial.nbytes
             + self.log_factorial.nbytes
-            + self.log_beta.nbytes
+            + self.log_rate.nbytes
         )
 
 
@@ -332,6 +337,18 @@ def _outer_table(
     )
     table = np.empty((extent * n_levels, params.n_classes, params.n_states))
     for m, side in enumerate(sides):
+        if isinstance(side, BetaBinomialEmission):
+            # The factored layout's rising factorials, so every layout scores
+            # the same bits (issue #1332); a zero trial count is unobserved.
+            trials = covariate.numpy()
+            pmf = beta_binomial_log_pmf(
+                counts.numpy()[:, None],
+                trials,
+                side.alpha.detach().numpy(),
+                side.beta.detach().numpy(),
+            )
+            table[:, m, :] = np.where(trials == 0.0, 0.0, pmf)
+            continue
         table[:, m, :] = side.log_density(counts, covariate=covariate).numpy()
     return table
 
@@ -512,6 +529,10 @@ def _count_table(
     counts = torch.from_numpy(np.arange(extent, dtype=np.float64))
     table = np.empty((extent, params.n_classes, params.n_states))
     for m, side in enumerate(sides):
+        if isinstance(side, BetaBinomialEmission):
+            # The NumPy pmf every beta-binomial route reads (issue #1332).
+            table[:, m, :] = density_table(side, extent)
+            continue
         table[:, m, :] = side.log_density(counts).numpy()
     return table
 
@@ -527,7 +548,7 @@ def _total_table(
         return _count_table(sides, params, rows.extent), None
     table = np.empty((rows.extent, params.n_classes, params.n_states))
     for m, side in enumerate(sides):
-        table[:, m, :] = exposure_table(side, rows.extent).numpy()
+        table[:, m, :] = exposure_table(side, rows.extent)
     term = ExposureTerm(
         rows.covariate,
         np.ascontiguousarray(np.stack([side.dispersion.numpy() for side in sides])),
@@ -555,19 +576,15 @@ def _success_table(
     success = np.empty((rows.extent, *shape))
     failure = np.empty((trials_extent, *shape))
     trial = np.empty((trials_extent, *shape))
-    log_beta = np.empty((3, *shape))
+    log_rate = np.empty((2, *shape))
     for m, side in enumerate(sides):
         tables = trial_tables(side, rows.extent, trials_extent)
-        success[:, m, :] = tables.success.numpy()
-        failure[:, m, :] = tables.failure.numpy()
-        trial[:, m, :] = tables.trial.numpy()
-        log_beta[:, m, :] = tables.log_beta.numpy()
+        success[:, m, :] = tables.success
+        failure[:, m, :] = tables.failure
+        trial[:, m, :] = tables.trial
+        log_rate[:, m, :] = tables.log_rate
     term = TrialTerm(
-        rows.covariate,
-        failure,
-        trial,
-        np.ascontiguousarray(log_factorial(trials_extent).numpy()),
-        log_beta,
+        rows.covariate, failure, trial, log_factorial(trials_extent), log_rate
     )
     return success, term
 
