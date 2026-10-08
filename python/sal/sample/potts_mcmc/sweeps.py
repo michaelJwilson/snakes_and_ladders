@@ -817,6 +817,7 @@ def wolff_sweep(
     root: int | None = None,
     proposed: int | None = None,
     lists: AdjacencyLists | None = None,
+    backend: Backend = Backend.RUST,
 ) -> int:
     """Grow one cluster from a random seed, recolour it, and stop.
 
@@ -846,6 +847,14 @@ def wolff_sweep(
     arrays and the lists are the same adjacency, so the stream is bitwise
     the same either way.
 
+    ``backend`` names which implementation runs the step.
+    :data:`~sal.backend.Backend.PYTHON` is this one, the oracle;
+    :data:`~sal.backend.Backend.RUST`, the default, is
+    ``oxisal.wolff_sweeps`` (:func:`_wolff_rust`), a chain of the same law
+    and not the same chain, at 26.0x the oracle per site visit on a
+    256x256 lattice near ``beta_c``, min of 3 (#1362).
+    ``lists`` is unread on the Rust route.
+
     **Contract** (issue #1143). In: ``state``, ``(n_nodes,)`` ``int64``,
     recoloured in place; ``rows``, ``(n_nodes, n_states)`` ``float64`` log
     weights at temperature 1, or a :class:`~sal.sim.potts.SiteField`; the
@@ -862,12 +871,86 @@ def wolff_sweep(
         The size of the cluster this step built.
     """
     rows = log_weight_of(rows)
+    if backend is Backend.RUST:
+        return _wolff_rust(
+            state,
+            rows,
+            (offsets, neighbours, couplings),
+            rng,
+            counter,
+            graph,
+            beta,
+            heat_bath=False,
+            root=root,
+            proposed=proposed,
+        )
+    refuse_backend("the Wolff step", backend, (Backend.PYTHON, Backend.RUST))
     walk = adjacency_lists(offsets, neighbours, couplings) if lists is None else lists
     members = _grow_wolff(state, walk, rng, beta, root)
     outcome = _recolour(state, members, beta * rows, rng, proposed)
     if counter is not None:
         counter.record(members, outcome, graph)
     return int(members.shape[0])
+
+
+def _wolff_rust(
+    state: np.ndarray,
+    rows: np.ndarray,
+    adjacency: tuple[np.ndarray, np.ndarray, np.ndarray],
+    rng: np.random.Generator,
+    counter: ClusterCounter | None,
+    graph: PottsGraph | None,
+    beta: float,
+    *,
+    heat_bath: bool,
+    root: int | None = None,
+    proposed: int | None = None,
+) -> int:
+    """One :func:`wolff_sweep` or :func:`wolff_heat_bath_sweep` step on the extension (#1362).
+
+    **The same law, from one seed.** A cluster consumes as many uniforms as
+    it reaches like edges, so they cannot be drawn here as arrays without one
+    per incident edge of the graph each step; the kernel takes one draw of
+    ``rng``, ``integers(0, 2**62)``, as a ChaCha8 seed --- the protocol
+    ``sal.sample.chain._seed`` states for the compiled chains. The chain is
+    of the oracle's law and is not the oracle's chain, so the referee is the
+    enumerated law (`tests/regression/sample/test_potts_wolff_rust.py`).
+
+    One crossing per step: the step interface returns one cluster's size per
+    call (:func:`~sal.sample.potts_mcmc.chains.step_visits` charges it), so
+    the kernel's batch is one here. ``members`` is the kernel's work queue
+    and, after the step, the cluster, which is what ``counter`` records.
+    """
+    from sal import oxisal
+
+    offsets, neighbours, couplings = adjacency
+    members = np.empty(state.shape[0], dtype=np.int64)
+    sizes = np.empty(1, dtype=np.int64)
+    proposals = np.empty(1, dtype=np.bool_)
+    accepts = np.empty(1, dtype=np.bool_)
+    oxisal.wolff_sweeps(
+        state,
+        np.ascontiguousarray(rows, dtype=np.float64),
+        np.ascontiguousarray(offsets, dtype=np.int64),
+        np.ascontiguousarray(neighbours, dtype=np.int64),
+        np.ascontiguousarray(couplings, dtype=np.float64),
+        float(beta),
+        heat_bath,
+        -1 if root is None else int(root),
+        -1 if proposed is None else int(proposed),
+        int(rng.integers(0, 2**62)),
+        members,
+        sizes,
+        proposals,
+        accepts,
+    )
+    size = int(sizes[0])
+    if counter is not None:
+        outcome = RecolourOutcome(
+            proposed=bool(proposals[0]), accepted=bool(accepts[0])
+        )
+        counter.record(members[:size], outcome, graph)
+    return size
 
 
 def _grow_wolff(
@@ -1450,6 +1533,7 @@ def wolff_heat_bath_sweep(
     graph: PottsGraph | None = None,
     beta: float = 1.0,
     lists: AdjacencyLists | None = None,
+    backend: Backend = Backend.RUST,
 ) -> int:
     """Grow one Wolff cluster and relabel it by the heat bath on its field (issue #1142).
 
@@ -1471,9 +1555,21 @@ def wolff_heat_bath_sweep(
     Forbidden labels as :func:`swendsen_wang_heat_bath_sweep` treats them.
 
     Draws: :func:`_grow_wolff`'s, then ``q`` uniforms. Thread safety as
-    :func:`wolff_sweep`'s (issue #1143).
+    :func:`wolff_sweep`'s (issue #1143). ``backend`` as :func:`wolff_sweep`'s.
     """
     rows = log_weight_of(rows)
+    if backend is Backend.RUST:
+        return _wolff_rust(
+            state,
+            rows,
+            (offsets, neighbours, couplings),
+            rng,
+            counter,
+            graph,
+            beta,
+            heat_bath=True,
+        )
+    refuse_backend("the heat-bath Wolff step", backend, (Backend.PYTHON, Backend.RUST))
     walk = adjacency_lists(offsets, neighbours, couplings) if lists is None else lists
     members = _grow_wolff(state, walk, rng, beta, None)
     current = int(state[members[0]])

@@ -71,6 +71,12 @@ FLIPPED = {
     "search/maxflow/__init__.py::max_flow(backend)": "131x, open 512^2",
     "search/maxflow/__init__.py::ising_ground_state(backend)": "315x, open 512^2",
     "sample/potts_mcmc/sweeps.py::swendsen_wang_sweep(backend)": "47.2x, 64^2 q=3",
+    "sample/potts_mcmc/sweeps.py::wolff_sweep(backend)": (
+        "26.0x per site visit, 256^2 q=3 near beta_c (#1362)"
+    ),
+    "sample/potts_mcmc/sweeps.py::wolff_heat_bath_sweep(backend)": (
+        "25.1x per site visit, 256^2 q=3 near beta_c (#1362)"
+    ),
     "sample/potts_mcmc/chains.py::sample_potts(cluster_backend)": "35.6x, 64^2 q=3",
     "sample/potts_mcmc/chains.py::anneal_potts(cluster_backend)": "49.1x, 64^2 q=3",
     "sample/potts_mcmc/chains.py::sample_potts_pair(cluster_backend)": "19.8x",
