@@ -3251,6 +3251,17 @@ recurrence bitwise and `loop.anneal_adaptive` stops on it with a `Termination`.
 The three earlier shapes are bitwise unchanged. Pinned in
 `tests/regression/sample/test_schedule_ramps.py`.
 
+**One ladder order for the Potts temperings, and a start per rung**
+([#1343](https://github.com/michaelJwilson/snakes_and_ladders/issues/1343)).
+`parallel_tempering` and `cluster_tempering` take a ladder coldest first, the
+order 20 of 32 explicit-ladder call sites passed; the other order is refused by
+`check_ladder`. An increasing ladder is bitwise unchanged against main.
+`start` is `(n_nodes,)` or `(n_rungs, n_nodes)`, mapped onto an `"auto"` ladder
+by nearest temperature. Over 40 seeds the per-pair exchange means agree across
+orders (cold pair 0.340 hottest first, 0.320 coldest first). The glass test
+scores against MIP-proven optima: tempering 12/12, annealing 9/12, restarts
+4/12. Pinned in `tests/regression/sample/test_ladder_tuning.py`.
+
 **Schedule pilots race, pair and rank on the polish**
 ([#1337](https://github.com/michaelJwilson/snakes_and_ladders/issues/1337)).
 `ScheduleTuning(racing=True)` runs successive halving and equals a hand-run
