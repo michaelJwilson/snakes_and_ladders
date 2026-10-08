@@ -1405,6 +1405,7 @@ def _chain_from(
     equilibration_sweeps: int,
     backend: Backend,
     cluster_backend: Backend,
+    sampler: Callable[..., PottsChain] = sample_potts,
 ) -> PottsChain:
     """One :func:`sample_potts_starts` body: its start, then its chain, on its own generator.
 
@@ -1427,7 +1428,8 @@ def _chain_from(
             temperature=temperature,
             backend=backend,
         ).states[-1]
-    return sample_potts(
+    # ``sampler`` is :func:`sample_potts` but for the sandbox's own (#1365).
+    return sampler(
         graph,
         field,
         move,
@@ -1516,6 +1518,13 @@ def sample_potts_starts(
         cluster_backend=cluster_backend,
     )
     chains = tuple(map_tasks(body, STARTS, workers=workers, pool=pool, generator=rng))
+    return _starts(graph, field, chains)
+
+
+def _starts(
+    graph: PottsGraph, field: np.ndarray, chains: tuple[PottsChain, ...]
+) -> PottsStarts:
+    """The chains of :data:`STARTS` and whether they agree, shared with :mod:`sal.sandbox.potts_moves` (issue #1365)."""
     series = np.stack([observables(graph, field, chain.states) for chain in chains])
     rhat = np.array([split_rhat(series[:, k]) for k in range(series.shape[1])])
     mixed = bool(np.all(rhat <= RHAT_THRESHOLD)) and all(

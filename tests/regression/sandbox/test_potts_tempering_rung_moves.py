@@ -15,13 +15,10 @@ pair against its row. :func:`rung_moves` is checked on hand cases.
 
 from __future__ import annotations
 
-import itertools
-
 import numpy as np
 import pytest
 from sal.backend import Backend
 from sal.sample.potts_mcmc import PottsMove, move_set
-from sal.sandbox.potts_moves import SandboxMove
 from sal.sandbox.potts_tempering import (
     critical_ratio,
     field_ratio,
@@ -35,7 +32,6 @@ from tests.regression.sample.test_potts_heat_bath_cluster import (
     COUPLINGS,
     EDGES,
     N_STATES,
-    _components,
     _graph,
     _rows,
     _states,
@@ -53,14 +49,12 @@ from tests.regression.sandbox.test_potts_tempering_moves import (
 
 H = PottsMove.SWENDSEN_WANG_HEAT_BATH
 S = PottsMove.SINGLE_SITE
-G = SandboxMove.GHOST_SPIN
-#: Two ladders, coldest rung first as :data:`TEMPERATURES` is: the issue's
-#: (single-site after heat-bath Swendsen-Wang cold, the cluster move alone
-#: hot), and one with the ghost-spin pass on each rung, before a sweep cold
-#: and after a cluster move hot.
+#: The ladder, coldest rung first as :data:`TEMPERATURES` is: single-site
+#: after heat-bath Swendsen-Wang cold, the cluster move alone hot. The
+#: ghost-spin ladder left with the move for `sal.sandbox.potts_moves`
+#: (issue #1365), which `parallel_tempering` does not run.
 LADDERS = {
     "cluster-then-sweep": ((H, S), (H,)),
-    "ghost-mixed": ((G, S), (H, G)),
 }
 
 
@@ -87,54 +81,9 @@ def _sweep_kernel(rows: np.ndarray, beta: float) -> np.ndarray:
     return kernel
 
 
-def _ghost_kernel(rows: np.ndarray, beta: float) -> np.ndarray:
-    """The exact ``(81, 81)`` kernel of one ghost-spin pass on a finite field."""
-    states = _states()
-    index = {state: k for k, state in enumerate(states)}
-    kernel = np.zeros((len(states), len(states)))
-    ghost = rows - rows.min(axis=1, keepdims=True)
-    bond = [1.0 - np.exp(-beta * coupling) for coupling in COUPLINGS]
-    for state in states:
-        like = [k for k, (i, j) in enumerate(EDGES) if state[i] == state[j]]
-        to_ghost = [1.0 - np.exp(-beta * ghost[i, state[i]]) for i in range(4)]
-        for bonded in itertools.product((False, True), repeat=len(like)):
-            weight = float(
-                np.prod(
-                    [
-                        bond[k] if b else 1.0 - bond[k]
-                        for k, b in zip(like, bonded, strict=True)
-                    ]
-                )
-            )
-            clusters = _components(
-                [EDGES[k] for k, b in zip(like, bonded, strict=True) if b]
-            )
-            for held in itertools.product((False, True), repeat=4):
-                share = weight * float(
-                    np.prod(
-                        [
-                            p if h else 1.0 - p
-                            for p, h in zip(to_ghost, held, strict=True)
-                        ]
-                    )
-                )
-                free = [c for c in clusters if not any(held[i] for i in c)]
-                for labels in itertools.product(range(N_STATES), repeat=len(free)):
-                    target = list(state)
-                    for cluster, label in zip(free, labels, strict=True):
-                        for site in cluster:
-                            target[site] = label
-                    kernel[index[state], index[tuple(target)]] += share / (
-                        N_STATES ** len(free)
-                    )
-    return kernel
-
-
 def _move_kernel(move: PottsMove, rows: np.ndarray, beta: float) -> np.ndarray:
     if move is S:
         return _sweep_kernel(rows, beta)
-    if move is G:
-        return _ghost_kernel(rows, beta)
     return _kernel(move, rows, beta)
 
 
@@ -303,10 +252,10 @@ def test_spent_sums_each_rungs_moves() -> None:
         np.random.default_rng(0),
         steps - 2,
         burn_in=2,
-        move=((H, S), G, (S,)),
+        move=((H, S), H, (S,)),
     )
 
-    assert run.spent == steps * (2 * per_sweep + per_sweep + graph.n_nodes + per_sweep)
+    assert run.spent == steps * (2 * per_sweep + per_sweep + per_sweep)
 
 
 @pytest.mark.smoke

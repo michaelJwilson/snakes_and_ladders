@@ -28,7 +28,6 @@ from sal.backend import Backend
 from sal.sample import annealed, potts_keyed, potts_mcmc, tempered
 from sal.sample.potts_mcmc import PottsMove, Recolour, move_set, sample_potts, sweep_at
 from sal.sample.statistics import chi_square_p_value
-from sal.sandbox.potts_moves import SandboxMove
 from sal.search.icm import SweepOrder, iterated_conditional_modes
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 
@@ -332,25 +331,6 @@ def test_a_single_move_is_its_resolved_move_set_bitwise(move: PottsMove) -> None
     assert one.mean_cluster_size == seq.mean_cluster_size
 
 
-@pytest.mark.smoke
-@pytest.mark.parametrize(
-    "move",
-    [SandboxMove.NIEDERMAYER, SandboxMove.GHOST_SPIN, SandboxMove.LABEL_DIRECTED],
-)
-def test_a_move_without_a_heat_bath_recolouring_is_refused_by_name(
-    move: PottsMove,
-) -> None:
-    with pytest.raises(ValueError, match=str(move)):
-        sample_potts(
-            _graph(),
-            FIELD,
-            [PottsMove.SINGLE_SITE, move],
-            np.random.default_rng(SEED),
-            1,
-            recolour=Recolour.HEAT_BATH,
-        )
-
-
 #: The public Potts entry points: every function that runs a Potts move set.
 ENTRY_POINTS = [
     potts_mcmc.sample_potts,
@@ -398,9 +378,6 @@ DEFAULTS = {
         PottsMove.SWENDSEN_WANG_HEAT_BATH,
         PottsMove.SINGLE_SITE,
     ),
-    SandboxMove.NIEDERMAYER: (SandboxMove.NIEDERMAYER,),
-    SandboxMove.GHOST_SPIN: (SandboxMove.GHOST_SPIN,),
-    SandboxMove.LABEL_DIRECTED: (SandboxMove.LABEL_DIRECTED,),
 }
 
 

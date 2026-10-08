@@ -204,9 +204,9 @@ def test_schedule_tuning_refuses_another_unit_and_criterion() -> None:
 
 
 @pytest.mark.oracle
-def test_cluster_moves_default_is_the_three_moves_as_before() -> None:
+def test_cluster_moves_default_is_the_two_moves_as_before() -> None:
     moves = cluster_moves(_graph(), FIELD)
-    assert list(moves) == [MoveKind.WOLFF, MoveKind.SWENDSEN_WANG, MoveKind.NIEDERMAYER]
+    assert list(moves) == [MoveKind.WOLFF, MoveKind.SWENDSEN_WANG]
 
 
 @pytest.mark.oracle

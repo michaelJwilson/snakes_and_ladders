@@ -25,6 +25,7 @@ The tests moved with them, under ``tests/regression/sandbox/``.
 
 from __future__ import annotations
 
+import functools
 import math
 import time
 from collections.abc import Callable, Sequence
@@ -37,6 +38,7 @@ import numpy as np
 from sal.backend import Backend
 from sal.opt.budget import Budget
 from sal.opt.termination import Termination
+from sal.parallel import Pool, map_tasks
 from sal.sample.accept import accept_at
 from sal.sample.potts_mcmc import (
     AdjacencyLists,
@@ -45,17 +47,22 @@ from sal.sample.potts_mcmc import (
     PottsChain,
     PottsMove,
     PottsPair,
+    PottsStarts,
     RecolourOutcome,
     adjacency_lists,
     bond_roots,
     refuse_negative_coupling,
     tempered,
 )
+from sal.sample.potts_mcmc import sample_potts as supported_sample_potts
 from sal.sample.potts_mcmc.chains import (
+    STARTS,
     _anneal_lattice,
+    _chain_from,
     _Lattice,
     _record_chain,
     _record_pair,
+    _starts,
     step_visits,
 )
 from sal.sample.potts_mcmc.sweeps import _like_bonds
@@ -730,6 +737,21 @@ def _lattice(
     )
 
 
+def sweep_for(
+    move: SandboxMove | PottsMove,
+    graph: PottsGraph,
+    rows: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    cluster_backend: Backend = Backend.RUST,
+) -> Callable[[np.ndarray, np.random.Generator, float], int]:
+    """One pass of ``move`` as :func:`~sal.sample.potts_mcmc.sweep_for` returns one (issue #1365)."""
+    adjacency = (offsets, neighbours, couplings)
+    lattice = _SandboxLattice(graph, rows, adjacency, Backend.RUST, cluster_backend)
+    return lattice.sweep(cast("PottsMove", move))
+
+
 def _as_supported(moves: tuple[SandboxMove | PottsMove, ...]) -> tuple[PottsMove, ...]:
     """``moves`` typed as the shared loops take them; :class:`_SandboxLattice` dispatches each."""
     return cast("tuple[PottsMove, ...]", moves)
@@ -771,6 +793,81 @@ def sample_potts(
     return _record_chain(
         lattice, _as_supported(moves), state, rng, n_sweeps, burn_in, thin
     )
+
+
+def _sampler(
+    graph: PottsGraph,
+    field: np.ndarray,
+    move: Moves,
+    rng: np.random.Generator,
+    n_sweeps: int,
+    burn_in: int = 0,
+    thin: int = 1,
+    **options: object,
+) -> PottsChain:
+    """:func:`sample_potts` as ``chains._chain_from`` calls it; its single-site equilibration is the supported one."""
+    if move is PottsMove.SINGLE_SITE:
+        return supported_sample_potts(
+            graph,
+            field,
+            move,
+            rng,
+            n_sweeps,
+            burn_in,
+            thin,
+            **options,  # type: ignore[arg-type]
+        )
+    return sample_potts(
+        graph,
+        field,
+        move,
+        rng,
+        n_sweeps,
+        burn_in,
+        thin,
+        temperature=cast("float", options["temperature"]),
+        cluster_backend=cast("Backend", options["cluster_backend"]),
+        start=cast("np.ndarray | None", options["start"]),
+    )
+
+
+def sample_potts_starts(
+    graph: PottsGraph,
+    field: SiteField | np.ndarray,
+    move: Moves,
+    rng: np.random.Generator,
+    n_sweeps: int,
+    burn_in: int = 0,
+    thin: int = 1,
+    *,
+    temperature: float = 1.0,
+    cluster_backend: Backend = Backend.RUST,
+    equilibration_sweeps: int = 100,
+    workers: int = 1,
+    pool: Pool = "serial",
+) -> PottsStarts:
+    """:func:`~sal.sample.potts_mcmc.sample_potts_starts` with ``move`` a :class:`SandboxMove` (issue #1365)."""
+    if n_sweeps < 4:
+        msg = f"split R-hat needs at least 4 recorded sweeps, got {n_sweeps}"
+        raise ValueError(msg)
+    field = log_weight_of(field)
+    body = functools.partial(
+        _chain_from,
+        graph=graph,
+        field=field,
+        # Typed as the supported moves; `_sampler` runs the sandbox's.
+        move=cast("PottsMove", move),
+        n_sweeps=n_sweeps,
+        burn_in=burn_in,
+        thin=thin,
+        temperature=temperature,
+        equilibration_sweeps=equilibration_sweeps,
+        backend=Backend.RUST,
+        cluster_backend=cluster_backend,
+        sampler=_sampler,
+    )
+    chains = tuple(map_tasks(body, STARTS, workers=workers, pool=pool, generator=rng))
+    return _starts(graph, field, chains)
 
 
 def sample_potts_pair(

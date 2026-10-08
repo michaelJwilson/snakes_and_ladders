@@ -24,7 +24,6 @@ from sal.backend import Backend
 from sal.sample.potts_mcmc import (
     PottsMove,
     cluster_tempering,
-    sample_potts,
 )
 from sal.sandbox import potts_moves
 from sal.sandbox.potts_moves import SandboxMove
@@ -70,11 +69,13 @@ def _bound(probability: np.ndarray, recorded: int = RECORDED) -> float:
     return SLACK * float(np.quantile(distances, 0.999))
 
 
-def _chain_distance(move: PottsMove, temperature: float = 1.0) -> tuple[float, float]:
+def _chain_distance(
+    move: PottsMove | SandboxMove, temperature: float = 1.0
+) -> tuple[float, float]:
     """The chain's distance from the enumerated law, and the bound."""
     graph = _graph()
     index, probability = enumerated_law(graph, FIELD, temperature)
-    chain = sample_potts(
+    chain = potts_moves.sample_potts(
         graph,
         FIELD,
         move,
@@ -148,7 +149,7 @@ def test_the_compiled_union_find_is_the_same_chain(move: PottsMove) -> None:
     graph = lattice_graph((6, 6), BoundaryCondition.OPEN, COUPLING)
     field = np.random.default_rng(7).normal(0.0, 0.6, (graph.n_nodes, N_STATES))
     runs = [
-        sample_potts(
+        potts_moves.sample_potts(
             graph,
             field,
             move,
