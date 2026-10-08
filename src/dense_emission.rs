@@ -46,8 +46,11 @@ pub enum ExposureOrder {
 
 /// The first channel: a negative binomial by count, with or without an exposure.
 pub struct TotalChannel<'a> {
-    /// `N` counts.
+    /// `N` counts, or with `rows` the `U` distinct counts the table is built at.
     pub counts: &'a [u32],
+    /// Coded observations (issue #1340): observation `i` reads count and
+    /// table row `rows[i]`, and scores zero where `rows[i]` is negative.
+    pub rows: Option<&'a [i32]>,
     /// `extent * K`, row `y` the count `y`: the density itself without an
     /// exposure, `T = S(r, y) - lgamma(y + 1)` with one, in either order.
     pub table: &'a [f64],
@@ -60,8 +63,10 @@ pub struct TotalChannel<'a> {
 
 /// The second channel: a beta-binomial by successes, with or without a trial count.
 pub struct SuccessChannel<'a> {
-    /// `N` successes.
+    /// `N` successes, or with `rows` the `U` distinct successes the table is built at.
     pub counts: &'a [u32],
+    /// Coded observations, as [`TotalChannel::rows`] reads them.
+    pub rows: Option<&'a [i32]>,
     /// `extent * K`, row `z` the successes `z`: the density itself without a
     /// trial count, `U[z] = lgamma(z + a)` with one.
     pub table: &'a [f64],
@@ -76,6 +81,32 @@ fn shape(n: usize, n_states: usize) -> CoupledShape {
         n_nodes: n,
         n_classes: 1,
         n_states,
+    }
+}
+
+/// Refuse coded rows that are not `n`, or that name a code past the `U` built.
+fn check_rows(name: &str, rows: Option<&[i32]>, codes: usize, n: usize) -> Result<(), String> {
+    let Some(rows) = rows else { return Ok(()) };
+    if rows.len() != n {
+        return Err(format!(
+            "the {name} rows have {} entries, expected N = {n}",
+            rows.len()
+        ));
+    }
+    match rows.iter().max() {
+        Some(&largest) if largest >= 0 && largest as usize >= codes => Err(format!(
+            "a {name} row of {largest} is past the {codes} codes"
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// The count and table row observation `i` reads, or `None` where it is unobserved.
+#[inline]
+fn lookup(counts: &[u32], rows: Option<&[i32]>, i: usize) -> Option<(u32, usize)> {
+    match rows {
+        None => Some((counts[i], counts[i] as usize)),
+        Some(rows) => usize::try_from(rows[i]).ok().map(|row| (counts[row], row)),
     }
 }
 
@@ -119,25 +150,35 @@ fn validate(
     }
     let shape = shape(n, n_states);
     if let Some(channel) = total {
-        if channel.counts.len() != n {
+        if channel.rows.is_none() && channel.counts.len() != n {
             return Err(format!(
                 "the totals have {} entries, expected N = {n}",
                 channel.counts.len()
             ));
         }
-        check_table("total", channel.table, channel.counts, n_states)?;
+        check_rows("total", channel.rows, channel.counts.len(), n)?;
+        if channel.rows.is_none() {
+            check_table("total", channel.table, channel.counts, n_states)?;
+        } else if channel.table.len() != channel.counts.len() * n_states {
+            return Err("a coded total table has one row per code".to_string());
+        }
         if let Some(term) = &channel.exposure {
             term.validate(&shape)?;
         }
     }
     if let Some(channel) = successes {
-        if channel.counts.len() != n {
+        if channel.rows.is_none() && channel.counts.len() != n {
             return Err(format!(
                 "the successes have {} entries, expected N = {n}",
                 channel.counts.len()
             ));
         }
-        check_table("success", channel.table, channel.counts, n_states)?;
+        check_rows("success", channel.rows, channel.counts.len(), n)?;
+        if channel.rows.is_none() {
+            check_table("success", channel.table, channel.counts, n_states)?;
+        } else if channel.table.len() != channel.counts.len() * n_states {
+            return Err("a coded success table has one row per code".to_string());
+        }
         if let Some(term) = &channel.trials {
             term.validate(&shape)?;
         }
@@ -149,8 +190,11 @@ fn validate(
 #[inline]
 fn total_scores(channel: &TotalChannel<'_>, i: usize, out: &mut [f64]) {
     let n_states = out.len();
-    let count = channel.counts[i];
-    let row = &channel.table[count as usize * n_states..][..n_states];
+    let Some((count, row)) = lookup(channel.counts, channel.rows, i) else {
+        out.fill(0.0);
+        return;
+    };
+    let row = &channel.table[row * n_states..][..n_states];
     match (&channel.exposure, channel.order) {
         (None, _) => out.copy_from_slice(row),
         // One order on every route (issue #1335); `order` is read by no arm.
@@ -162,8 +206,11 @@ fn total_scores(channel: &TotalChannel<'_>, i: usize, out: &mut [f64]) {
 #[inline]
 fn success_scores(channel: &SuccessChannel<'_>, i: usize, out: &mut [f64]) {
     let n_states = out.len();
-    let count = channel.counts[i];
-    let row = &channel.table[count as usize * n_states..][..n_states];
+    let Some((count, row)) = lookup(channel.counts, channel.rows, i) else {
+        out.fill(0.0);
+        return;
+    };
+    let row = &channel.table[row * n_states..][..n_states];
     match &channel.trials {
         None => out.copy_from_slice(row),
         Some(term) => term.score_into(row, count, term.trials[i], n_states, 0, out),
@@ -266,6 +313,7 @@ pub fn dense_log_emission(
         (None, None) => None,
         (Some(counts), Some(table)) => Some(TotalChannel {
             counts: borrowed(counts, "totals")?,
+            rows: None,
             table: borrowed(table, "total_table")?,
             exposure: exposure_term(&exposure, &dispersion, &mean)?,
             order: if family_order {
@@ -284,6 +332,7 @@ pub fn dense_log_emission(
         (None, None) => None,
         (Some(counts), Some(table)) => Some(SuccessChannel {
             counts: borrowed(counts, "successes")?,
+            rows: None,
             table: borrowed(table, "success_table")?,
             trials: trial_term(
                 &trials,
@@ -330,6 +379,7 @@ mod tests {
         let counts = [2, 0, 1, 2];
         let channel = TotalChannel {
             counts: &counts,
+            rows: None,
             table: &table,
             exposure: None,
             order: ExposureOrder::Family,
@@ -345,6 +395,7 @@ mod tests {
         let counts = [1];
         let channel = SuccessChannel {
             counts: &counts,
+            rows: None,
             table: &table,
             trials: None,
         };

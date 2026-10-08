@@ -481,6 +481,26 @@ class SupportedEnergy:
     ) -> None: ...
     def value_and_gradient(self, theta: np.ndarray) -> tuple[float, np.ndarray]: ...
 
+def coded_encode(
+    keys: np.ndarray, observed: np.ndarray | None = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]: ...
+def coded_log_emission(
+    n_states: int,
+    inverse: np.ndarray,
+    out: np.ndarray,
+    totals: np.ndarray | None = None,
+    total_table: np.ndarray | None = None,
+    exposure: np.ndarray | None = None,
+    dispersion: np.ndarray | None = None,
+    mean: np.ndarray | None = None,
+    successes: np.ndarray | None = None,
+    success_table: np.ndarray | None = None,
+    trials: np.ndarray | None = None,
+    failure_table: np.ndarray | None = None,
+    trial_table: np.ndarray | None = None,
+    log_factorial: np.ndarray | None = None,
+    log_rate: np.ndarray | None = None,
+) -> None: ...
 def dense_log_emission(
     n_states: int,
     family_order: bool,
