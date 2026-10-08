@@ -3180,6 +3180,8 @@ its children shuffled, to 1e-13.
 
 **Exact lattice referees for the cluster moves** ([#1276](https://github.com/michaelJwilson/snakes_and_ladders/issues/1276)). `sim.potts` holds Onsager's and Kaufman's `q = 2` energy per site, Yang's magnetization and Baxter's critical energy for `q <= 4`; Kaufman's torus value matches enumeration of the 3x3 and 4x4 tori to 1e-15 and Onsager's to 3.2e-12 at `L = 64` off the transition. On `64 x 64` at 0.8, 1.0 and 1.2 of the critical coupling, Swendsen-Wang, Wolff and their heat-bath variants sit within 2.83 standard errors of Kaufman's energy and, at 1.2, Yang's magnetization, against a declared 4; the single-site control does off the transition. A chain at 0.99 of the coupling is refuted at about 27 standard errors. The `128 x 128` and `256 x 256` runs and the Baxter extrapolation at `q = 3, 4` are `release` tests and have not run.
 
+**Wolff and heat-bath Wolff in Rust** ([#1362](https://github.com/michaelJwilson/snakes_and_ladders/issues/1362)). `oxisal.wolff_sweeps` grows the cluster on a reused queue and a visited stamp, seeded by one draw of the run's generator; at `q = 3` near the critical coupling, min of 3 on a shared host, it costs 11.9 and 18.8 ns per site visit at `64 x 64` and `256 x 256` against the Python step's 307.5 and 489.2 ns, 25.8x and 26.0x (heat bath 24.5x and 25.1x), so `cluster_backend=RUST` now runs both Wolff moves by default. The Rust chain is the oracle's law, not its stream: the 2x3 enumerated law refutes neither recolouring alone or with Gibbs, and on a fixed cluster `cluster_sites` and `spent` equal the Python step's.
+
 ## Milestone 1.5 — Continuous Samplers, HMC & Parallel Tempering
 
 **Landed, and one of its two integrators was declined on measurement.** A

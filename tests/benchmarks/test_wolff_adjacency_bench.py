@@ -12,6 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 from pytest_benchmark.fixture import BenchmarkFixture
+from sal.backend import Backend
 from sal.sample import potts_mcmc
 from sal.sim.graph import BoundaryCondition, lattice_graph
 from sal.sim.potts import critical_coupling, site_field
@@ -32,7 +33,15 @@ def test_wolff_adjacency_benchmark(
     state = rng.integers(0, 3, graph.n_nodes)
     for _ in range(STEPS):
         potts_mcmc.wolff_sweep(
-            state, rows, offsets, neighbours, couplings, rng, beta=beta, lists=lists
+            state,
+            rows,
+            offsets,
+            neighbours,
+            couplings,
+            rng,
+            beta=beta,
+            lists=lists,
+            backend=Backend.PYTHON,
         )
 
     warmed = state.copy()
@@ -52,6 +61,8 @@ def test_wolff_adjacency_benchmark(
                 stream,
                 beta=beta,
                 lists=lists,
+                # The lists are the Python route's; Rust reads neither (#1362).
+                backend=Backend.PYTHON,
             )
             for _ in range(STEPS)
         )

@@ -730,6 +730,8 @@ def test_niedermayers_rule_is_wolffs_bitwise_on_a_ferromagnet() -> None:
                 beta=1.0 / temperature,
                 root=root,
                 proposed=colour,
+                # Niedermayer has the oracle's stream alone (#1362).
+                backend=Backend.PYTHON,
             )
             ours = potts_mcmc.niedermayer_sweep(
                 niedermayer,
@@ -781,7 +783,15 @@ def _cluster_counter(
     for _ in range(n_clusters):
         if move is PottsMove.WOLFF:
             potts_mcmc.wolff_sweep(
-                state, rows, offsets, neighbours, couplings, rng, counter, graph
+                state,
+                rows,
+                offsets,
+                neighbours,
+                couplings,
+                rng,
+                counter,
+                graph,
+                backend=Backend.PYTHON,
             )
         else:
             potts_mcmc.niedermayer_sweep(
