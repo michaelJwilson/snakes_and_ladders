@@ -16,6 +16,7 @@ import pytest
 from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.opt.termination import Stop
+from sal.sample.loop import swap_log_ratio
 from sal.sample.potts_mcmc import chains, cluster_tempering, parallel_tempering
 from sal.sample.tune import LadderTuning, TunedLadder
 from sal.search.ground_state import Problem, run_tempering
@@ -214,4 +215,17 @@ def test_auto_takes_a_start_per_starting_rung() -> None:
             5,
             start=rows[:-1],
             ladder_tuning=_tuning(),
+        )
+
+
+@pytest.mark.analytic
+def test_the_exchange_ratio_does_not_read_the_ladder_order() -> None:
+    # Reversing the ladder relabels each pair (i, i + 1) as (i + 1, i); the
+    # Metropolis exchange ratio is the same number under that relabelling, so
+    # the order changes which pair proposes first, not the law (#1343).
+    rng = np.random.default_rng(0)
+    for _ in range(100):
+        beta_i, beta_j, energy_i, energy_j = rng.normal(size=4)
+        assert swap_log_ratio(beta_i, beta_j, energy_i, energy_j) == swap_log_ratio(
+            beta_j, beta_i, energy_j, energy_i
         )

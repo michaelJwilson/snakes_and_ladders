@@ -1392,6 +1392,26 @@ def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
         parallel_tempering(graph, NO_FIELD, (1.0, 0.0), np.random.default_rng(SEED), 10)
 
 
+#: The 12 glasses' exact minimum energies, HiGHS's MIP over the whole problem
+#: (`sal.sandbox.potts_mip.mip`), each proven optimal with its dual bound equal
+#: to its value; recorded once so a hit is scored against the instance and not
+#: against the best any compared method found (#1343).
+GLASS_OPTIMA = (
+    -40.0,
+    -35.0,
+    -49.0,
+    -59.0,
+    -37.0,
+    -33.0,
+    -44.0,
+    -30.0,
+    -43.0,
+    -40.0,
+    -36.0,
+    -39.0,
+)
+
+
 @pytest.mark.end2end
 def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() -> None:
     # The planted Viana-Bray glass (60 sites, degree 4, frustration 0.2);
@@ -1440,6 +1460,7 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
         budget,
         seeds=(0,),
         workers=1,
+        known=GLASS_OPTIMA,
     )
     hits = result.hits()
 
