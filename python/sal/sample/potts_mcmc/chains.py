@@ -89,6 +89,7 @@ from sal.sim.potts import (
 
 # `current` is aliased: `parallel_tempering` already binds that name to the
 # replicas' energies, and one of the two has to give.
+from sal.track import NULL as NULL_TRACKED
 from sal.track import TrackedOptimization
 from sal.track import current as current_tracked
 
@@ -101,6 +102,73 @@ _BALANCED_MOVES = frozenset(
 _SINGLE_CLUSTER_MOVES = frozenset(
     {PottsMove.WOLFF, PottsMove.NIEDERMAYER, PottsMove.WOLFF_HEAT_BATH}
 )
+
+
+#: The moves the Rust loop runs, by the code ``oxisal.potts_loop`` reads
+#: (issue #1368). Heat-bath Swendsen-Wang has no whole Rust kernel yet (#1364).
+_LOOP_CODES = {
+    PottsMove.SINGLE_SITE: 0,
+    PottsMove.SWENDSEN_WANG: 1,
+    PottsMove.WOLFF: 2,
+    PottsMove.WOLFF_HEAT_BATH: 3,
+}
+
+
+def loop_codes(move: Sequence[PottsMove], loop_backend: Backend) -> list[int] | None:
+    """``move`` as the Rust loop's codes, or ``None`` where the Python loop runs the whole run (issue #1368).
+
+    The Python loop runs where it is asked for, where a move in ``move`` has
+    no Rust kernel the loop can call (heat-bath Swendsen-Wang, #1364; the
+    gradient-informed, ghost-spin, label-directed and Niedermayer moves), and
+    inside a :func:`~sal.track.track` block, whose per-step records are
+    Python calls.
+    """
+    if loop_backend is not Backend.RUST or current_tracked() is not NULL_TRACKED:
+        return None
+    if any(each not in _LOOP_CODES for each in move):
+        return None
+    return [_LOOP_CODES[each] for each in move]
+
+
+def run_loop(
+    state: np.ndarray,
+    rows: np.ndarray,
+    adjacency: Iterable[np.ndarray],
+    codes: list[int],
+    temperatures: np.ndarray,
+    rng: np.random.Generator,
+    *,
+    budget: int = 0,
+    n_main: int = 0,
+    lead: int = 0,
+    thin: int = 1,
+    record: bool = False,
+    track_best: bool = False,
+) -> dict[str, Any]:
+    """One ``oxisal.potts_loop`` call: the whole run in Rust, ``state`` moved in place (issue #1368).
+
+    One draw of ``rng`` seeds the run's ChaCha8 stream, as the Wolff kernel
+    takes it (``sample.chain._seed``).
+    """
+    from sal import oxisal
+
+    offsets, neighbours, couplings = adjacency
+    return oxisal.potts_loop(
+        state,
+        np.ascontiguousarray(rows, dtype=np.float64),
+        np.ascontiguousarray(offsets, dtype=np.int64),
+        np.ascontiguousarray(neighbours, dtype=np.int64),
+        np.ascontiguousarray(couplings, dtype=np.float64),
+        codes,
+        np.ascontiguousarray(temperatures, dtype=np.float64),
+        budget,
+        n_main,
+        lead,
+        thin,
+        record,
+        track_best,
+        int(rng.integers(0, 2**62)),
+    )
 
 
 @dataclass(frozen=True)
@@ -265,6 +333,7 @@ def sample_potts(
     backend: Backend = Backend.RUST,
     cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
+    loop_backend: Backend = Backend.PYTHON,
 ) -> PottsChain:
     """Run one chain and return the configuration after every sweep.
 
@@ -331,6 +400,17 @@ def sample_potts(
         The starting labelling. ``None``, the default, draws one uniformly
         from ``rng`` as before; a given start draws nothing, so
         :func:`sample_potts_starts` can run the ordered start (issue #1316).
+    loop_backend : Backend
+        Which implementation runs the **step loop** (issue #1368).
+        :data:`~sal.backend.Backend.RUST` runs burn-in, the steps, the
+        charge and the recording in one ``oxisal.potts_loop`` call on a
+        ChaCha8 stream seeded from ``rng``: a chain of the same law, not the
+        same chain, whatever ``backend`` and ``cluster_backend`` say, since
+        the loop calls the Rust kernels. It covers single-site, uniform
+        Swendsen-Wang and both Wolff moves; any other move in ``move``, or a
+        :func:`~sal.track.track` block, runs the whole chain on the Python
+        loop (:func:`loop_codes`). :data:`~sal.backend.Backend.PYTHON`, the
+        oracle, is the default.
 
     Returns
     -------
@@ -366,6 +446,19 @@ def sample_potts(
             check_labelling(start, graph.n_nodes, n_states), dtype=np.int64
         )
     offsets, neighbours, couplings = graph.compressed_adjacency()
+    codes = loop_codes(move, loop_backend)
+    if codes is not None:
+        return _rust_chain(
+            graph,
+            rows,
+            state,
+            rng,
+            codes,
+            (offsets, neighbours, couplings),
+            n_sweeps,
+            burn_in,
+            thin,
+        )
     advance = sweep_for(
         move,
         graph,
@@ -415,6 +508,48 @@ def sample_potts(
         mean_cluster_size=mean_cluster,
         acceptance=accepted / steps if steps else 0.0,
         largest_cluster_share=largest / graph.n_nodes if cluster_count else 1.0,
+        ess=ess,
+        termination=_mixing(ess, steps),
+    )
+
+
+def _rust_chain(
+    graph: PottsGraph,
+    rows: np.ndarray,
+    state: np.ndarray,
+    rng: np.random.Generator,
+    codes: list[int],
+    adjacency: tuple[np.ndarray, np.ndarray, np.ndarray],
+    n_sweeps: int | Budget,
+    burn_in: int,
+    thin: int,
+) -> PottsChain:
+    """:func:`sample_potts` on the Rust loop, at the tempered model's temperature one (issue #1368)."""
+    budget = n_sweeps.size if isinstance(n_sweeps, Budget) else 0
+    ran = run_loop(
+        state,
+        rows,
+        adjacency,
+        codes,
+        np.ones(1),
+        rng,
+        budget=budget,
+        n_main=0 if budget else int(n_sweeps) * thin,
+        lead=burn_in * thin,
+        thin=thin,
+        record=True,
+    )
+    recorded = np.asarray(ran["records"]).reshape(-1, graph.n_nodes)
+    steps = int(ran["n_main"]) + burn_in * thin
+    count = int(ran["cluster_count"])
+    ess = effective_draws(observables(graph, rows, recorded))
+    return PottsChain(
+        states=recorded,
+        mean_cluster_size=(
+            int(ran["cluster_total"]) / count if count else float(graph.n_nodes)
+        ),
+        acceptance=int(ran["accepted"]) / steps if steps else 0.0,
+        largest_cluster_share=int(ran["largest"]) / graph.n_nodes if count else 1.0,
         ess=ess,
         termination=_mixing(ess, steps),
     )
@@ -735,6 +870,7 @@ def anneal_potts(
     start: np.ndarray | None = None,
     tuning: ScheduleTuning | None = None,
     budget: Budget | None = None,
+    loop_backend: Backend = Backend.PYTHON,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -815,6 +951,16 @@ def anneal_potts(
         its clusters, spends the budget and ends its ramp at it; ``n_sweeps``
         is then the steps run. A move set of fixed cost per step ``c`` given
         ``budget.size = schedule.n_steps * c`` is the default run, bitwise.
+    loop_backend : Backend
+        Which implementation runs the **step loop** (issue #1368), as
+        :func:`sample_potts` takes it. :data:`~sal.backend.Backend.RUST` reads
+        the temperature, charges :func:`step_visits`, tracks the best and
+        stops in one ``oxisal.potts_loop`` call; its steps keep no counter,
+        so ``trace`` is empty, as for the compiled Swendsen-Wang pass, and
+        ``energy`` is ``best``'s energy recomputed by :func:`energies`.
+        :data:`~sal.backend.Backend.PYTHON`, :func:`~sal.sample.loop.anneal`
+        and :func:`~sal.sample.loop.anneal_spent`, is the oracle and the
+        default.
 
     Returns
     -------
@@ -853,6 +999,31 @@ def anneal_potts(
     lattice = _Lattice(
         graph, rows, graph.compressed_adjacency(), backend, cluster_backend
     )
+    codes = loop_codes(move, loop_backend)
+    if codes is not None:
+        ran = run_loop(
+            state,
+            rows,
+            lattice.adjacency,
+            codes,
+            np.array([schedule(index) for index in range(schedule.n_steps)]),
+            rng,
+            budget=0 if budget is None else budget.size,
+            n_main=schedule.n_steps,
+            track_best=True,
+        )
+        best = np.asarray(ran["best"])
+        return AnnealedPotts(
+            best=best,
+            energy=lattice.energy(best),
+            final=state,
+            n_sweeps=int(ran["n_main"]),
+            spent=int(ran["spent_total"]),
+            unit=Cost.SITE_VISITS,
+            termination=Termination.after(int(ran["n_main"]), converged=False),
+            trace=(),
+            tuned=tuned,
+        )
     origin = Moved(state, lattice.energy(state), None, 0)
     step = lattice.rung(move, trace)
     walked = (

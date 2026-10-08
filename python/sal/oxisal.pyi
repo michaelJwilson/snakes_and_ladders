@@ -224,6 +224,22 @@ def wolff_sweeps(
     proposals: np.ndarray,
     accepts: np.ndarray,
 ) -> None: ...
+def potts_loop(
+    state: np.ndarray,
+    field: np.ndarray,
+    offsets: np.ndarray,
+    neighbours: np.ndarray,
+    couplings: np.ndarray,
+    moves: list[int],
+    temperatures: np.ndarray,
+    budget: int,
+    n_main: int,
+    lead: int,
+    thin: int,
+    record: bool,
+    track_best: bool,
+    seed: int,
+) -> dict[str, Any]: ...
 def class_posteriors(
     totals: np.ndarray,
     successes: np.ndarray | None,
