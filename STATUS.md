@@ -3297,7 +3297,7 @@ their budget after 8 rounds with `within_band` `False` (last acceptances
 `0.44, 0.16, 0.27` and `0.16, 0.13, 0.71`), stated by a `Termination`. A given
 ladder is bitwise main's on all three. Pinned in
 `tests/regression/sample/test_schedule_racing.py` and
-`tests/regression/sample/test_ladder_tuning.py`.
+`tests/regression/sample/test_ladder_tuning.py`. A start in units of `J d` transfers from `potts_reference/stress` to its variants, 57.94 nats summed held-out gap against 54.72 tuned per variant, and the field margin does not, 92.76 ([#1390](https://github.com/michaelJwilson/snakes_and_ladders/issues/1390), [`docs/experiments/032`](docs/experiments/032-a-start-temperature-in-the-instances-units.md)).
 
 **A Wolff run spends its site-visit budget**
 ([#1344](https://github.com/michaelJwilson/snakes_and_ladders/issues/1344)).
