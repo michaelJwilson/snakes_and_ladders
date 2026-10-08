@@ -3,7 +3,7 @@ id: "035"
 date: 2026-10-08
 commit: fc7e2168f3581f4a476e7177f99c57e7f92efa1f
 branch: claude/budget-split-1390q5
-pr: 0
+pr: 1401
 tickets: [1390, 1392]
 problem: potts-lattice
 fixture: tests/regression/fixtures/potts_reference/stress.yaml, with the stress variants margin_0.1 and q8
