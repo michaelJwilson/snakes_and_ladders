@@ -202,6 +202,9 @@ class WolffMove:
                 root=site,
                 proposed=label,
                 lists=self._lists,
+                # The oracle's stream, which keyed callers replay; the Rust
+                # step is the same law on another stream (#1362).
+                backend=Backend.PYTHON,
             )
         return labels, size * self._per_member
 

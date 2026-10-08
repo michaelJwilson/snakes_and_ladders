@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from sal.backend import Backend
 from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.sample.loop import Moved, anneal_spent
@@ -159,6 +160,9 @@ def test_the_step_count_wolff_anneal_is_mains_bitwise(name: str) -> None:
         np.random.default_rng(SEED),
         move=PottsMove.WOLFF,
         recolour=recolour,
+        # Main's run is the oracle's stream; the Rust step is the same law
+        # on another (#1362).
+        cluster_backend=Backend.PYTHON,
     )
     energy, spent, head = WOLFF_PINS[name]
     assert (run.energy, run.spent, tuple(int(v) for v in run.final[:8])) == (

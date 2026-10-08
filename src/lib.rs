@@ -46,6 +46,7 @@ pub mod ragged_sample;
 pub mod ragged_viterbi;
 pub mod sampling;
 pub mod special;
+pub mod wolff;
 
 pub use bcjr::bcjr_forward_backward;
 pub use bifurcation::bifurcation_integrate;
@@ -79,6 +80,7 @@ pub use ragged::{ragged_posteriors_into, SwitchKind};
 pub use ragged_sample::ragged_sample_paths_into;
 pub use ragged_viterbi::ragged_viterbi_into;
 pub use sampling::sample_rows;
+pub use wolff::wolff_sweeps;
 
 /// Doubles an integer.
 ///
@@ -114,6 +116,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ising_ground_state_declined, m)?)?;
     m.add_function(wrap_pyfunction!(single_site_sweeps, m)?)?;
     m.add_function(wrap_pyfunction!(swendsen_wang_sweep, m)?)?;
+    m.add_function(wrap_pyfunction!(wolff_sweeps, m)?)?;
     m.add_function(wrap_pyfunction!(class_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(external_field, m)?)?;
     m.add_function(wrap_pyfunction!(count_mixture_value_and_gradient, m)?)?;
