@@ -71,7 +71,7 @@ CALLS: dict[str, Callable[[PottsGraph, Any], Any]] = {
         g, f, (1.0, 2.0), _rng(), SWEEPS
     ),
     "adapt_ladder_potts": lambda g, f: adapt_ladder_potts(
-        g, f, (2.0, 0.4), _rng(), SWEEPS, (0.1, 0.9), 2, 4
+        g, f, (0.4, 2.0), _rng(), SWEEPS, (0.1, 0.9), 2, 4
     ),
     "sample_potts_pair": lambda g, f: sample_potts_pair(
         g, f, PottsMove.SINGLE_SITE, _rng(), SWEEPS, houdayer=False

@@ -55,7 +55,6 @@ from sal.sample import (
     tempered,
 )
 from sal.sample.schedule import ExponentialTempSchedule, InverseTemperatures
-from sal.sandbox import potts_tempering
 from sal.sim.elementary_codes import hamming_code
 from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
 from sal.sim.hmm import HmmParams
@@ -150,17 +149,6 @@ def _annealed() -> potts_mcmc.AnnealedPotts:
     )
 
 
-def _tempered() -> potts_tempering.TemperedChains:
-    return potts_tempering.parallel_tempering(
-        _graph(),
-        FIELD,
-        TEMPERATURES,
-        np.random.default_rng(SEED),
-        SWEEPS,
-        backend=Backend.PYTHON,
-    )
-
-
 def _memory(run: Run) -> MemoryRun:
     """The run as the referee it is, so an assertion reads it rather than writes it."""
     assert isinstance(run, MemoryRun)
@@ -182,20 +170,17 @@ def test_the_null_run_leaves_a_chain_bitwise_what_it_was() -> None:
 
 @pytest.mark.patch
 @pytest.mark.smoke
-def test_the_null_run_leaves_an_annealed_and_a_tempered_run_bitwise() -> None:
-    outside_annealed, outside_tempered = _annealed(), _tempered()
+def test_the_null_run_leaves_an_annealed_run_bitwise() -> None:
+    # The tempered half moved with `parallel_tempering` (#1352):
+    # `tests/regression/sandbox/test_potts_tempering_track.py`.
+    outside_annealed = _annealed()
     with track(NULL_RUN):
-        inside_annealed, inside_tempered = _annealed(), _tempered()
+        inside_annealed = _annealed()
 
     assert np.array_equal(inside_annealed.best, outside_annealed.best)
     assert np.array_equal(inside_annealed.final, outside_annealed.final)
     assert inside_annealed.energy == outside_annealed.energy
     assert inside_annealed.spent == outside_annealed.spent
-    assert np.array_equal(inside_tempered.states, outside_tempered.states)
-    assert np.array_equal(
-        inside_tempered.swap_acceptance, outside_tempered.swap_acceptance
-    )
-    assert inside_tempered.energy == outside_tempered.energy
 
 
 @pytest.mark.smoke
@@ -282,17 +267,6 @@ def test_the_annealer_records_one_energy_per_sweep_ending_at_the_result() -> Non
     assert energies == sorted(energies, reverse=True)
     assert run.last("temperature") == pytest.approx(0.1)
     assert run.last("state_bytes") == float(annealed.final.nbytes)
-
-
-@pytest.mark.smoke
-def test_the_tempered_run_records_the_swap_acceptance_it_returns() -> None:
-    with track() as tracked:
-        chains = _tempered()
-
-    run = _memory(tracked.run)
-    assert len(run.series("swap_acceptance")) == SWEEPS
-    assert run.last("swap_acceptance") == float(np.mean(chains.swap_acceptance))
-    assert run.last("state_bytes") == float(chains.states[0].nbytes)
 
 
 @pytest.mark.smoke
