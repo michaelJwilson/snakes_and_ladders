@@ -3,7 +3,7 @@ id: "032"
 date: 2026-10-08
 commit: 0a46e429d9941c61a1b1ab1d93a70958f4992019
 branch: claude/temperature-scale-1390q1
-pr: 0
+pr: 1399
 tickets: [1390]
 problem: potts-lattice
 fixture: tests/regression/fixtures/potts_reference/stress.yaml
