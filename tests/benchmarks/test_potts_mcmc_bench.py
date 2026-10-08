@@ -60,8 +60,8 @@ def test_release_cluster_pass_benchmark(
     benchmark: BenchmarkFixture, move: PottsMove
 ) -> None:
     # One pass at `spatio_tiling/release` (5,041 sites, q = 10), the size the
-    # anneal comparison of issue #1142 runs at: the uniform proposal on its
-    # compiled pass against the heat bath on NumPy and the compiled union-find.
+    # anneal comparison of issue #1142 runs at: the uniform proposal against
+    # the heat bath, each on its compiled pass (#1364).
     from sal.sample.potts_mcmc import sweeps
     from sal.search.potts_starts import tiling_rung
     from sal.sim.fixtures import fixture
@@ -83,6 +83,33 @@ def test_release_cluster_pass_benchmark(
     benchmark(one_pass)
 
     assert state.shape == (rung.n_nodes,)
+
+
+@pytest.mark.parametrize("backend", [Backend.PYTHON, Backend.RUST], ids=str)
+def test_heat_bath_swendsen_wang_pass_benchmark(
+    benchmark: BenchmarkFixture, backend: Backend
+) -> None:
+    # One heat-bath Swendsen-Wang pass on a 64x64 periodic lattice at the
+    # q = 3 transition, in a weak per-site field: the NumPy oracle (bonds and
+    # labels in NumPy, the compiled merge) against the compiled pass (#1364).
+    from sal.sample.potts_mcmc import sweeps
+
+    graph = lattice_graph((64, 64), BoundaryCondition.PERIODIC, TRANSITION)
+    rng = np.random.default_rng(1364)
+    rows = rng.normal(0.0, 0.1, (graph.n_nodes, 3))
+    state = rng.integers(0, 3, size=graph.n_nodes)
+
+    benchmark(
+        sweeps.swendsen_wang_heat_bath_sweep,
+        state,
+        graph,
+        rows,
+        rng,
+        1.0,
+        backend=backend,
+    )
+
+    assert state.shape == (graph.n_nodes,)
 
 
 #: Tempering steps a benchmark call runs.

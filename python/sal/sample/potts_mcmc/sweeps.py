@@ -1400,7 +1400,7 @@ def label_directed_sweep(
     rows = log_weight_of(rows)
     n_nodes, n_states = graph.n_nodes, int(rows.shape[1])
     bonds = _like_bonds(state, graph, rng, beta)
-    roots = bond_roots(n_nodes, bonds)
+    roots = bond_roots(n_nodes, bonds, backend=backend)
     partners = rng.integers(0, n_states, size=n_nodes)
     # A cluster is monochromatic, so each site's `at_target` is its cluster's.
     at_target = state == target
@@ -1485,7 +1485,8 @@ def swendsen_wang_heat_bath_sweep(
     :data:`~sal.backend.Backend.RUST`, the default, is
     ``oxisal.swendsen_wang_heat_bath_sweeps`` (:func:`_heat_bath_pass_rust`),
     the whole pass compiled from one seed: a chain of the same law and not
-    the same chain (#1364).
+    the same chain, at 2.3x the oracle per pass on a 256x256 periodic
+    lattice at the ``q = 3`` transition, min of 3 (#1364).
 
     Draws: on the oracle's route, one uniform per edge, then ``q`` per
     cluster, clusters in increasing root order; on the Rust route, one
@@ -1545,10 +1546,11 @@ def _heat_bath_pass_rust(
 ) -> np.ndarray:
     """``n_sweeps`` :func:`swendsen_wang_heat_bath_sweep` passes on the extension (#1364).
 
-    **The same law, from one seed.** The bond pass draws one uniform per like
-    edge, a count known only inside the pass, so the kernel takes one draw of
+    **The same law, from one seed.** The label draws are one per cluster, a
+    count known only inside the pass, so the kernel takes one draw of
     ``rng``, ``integers(0, 2**62)``, as a ChaCha8 seed, the protocol
-    :func:`_wolff_rust` follows (#1362). The chain is of the oracle's law and
+    :func:`_wolff_rust` follows (#1362), and draws the bonds and the labels
+    from it. The chain is of the oracle's law and
     is not the oracle's chain, so the referee is the enumerated law
     (`tests/regression/sample/test_potts_heat_bath_cluster_rust.py`).
 

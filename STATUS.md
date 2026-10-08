@@ -3182,6 +3182,8 @@ its children shuffled, to 1e-13.
 
 **Wolff and heat-bath Wolff in Rust** ([#1362](https://github.com/michaelJwilson/snakes_and_ladders/issues/1362)). `oxisal.wolff_sweeps` grows the cluster on a reused queue and a visited stamp, seeded by one draw of the run's generator; at `q = 3` near the critical coupling, min of 3 on a shared host, it costs 11.9 and 18.8 ns per site visit at `64 x 64` and `256 x 256` against the Python step's 307.5 and 489.2 ns, 25.8x and 26.0x (heat bath 24.5x and 25.1x), so `cluster_backend=RUST` now runs both Wolff moves by default. The Rust chain is the oracle's law, not its stream: the 2x3 enumerated law refutes neither recolouring alone or with Gibbs, and on a fixed cluster `cluster_sites` and `spent` equal the Python step's.
 
+**Heat-bath Swendsen-Wang in Rust** ([#1364](https://github.com/michaelJwilson/snakes_and_ladders/issues/1364)). `oxisal.swendsen_wang_heat_bath_sweeps` draws the bonds, merges them with the uniform pass's union-find and draws each cluster's label with the heat-bath Wolff step's draw, from one seed of the run's generator; on a periodic lattice at the `q = 3` critical coupling, min of 3 on a shared host, it costs 56.7 and 49.5 ns per site visit at `64 x 64` and `256 x 256` against the NumPy pass's 123.6 and 112.1 ns, 2.2x and 2.3x, so `backend=RUST` and `cluster_backend=RUST` run it by default. The Rust chain is the oracle's law, not its stream: the 2x3 enumerated law refutes it neither alone nor with Gibbs, and the 4-site kernel's exact row admits it and refutes it at half the temperature's inverse.
+
 ## Milestone 1.5 — Continuous Samplers, HMC & Parallel Tempering
 
 **Landed, and one of its two integrators was declined on measurement.** A

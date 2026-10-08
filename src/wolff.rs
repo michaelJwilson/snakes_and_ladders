@@ -61,33 +61,55 @@ pub struct Outcomes<'a> {
 }
 
 /// One label drawn with probability proportional to `exp(beta * sums[c])`,
-/// by Gumbel-max as `heat_bath_labels`: no row is normalized and no `exp` can
-/// overflow. Draws `sums.len()` uniforms from `rng` whatever the outcome, a
-/// forbidden label's (`-inf`) included, so the stream advances by the
-/// alphabet per cluster. A cluster forbidding every label keeps `current`
-/// (#1146). Shared by the Wolff and Swendsen-Wang heat-bath kernels (#1364).
+/// by inversion: the weights are taken relative to the largest, so no `exp`
+/// can overflow and none underflows the drawn label away, and one uniform
+/// scaled by their total is walked through the cumulative sum. `sums` is
+/// overwritten with those weights, so the callers' per-cluster scratch is
+/// the draw's. A forbidden label (`-inf`) has weight zero and is never
+/// drawn; a cluster forbidding every label keeps `current` and draws
+/// nothing (#1146). One uniform per cluster where #1362 drew one per label
+/// by Gumbel-max, two logarithms each: that was ~70% of the heat-bath
+/// Swendsen-Wang pass at 64x64 near `beta_c` (#1364). Shared by the Wolff
+/// and Swendsen-Wang heat-bath kernels.
 #[inline]
 pub(crate) fn heat_bath_label(
-    sums: &[f64],
+    sums: &mut [f64],
     beta: f64,
     current: usize,
     rng: &mut ChaCha8Rng,
 ) -> usize {
-    let mut best = (f64::NEG_INFINITY, current);
-    let mut allowed = false;
-    for (c, &s) in sums.iter().enumerate() {
-        let weight = beta * s;
-        let uniform: f64 = StandardUniform.sample(rng);
-        if weight == f64::NEG_INFINITY {
-            continue;
+    let mut top = f64::NEG_INFINITY;
+    for s in sums.iter_mut() {
+        // A forbidden label stays forbidden at `beta = 0`, where the
+        // product would be `NaN`.
+        if *s != f64::NEG_INFINITY {
+            *s *= beta;
         }
-        let key = weight - (-uniform.ln()).ln();
-        if !allowed || key > best.0 {
-            best = (key, c);
-            allowed = true;
+        top = top.max(*s);
+    }
+    if top == f64::NEG_INFINITY {
+        return current;
+    }
+    let mut total = 0.0f64;
+    for s in sums.iter_mut() {
+        // The largest weight is one exactly; only the others pay an `exp`.
+        *s = if *s == top { 1.0 } else { (*s - top).exp() };
+        total += *s;
+    }
+    let uniform: f64 = StandardUniform.sample(rng);
+    let mut remaining = uniform * total;
+    // The last allowed label takes what rounding leaves past the total.
+    let mut last = current;
+    for (c, &weight) in sums.iter().enumerate() {
+        if weight > 0.0 {
+            if remaining < weight {
+                return c;
+            }
+            remaining -= weight;
+            last = c;
         }
     }
-    best.1
+    last
 }
 
 /// Run `sizes.len()` Wolff steps on `state`, in place.
@@ -98,7 +120,7 @@ pub(crate) fn heat_bath_label(
 /// `heat_bath = false` is `_recolour`: a uniform label (or `proposed` where it
 /// is non-negative) accepted on the field difference `beta sum_C (h[i, c'] -
 /// h[i, c])`. `heat_bath = true` draws the label from `exp(beta sum_C h[i,
-/// c])` over all `n_states` by Gumbel-max, as `heat_bath_labels`. A forbidden
+/// c])` over all `n_states` ([`heat_bath_label`]). A forbidden
 /// label (`-inf`) is never entered; a cluster forbidding every label keeps
 /// its own, as the oracle (#1146).
 ///
@@ -255,7 +277,7 @@ pub fn wolff_sweeps_impl(
                     *s += h;
                 }
             }
-            let label = heat_bath_label(&sums, beta, colour as usize, &mut rng) as i64;
+            let label = heat_bath_label(&mut sums, beta, colour as usize, &mut rng) as i64;
             out.proposals[step] = label != colour;
             out.accepts[step] = label != colour;
             label

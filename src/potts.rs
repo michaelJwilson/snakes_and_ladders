@@ -40,9 +40,8 @@
 use numpy::{PyReadonlyArray1, PyReadonlyArrayDyn, PyReadwriteArray1, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
-use rand_distr::{Distribution, StandardUniform};
 
 use crate::wolff::heat_bath_label;
 
@@ -310,6 +309,20 @@ pub fn single_site_sweeps(
 /// The largest relative gap between neighbouring `f64`s, `2**-52`. The width
 /// the caller's guard is counted in, as in [`single_site_sweeps_impl`].
 const ULP: f64 = 2.220446049250313e-16;
+
+/// `2^53`, the count of `f64` uniforms in `[0, 1)` a 53-bit draw indexes.
+const UNIT_53: f64 = 9_007_199_254_740_992.0;
+
+/// Edges whose bond draws the heat-bath pass makes together.
+const DRAW_BLOCK: usize = 256;
+
+/// The bond probability `1 - exp(-beta J)` as an integer threshold on a
+/// uniform's 53 bits: `u < p` with `u = m * 2^-53` is `m < ceil(p * 2^53)`,
+/// exactly. `-expm1(-beta J)` is `1 - exp(-beta J)` without cancellation.
+#[inline]
+fn bond_threshold(beta: f64, coupling: f64) -> u64 {
+    (-(-beta * coupling).exp_m1() * UNIT_53).ceil() as u64
+}
 
 /// Union-find root, with path compression. The oracle's `find_root`.
 #[inline]
@@ -746,11 +759,12 @@ pub fn swendsen_wang_sweep(
 /// The bond construction cancels from the label's conditional, so there is
 /// no accept step.
 ///
-/// **The generator is the run's, through one seed**, for the reason
-/// `wolff.rs` states: the bond pass draws one uniform per *like* edge, a
-/// count the caller cannot know, so the kernel takes one draw of the run's
-/// generator as a ChaCha8 seed. The chain is of the oracle's law and is not
-/// the oracle's chain.
+/// **The generator is the run's, through one seed**, the protocol
+/// `wolff.rs` states: the label draws are one per cluster, a count the
+/// caller cannot know before the bond pass, so the kernel takes one draw of
+/// the run's generator as a ChaCha8 seed and draws one uniform per edge and
+/// one per cluster from it. The chain is of the oracle's law and is not the
+/// oracle's chain.
 ///
 /// # Parameters
 /// - `field`: the unscaled log weights, `n_nodes * n_states`, row-major.
@@ -812,26 +826,43 @@ pub fn swendsen_wang_heat_bath_sweeps_impl(
         }
     }
 
-    // Evaluated once per batch, as `wolff.rs` evaluates it per edge reached:
-    // `-expm1(-beta J)` is `1 - exp(-beta J)` without the cancellation.
-    let probability: Vec<f64> = couplings
-        .iter()
-        .map(|&coupling| -(-beta * coupling).exp_m1())
-        .collect();
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
-    // Allocated once per batch and reused by every pass.
+    // Allocated once per batch and reused by every pass; `parent` is free
+    // once the roots are read, and holds each root's cluster rank after.
+    // Nothing per edge is stored: each fresh page is a fault, and a per-edge
+    // threshold and draw array were 2 MB of them at 256x256 (#1364).
     let mut parent = vec![0usize; n_nodes];
     let mut roots = vec![0i64; n_nodes];
-    let mut rank = vec![0usize; n_nodes];
     let mut heads: Vec<usize> = Vec::with_capacity(n_nodes);
-    let mut sums: Vec<f64> = Vec::with_capacity(n_nodes * n_states);
-    let mut drawn: Vec<i64> = Vec::with_capacity(n_nodes);
+    let mut sums: Vec<f64> = Vec::new();
+    let mut drawn: Vec<i64> = Vec::new();
+    // The bond threshold of the last coupling met, reused while the coupling
+    // repeats, the same `u64` exactly: a lattice's uniform coupling costs one
+    // `exp` per call rather than one per edge, which was 65 us of a 206 us
+    // pass at 64x64 (#1364).
+    let mut memo = (f64::NAN, 0u64);
 
     for count in n_clusters.iter_mut() {
+        // Draws in blocks of `DRAW_BLOCK` edges, one per edge of a block any
+        // like edge falls in: drawn together rather than one per like edge,
+        // they leave the bond test free of a branch on the draw, which was
+        // 2.2x the bulk draw's time at 256x256 (#1364). The law is the same.
+        let mut block = (usize::MAX, [0u64; DRAW_BLOCK]);
         like_bond_roots(state, edges, &mut parent, &mut roots, |edge| {
-            let uniform: f64 = StandardUniform.sample(&mut rng);
-            uniform < probability[edge]
+            let (index, offset) = (edge / DRAW_BLOCK, edge % DRAW_BLOCK);
+            if index != block.0 {
+                block.0 = index;
+                for draw in block.1.iter_mut() {
+                    *draw = rng.next_u64() >> 11;
+                }
+            }
+            let coupling = couplings[edge];
+            if coupling != memo.0 {
+                memo = (coupling, bond_threshold(beta, coupling));
+            }
+            block.1[offset] < memo.1
         })?;
+        let rank = &mut parent;
         // Clusters ranked in increasing root order: a root labels itself,
         // so an upward scan meets them sorted, the oracle's order.
         heads.clear();
@@ -852,7 +883,7 @@ pub fn swendsen_wang_heat_bath_sweeps_impl(
         }
         drawn.clear();
         for (cluster, &head) in heads.iter().enumerate() {
-            let own = &sums[cluster * n_states..][..n_states];
+            let own = &mut sums[cluster * n_states..][..n_states];
             let label = heat_bath_label(own, beta, state[head] as usize, &mut rng);
             drawn.push(label as i64);
         }
