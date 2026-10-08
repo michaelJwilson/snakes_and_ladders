@@ -41,7 +41,12 @@ import numpy as np
 from sal.backend import Backend, refuse_backend
 from sal.opt.termination import Stop, Termination
 from sal.search.alpha_expansion import Labelling
-from sal.search.icm.numba import greedy_colouring, icm_sweeps_checked, no_survivor
+from sal.search.icm.numba import (
+    floor_smallest_first,
+    greedy_colouring,
+    icm_sweeps_checked,
+    no_survivor,
+)
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
     SiteField,
@@ -51,6 +56,23 @@ from sal.sim.potts import (
     owner_rows,
     site_field,
 )
+
+
+class FloorPolicy(StrEnum):
+    """How :func:`merge_small_labels` moves the sites of a state below the floor before it descends (issue #1324).
+
+    ``UNIFORM`` hands the labelling to the descent's own floor, which
+    dissolves every state below it at once onto uniform draws: bitwise the
+    merge before the policy existed. ``SMALLEST_FIRST_BEST_FIELD`` draws
+    nothing: it dissolves the state with the fewest sites below the floor
+    (ties to the lowest index), moves each of its sites, in index order, to
+    the other state holding a site whose field ``h_i`` scores it highest
+    (ties to the lowest index, ``-inf`` never), and repeats. A state whose
+    site allows no other keeps that site and is not dissolved again.
+    """
+
+    UNIFORM = "uniform"
+    SMALLEST_FIRST_BEST_FIELD = "smallest-first-best-field"
 
 
 class SweepOrder(StrEnum):
@@ -369,6 +391,7 @@ def merge_small_labels(
     min_sites: int,
     max_iterations: int = 200,
     backend: Backend = Backend.NUMBA,
+    policy: FloorPolicy = FloorPolicy.UNIFORM,
 ) -> Labelling:
     """``labelling`` with no state below ``min_sites`` sites, descended again: the floor after any solver (issue #1081).
 
@@ -395,7 +418,14 @@ def merge_small_labels(
     max_iterations : int
         ICM sweeps to run at most.
     backend : Backend
-        :func:`iterated_conditional_modes`'s.
+        :func:`iterated_conditional_modes`'s, and the floor's under
+        ``SMALLEST_FIRST_BEST_FIELD``: the numba kernel, or its Python oracle.
+    policy : FloorPolicy
+        ``UNIFORM``, the default, is the merge before #1324, bitwise.
+        ``SMALLEST_FIRST_BEST_FIELD`` floors ``labelling`` first with no
+        draws, then descends exactly as ``UNIFORM`` does; ``rng`` then feeds
+        only the descent's floor, which moves a site only where the descent
+        takes a state back below ``min_sites``.
 
     Returns
     -------
@@ -414,6 +444,19 @@ def merge_small_labels(
     if min_sites < 1:
         msg = f"a merge floors at least one site, got min_sites={min_sites}"
         raise ValueError(msg)
+    if policy is FloorPolicy.SMALLEST_FIRST_BEST_FIELD:
+        rows = site_field(log_weight_of(field), graph.n_nodes)
+        labelling = check_labelling(labelling, graph.n_nodes, int(rows.shape[1])).copy()
+        if backend is Backend.PYTHON:
+            moved = _floor_smallest_first(labelling, rows, min_sites)
+        else:
+            moved = int(
+                floor_smallest_first(
+                    labelling, np.ascontiguousarray(rows, dtype=np.float64), min_sites
+                )
+            )
+        if moved < 0:
+            raise ValueError(no_survivor(0, min_sites))
     return iterated_conditional_modes(
         graph,
         field,
@@ -637,3 +680,37 @@ def _dissolve(
             labels[node] = allowed[min(int(uniforms[base + node] * m), m - 1)]
             moved = True
     return moved
+
+
+def _floor_smallest_first(
+    labels: np.ndarray, values: np.ndarray, min_sites: int
+) -> int:
+    """:attr:`FloorPolicy.SMALLEST_FIRST_BEST_FIELD` in place: the oracle of the kernel's; the sites moved, ``-1`` with no survivor."""
+    n_states = int(values.shape[1])
+    counts = np.bincount(labels, minlength=n_states).tolist()
+    stuck: set[int] = set()
+    moved = 0
+    while True:
+        below = [
+            (count, state)
+            for state, count in enumerate(counts)
+            if 0 < count < min_sites and state not in stuck
+        ]
+        if not below:
+            return moved
+        smallest = min(below)[1]
+        alive = [s for s in range(n_states) if counts[s] > 0 and s != smallest]
+        if not alive:
+            return -1
+        for node in np.flatnonzero(labels == smallest).tolist():
+            allowed = [s for s in alive if values[node, s] > -np.inf]
+            if not allowed:
+                continue
+            # max keeps the first maximum: ties go to the lowest index.
+            best = max(allowed, key=lambda s: values[node, s])
+            labels[node] = best
+            counts[smallest] -= 1
+            counts[best] += 1
+            moved += 1
+        if counts[smallest] > 0:
+            stuck.add(smallest)

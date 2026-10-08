@@ -9,7 +9,9 @@ takes one, for the expansion and the swap on both backends (the swap at two
 states is one cut over every site, so exact), and for the floor of
 ``merge_small_labels``, which ends ``Stop.INFEASIBLE`` where only a forbidden
 label meets it. And ``forbid``'s mask is the ``-inf`` field, bitwise, so the
-two spellings are one problem.
+two spellings are one problem. On a 2x4, four-state instance every method
+scores no worse than its own run on ``penalized``'s field, and bifurcation,
+which rounded onto a forbidden label there, now leaves it (#1324).
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from sal.search.icm import iterated_conditional_modes, merge_small_labels
 from sal.search.tightening import dual_bound
 from sal.search.trws import trws
 from sal.sim.graph import BoundaryCondition, lattice_graph
-from sal.sim.potts import energies, forbid
+from sal.sim.potts import energies, forbid, penalized
 
 GRAPH = lattice_graph((3, 3), BoundaryCondition.OPEN, 0.8)
 FINITE = np.random.default_rng(1081).normal(0.0, 1.0, (GRAPH.n_nodes, 3))
@@ -251,3 +253,59 @@ def test_a_floor_only_a_forbidden_label_meets_is_infeasible_and_left(
         assert run.energy == energies(GRAPH, FINITE[:, :2], only[None])[0]
         assert run.termination.reason is Stop.INFEASIBLE
         assert not run.termination.converged
+
+
+def _rounded_onto_forbidden() -> tuple[np.ndarray, np.ndarray]:
+    """The 2x4, four-state instance on which bifurcation rounded onto a forbidden label (#1324)."""
+    rng = np.random.default_rng(3)
+    finite = rng.normal(0.0, 1.0, (SMALL.n_nodes, 4))
+    allowed = np.ones_like(finite, dtype=bool)
+    allowed[:, 0] = False
+    allowed[rng.random(allowed.shape) < 0.3] = False
+    allowed[np.arange(SMALL.n_nodes), rng.integers(1, 4, SMALL.n_nodes)] = True
+    return finite, allowed
+
+
+@pytest.mark.oracle
+def test_bifurcation_leaves_a_forbidden_rounding_for_an_allowed_label() -> None:
+    # Before #1324 the rounding of rng 7's replica held a forbidden label:
+    # penalized keeps every optimum allowed, not every rounding. The run on
+    # the penalized field still rounds there, which is the regression's witness.
+    finite, allowed = _rounded_onto_forbidden()
+    field = forbid(finite, allowed)
+    budget = Budget(Cost.SITE_VISITS, 400 * SMALL.n_nodes * 5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        run = ground_state(
+            SMALL, field, "bifurcation", budget, np.random.default_rng(7)
+        )
+        on_penalty = ground_state(
+            SMALL,
+            penalized(SMALL, field),
+            "bifurcation",
+            budget,
+            np.random.default_rng(7),
+        )
+    nodes = np.arange(SMALL.n_nodes)
+    assert allowed[nodes, run.labelling].all()
+    assert not allowed[nodes, on_penalty.labelling].all()
+    assert run.energy == energies(SMALL, finite, run.labelling[None])[0]
+    assert run.energy < on_penalty.energy
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("method", sorted(METHODS))
+def test_every_method_scores_no_worse_than_on_the_penalized_field(method: str) -> None:
+    # No entry is exact on a loopy lattice, so each is held to its own run on
+    # penalized's finite stand-in: allowed, and no higher in energy (#1324).
+    finite, allowed = _rounded_onto_forbidden()
+    field = forbid(finite, allowed)
+    budget = Budget(Cost.SITE_VISITS, 400 * SMALL.n_nodes * 5)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        run = ground_state(SMALL, field, method, budget, np.random.default_rng(7))
+        on_penalty = ground_state(
+            SMALL, penalized(SMALL, field), method, budget, np.random.default_rng(7)
+        )
+    assert allowed[np.arange(SMALL.n_nodes), run.labelling].all()
+    assert run.energy <= on_penalty.energy

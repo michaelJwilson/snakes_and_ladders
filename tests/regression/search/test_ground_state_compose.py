@@ -10,6 +10,7 @@ arm. The arms themselves are pinned to the functions they replaced by
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 import pickle
 
@@ -571,3 +572,28 @@ def test_an_update_on_a_fusion_reaches_every_operand_or_none() -> None:
         SolverChain.parse("(swendsen-wang&alpha-expansion)>icm").stages[0].update(
             steps=3
         )
+
+
+@pytest.mark.oracle
+def test_a_warm_in_a_stages_text_is_the_schedule_carrying_it() -> None:
+    # #1324: ARGUMENTS["warm"] sets the schedule's warm, as schedule= does.
+    rung = _rung()
+    warmed = dataclasses.replace(ANNEAL_SCHEDULE, warm=0.2)
+    by_text = ground_state(
+        rung.graph,
+        rung.field,
+        "anneal(warm=0.2)",
+        _budget(rung),
+        np.random.default_rng(3),
+    )
+    by_schedule = ground_state(
+        rung.graph,
+        rung.field,
+        "anneal",
+        _budget(rung),
+        np.random.default_rng(3),
+        schedule=warmed,
+    )
+    _same(by_text, by_schedule)
+    assert "warm=0.2" in str(SolverStage("anneal").update(schedule=warmed))
+    assert "warm" not in str(SolverStage("anneal").update(schedule=ANNEAL_SCHEDULE))

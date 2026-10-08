@@ -59,6 +59,11 @@ module. It is referenced here, never restated. What follows is local.
 
 - **A construction error in a reduction does not break loudly.**
 
+- **A penalty keeps every optimum allowed, not every rounding.** A solver
+  that reads `penalized`'s finite stand-in for `-inf` returns a forbidden
+  label wherever it stops short of an optimum, so a heuristic on it repairs
+  its result before returning it: bifurcation did not, on 8 sites (#1324).
+
 - **A move offered to a learner is the move this package runs, wrapped.**
   `potts_keyed` parameterizes what the action names and writes out the `T = 0`
   limit `beta = 1 / 0` cannot express; it implements no kernel of its own, so

@@ -17,7 +17,7 @@ from sal.sim.graph import (
     lattice_graph,
     triangular_lattice_graph,
 )
-from sal.sim.potts import energies
+from sal.sim.potts import energies, energy
 
 
 def _csr(graph: PottsGraph) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -172,3 +172,43 @@ def test_a_one_way_entry_is_half_a_coupling_and_a_pair_their_mean() -> None:
 def test_a_self_loop_in_a_directed_adjacency_is_refused() -> None:
     with pytest.raises(ValueError, match="self loop"):
         PottsGraph.from_directed_csr(np.array([0, 1, 1]), np.array([0]), 1.0)
+
+
+@pytest.mark.oracle
+@pytest.mark.parametrize("scale", [1.0, 0.7, 2.5])
+def test_a_scaled_directed_adjacency_scores_as_the_hand_scaled_graph_bitwise(
+    scale: float,
+) -> None:
+    # #1324: the caller's own beta * (A + A^T) / 2, built by hand.
+    indptr, indices, weights = _directed(0)
+    weights = np.abs(weights)
+    unscaled = PottsGraph.from_directed_csr(indptr, indices, weights)
+    by_hand = PottsGraph(
+        unscaled.n_nodes,
+        unscaled.edges,
+        tuple((np.asarray(unscaled.coupling) * scale).tolist()),
+    )
+    read = PottsGraph.from_directed_csr(indptr, indices, weights, scale=scale)
+    n_nodes = indptr.size - 1
+    states = np.random.default_rng(7).integers(0, 4, (16, n_nodes))
+    field = np.random.default_rng(8).normal(0.0, 1.0, (n_nodes, 4))
+
+    assert read == by_hand
+    for state in states:
+        assert energy(read, field, state) == energy(by_hand, field, state)
+    if scale == 1.0:
+        assert read == unscaled
+
+
+@pytest.mark.smoke
+def test_a_negative_coupling_or_scale_is_refused_by_pair() -> None:
+    indptr, indices = np.array([0, 1, 2, 3]), np.array([1, 2, 1])
+    with pytest.raises(ValueError, match=r"pair \(1, 2\) has coupling"):
+        PottsGraph.from_directed_csr(
+            indptr, indices, np.array([2.0, 1.0, -3.0]), scale=1.0
+        )
+    # Unscaled, either sign is kept, as before #1324.
+    kept = PottsGraph.from_directed_csr(indptr, indices, np.array([2.0, 1.0, -3.0]))
+    assert kept.coupling == (1.0, -1.0)
+    with pytest.raises(ValueError, match="scale"):
+        PottsGraph.from_directed_csr(indptr, indices, 1.0, scale=-1.0)

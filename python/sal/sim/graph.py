@@ -8,6 +8,7 @@ the ``shape``/``boundary`` metadata a lattice happens to carry.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterator
 from dataclasses import dataclass
 from enum import StrEnum
@@ -297,8 +298,10 @@ class PottsGraph:
         indptr: np.ndarray,
         indices: np.ndarray,
         coupling: np.ndarray | float,
+        *,
+        scale: float | None = None,
     ) -> PottsGraph:
-        """The graph a directed CSR adjacency describes, each pair coupled at ``(A_ij + A_ji) / 2`` (issue #1140).
+        """The graph a directed CSR adjacency describes, each pair coupled at ``(A_ij + A_ji) * scale / 2`` (issues #1140, #1324).
 
         :meth:`from_csr` refuses an asymmetric ``A``, so a caller holding a
         directed one --- a k-nearest-neighbour graph, whose ``j`` is among
@@ -321,8 +324,16 @@ class PottsGraph:
         ``(a + a) / 2`` is ``a`` in floating point; so on a symmetric ``A``
         whose rows hold sorted, unrepeated columns the graph equals
         :meth:`from_csr`'s, edge for edge and bitwise. Edges are in
-        row-major order of ``(i, j)``, ``i < j``. Couplings of either sign
-        are kept, as :meth:`from_csr` keeps them.
+        row-major order of ``(i, j)``, ``i < j``.
+
+        **The scale.** ``scale`` is the inverse temperature a caller
+        multiplied in by hand (#1324). Each pair's sum is multiplied by
+        ``scale / 2``; halving is exact, so the coupling is bitwise the
+        unscaled one times ``scale``, and ``scale=1.0`` is the unscaled
+        graph, bitwise. Given a scale, a negative coupling is refused, naming
+        the pair, since every ground-state solver takes ``J >= 0``. Left
+        ``None``, couplings of either sign are kept, as :meth:`from_csr`
+        keeps them: the call before #1324, bitwise.
 
         Parameters
         ----------
@@ -333,13 +344,20 @@ class PottsGraph:
         coupling : np.ndarray | float
             ``A_ij`` per stored entry, shape ``(indptr[-1],)``, or one value
             for every entry.
+        scale : float | None
+            Multiplies every coupling, finite and non-negative, and makes a
+            negative coupling an error; ``None`` neither scales nor checks.
 
         Raises
         ------
         ValueError
             If the adjacency has a self loop, which a Potts coupling does not
-            define.
+            define, or, given ``scale``, if it is negative or not finite or a
+            pair's coupling is negative.
         """
+        if scale is not None and not (math.isfinite(scale) and scale >= 0.0):
+            msg = f"scale multiplies every coupling; finite and >= 0, got {scale}"
+            raise ValueError(msg)
         indptr = np.asarray(indptr, dtype=np.int64)
         indices = np.asarray(indices, dtype=np.int64)
         n_nodes = indptr.shape[0] - 1
@@ -360,11 +378,19 @@ class PottsGraph:
         starts = np.flatnonzero(np.diff(keys, prepend=-1))
         pairs = keys[starts]
         edge_coupling = (
-            np.add.reduceat(weights[order], starts) / 2.0
+            np.add.reduceat(weights[order], starts)
+            * ((1.0 if scale is None else scale) / 2.0)
             if starts.size
             else np.empty(0, dtype=np.float64)
         )
         first, second = np.divmod(pairs, max(n_nodes, 1))
+        if scale is not None and np.any(edge_coupling < 0.0):
+            at = int(np.argmax(edge_coupling < 0.0))
+            msg = (
+                f"pair ({int(first[at])}, {int(second[at])}) has coupling "
+                f"{float(edge_coupling[at])!r} < 0; every ground-state solver takes J >= 0"
+            )
+            raise ValueError(msg)
         graph = cls(
             n_nodes,
             tuple(zip(first.tolist(), second.tolist(), strict=True)),

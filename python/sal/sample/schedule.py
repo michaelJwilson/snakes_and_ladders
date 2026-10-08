@@ -266,35 +266,38 @@ _RAMPS: dict[ScheduleShape, type[_InterpolatedTempSchedule]] = {
 
 @dataclass(frozen=True)
 class HeldTempSchedule(TempSchedule):
-    """A ramp, then its final temperature held for ``hold`` further steps.
+    """A ramp, its first temperature held for ``warm`` steps before it and its final one for ``hold`` after.
 
-    The ramp's steps are returned as the ramp returns them, so a hold of zero
-    is the ramp itself step for step.
+    The ramp's steps are returned as the ramp returns them, so a hold and a
+    warm of zero are the ramp itself step for step.
 
     Parameters
     ----------
     ramp : TempSchedule
-        The schedule up to the hold.
+        The schedule between the two holds.
     hold : int
         Steps at the ramp's last temperature after it, ``>= 0``.
+    warm : int
+        Steps at the ramp's first temperature before it, ``>= 0`` (issue #1324).
     """
 
     ramp: TempSchedule
     hold: int
+    warm: int = 0
 
     def __post_init__(self) -> None:
-        if self.hold < 0:
-            msg = f"a hold is a count of steps, got {self.hold}"
+        if self.hold < 0 or self.warm < 0:
+            msg = f"a hold is a count of steps, got hold={self.hold}, warm={self.warm}"
             raise ValueError(msg)
 
     @property
     def n_steps(self) -> int:  # type: ignore[override]
-        """The ramp's steps and the held ones."""
-        return self.ramp.n_steps + self.hold
+        """The ramp's steps and the held ones at each end."""
+        return self.warm + self.ramp.n_steps + self.hold
 
     def __call__(self, step: int) -> float:
         _check_step(step, self.n_steps)
-        return self.ramp(min(step, self.ramp.n_steps - 1))
+        return self.ramp(min(max(step - self.warm, 0), self.ramp.n_steps - 1))
 
 
 @dataclass(frozen=True)
@@ -316,12 +319,18 @@ class ScheduleParams:
     hold : float
         Fraction of the steps held at ``t_end`` after the ramp, in
         ``[0, 1)``. The held count is ``floor(hold * n_steps)``.
+    warm : float
+        Fraction of the steps held at ``t_start`` before the ramp, in
+        ``[0, 1)`` with ``warm + hold < 1``. The held count is
+        ``floor(warm * n_steps)``; ``0`` is the schedule before #1324,
+        bitwise.
     """
 
     shape: ScheduleShape
     t_start: float
     t_end: float
     hold: float = 0.0
+    warm: float = 0.0
 
     def __post_init__(self) -> None:
         _check_temperature("t_start", self.t_start)
@@ -329,11 +338,17 @@ class ScheduleParams:
         if not 0.0 <= self.hold < 1.0:
             msg = f"hold is a fraction of the steps in [0, 1), got {self.hold}"
             raise ValueError(msg)
+        if not 0.0 <= self.warm < 1.0 or not self.warm + self.hold < 1.0:
+            msg = (
+                f"warm is a fraction of the steps in [0, 1) with warm + hold < 1, "
+                f"got warm={self.warm}, hold={self.hold}"
+            )
+            raise ValueError(msg)
 
     def build(self, n_steps: int) -> TempSchedule:
         """The schedule of exactly ``n_steps`` steps.
 
-        With ``hold == 0`` this is the shape's own schedule, the object a
+        With ``hold == warm == 0`` this is the shape's own schedule, the object a
         caller building it by hand gets, so a default consumer's floats are
         unchanged.
 
@@ -345,8 +360,11 @@ class ScheduleParams:
         """
         _check_length(n_steps)
         held = math.floor(self.hold * n_steps)
-        ramp = _RAMPS[self.shape](self.t_start, self.t_end, n_steps - held)
-        return ramp if held == 0 else HeldTempSchedule(ramp, held)
+        warm = math.floor(self.warm * n_steps)
+        ramp = _RAMPS[self.shape](self.t_start, self.t_end, n_steps - held - warm)
+        if held == 0 and warm == 0:
+            return ramp
+        return HeldTempSchedule(ramp, held, warm)
 
 
 @dataclass(frozen=True)

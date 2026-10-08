@@ -102,6 +102,7 @@ from sal.search.alpha_expansion import (
 )
 from sal.search.bifurcation import simulated_bifurcation
 from sal.search.icm import (
+    FloorPolicy,
     SweepOrder,
     check_min_sites,
     iterated_conditional_modes,
@@ -777,8 +778,13 @@ def run_merge(
     start: np.ndarray | None = None,
     min_sites: int | None = None,
     backend: Backend | None = None,
+    policy: FloorPolicy = FloorPolicy.UNIFORM,
 ) -> MethodRun:
     """The stage after a solver that floors its labelling: ``merge(min_sites=k)`` (issue #1081).
+
+    ``policy`` is :func:`~sal.search.icm.merge_small_labels`'s, set in a
+    chain's text as ``merge(min_sites=20,policy=smallest-first-best-field)``
+    (issue #1324).
 
     :func:`~sal.search.icm.merge_small_labels` on the labelling the stage
     before handed over, charged ``visits_per_sweep`` per ICM sweep it ran, as
@@ -810,6 +816,7 @@ def run_merge(
         min_sites=min_sites,
         max_iterations=budget.size // problem.visits_per_sweep,
         backend=Backend.NUMBA if backend is None else backend,
+        policy=policy,
     )
     return MethodRun(
         labelling=floored.labelling,
@@ -1862,7 +1869,7 @@ _STAGE = re.compile(r"^\s*([A-Za-z0-9_\-]+)\s*(?:\((.*)\))?\s*$")
 
 #: The fields of an annealed stage's schedule an argument sets; the others
 #: are :data:`ANNEAL_SCHEDULE`'s.
-SCHEDULE_FIELDS = ("shape", "t_start", "t_end", "hold")
+SCHEDULE_FIELDS = ("shape", "t_start", "t_end", "hold", "warm")
 
 #: Every argument a stage can take, and how a value, typed or text, is read.
 ARGUMENTS: dict[str, Callable[[Any], Any]] = {
@@ -1870,9 +1877,11 @@ ARGUMENTS: dict[str, Callable[[Any], Any]] = {
     "t_start": float,
     "t_end": float,
     "hold": float,
+    "warm": float,
     "steps": int,
     "backend": Backend,
     "min_sites": int,
+    "policy": FloorPolicy,
     "reserve_cycles": int,
     "reserve_sweeps": int,
 }
@@ -1937,7 +1946,13 @@ class SolverStage:
         if "schedule" in arguments:
             schedule = arguments.pop("schedule")
             arguments = {
-                **{key: getattr(schedule, key) for key in SCHEDULE_FIELDS},
+                # A warm of zero is left unset, so a stage's text reads as it
+                # did before #1324.
+                **{
+                    key: getattr(schedule, key)
+                    for key in SCHEDULE_FIELDS
+                    if key != "warm" or schedule.warm
+                },
                 **arguments,
             }
         if not arguments:
@@ -1951,6 +1966,8 @@ class SolverStage:
         annealing = set(arguments) & {*SCHEDULE_FIELDS, "steps"}
         if annealing and not takes & ANNEAL_OPTIONS:
             _refuse_argument(self.name, annealing, "it runs no anneal")
+        if "policy" in arguments and self.name != "merge":
+            _refuse_argument(self.name, {"policy"}, "only 'merge' floors by a policy")
         descending = set(arguments) & {"backend", "min_sites"}
         if descending and not takes & DESCENT_OPTIONS:
             _refuse_argument(self.name, descending, "it is no single-site descent")
@@ -1970,7 +1987,7 @@ class SolverStage:
         }
         if fields:
             bound["schedule"] = replace(ANNEAL_SCHEDULE, **fields)
-        for key in ("steps", "backend", "min_sites"):
+        for key in ("steps", "backend", "min_sites", "policy"):
             if key in arguments:
                 bound[key] = arguments.pop(key)
         reserve: Callable[[Any], int] | None = None

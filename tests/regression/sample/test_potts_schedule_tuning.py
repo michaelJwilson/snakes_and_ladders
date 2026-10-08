@@ -236,3 +236,38 @@ def test_cluster_moves_refuses_a_keyed_wolff_under_a_heat_bath() -> None:
         cluster_moves(
             _graph(), FIELD, move=PottsMove.WOLFF, recolour=Recolour.HEAT_BATH
         )
+
+
+@pytest.mark.oracle
+def test_tune_schedule_searches_a_warm_grid_bitwise() -> None:
+    # #1324: a grid's candidates may carry warm; the brute force still referees.
+    grid = (
+        ScheduleParams(ScheduleShape.EXPONENTIAL, 2.0, 0.05),
+        ScheduleParams(ScheduleShape.EXPONENTIAL, 2.0, 0.05, warm=0.3),
+        ScheduleParams(ScheduleShape.LINEAR, 0.8, 0.3, 0.25, 0.25),
+        ScheduleParams(ScheduleShape.LINEAR, 0.8, 0.3, warm=0.5),
+    )
+    tuned = tune_schedule(
+        _graph(),
+        FIELD,
+        move=PottsMove.SINGLE_SITE,
+        recolour=Recolour.UNIFORM,
+        budget=BUDGET,
+        criterion=Criterion.LOWEST_ENERGY,
+        rng=np.random.default_rng(SEED),
+        grid=grid,
+    )
+    children = np.random.default_rng(SEED).spawn(len(grid))
+    energies = [
+        anneal_potts(
+            _graph(),
+            FIELD,
+            params.build(20),
+            child,
+            move=PottsMove.SINGLE_SITE,
+            recolour=Recolour.UNIFORM,
+        ).energy
+        for params, child in zip(grid, children, strict=True)
+    ]
+    assert [c.lowest_energy for c in tuned.candidates] == energies
+    assert tuned.params == grid[int(np.argmin(energies))]

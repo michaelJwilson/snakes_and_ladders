@@ -291,3 +291,52 @@ def greedy_colouring(offsets: np.ndarray, neighbours: np.ndarray) -> np.ndarray:
             chosen += 1
         colour[node] = chosen
     return colour
+
+
+@njit(cache=True, nogil=True)
+def floor_smallest_first(labels: np.ndarray, values: np.ndarray, min_sites: int) -> int:
+    """The smallest-first, best-field floor in place: the kernel of :func:`sal.search.icm._floor_smallest_first`.
+
+    Returns the sites moved, or ``-1`` where a state is below the floor and no
+    other state holds a site.
+    """
+    n_nodes, n_states = values.shape
+    counts = np.zeros(n_states, dtype=np.int64)
+    for node in range(n_nodes):
+        counts[labels[node]] += 1
+    stuck = np.zeros(n_states, dtype=np.bool_)
+    moved = 0
+    while True:
+        smallest = -1
+        for state in range(n_states):
+            count = counts[state]
+            if (
+                0 < count < min_sites
+                and not stuck[state]
+                and (smallest < 0 or count < counts[smallest])
+            ):
+                smallest = state
+        if smallest < 0:
+            return moved
+        alive = counts > 0
+        alive[smallest] = False
+        if not alive.any():
+            return -1
+        for node in range(n_nodes):
+            if labels[node] != smallest:
+                continue
+            best = -1
+            for state in range(n_states):
+                if (
+                    alive[state]
+                    and values[node, state] > -np.inf
+                    and (best < 0 or values[node, state] > values[node, best])
+                ):
+                    best = state
+            if best >= 0:
+                labels[node] = best
+                counts[smallest] -= 1
+                counts[best] += 1
+                moved += 1
+        if counts[smallest] > 0:
+            stuck[smallest] = True

@@ -115,3 +115,44 @@ def test_a_held_schedule_refuses_a_step_past_its_end() -> None:
 
     with pytest.raises(ValueError, match="outside"):
         built(10)
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("shape", list(ScheduleShape))
+@pytest.mark.parametrize(("warm", "hold"), [(0.2, 0.0), (0.3, 0.25), (0.1, 0.5)])
+def test_a_warm_holds_t_start_for_its_count_before_the_ramp(
+    shape: ScheduleShape, warm: float, hold: float
+) -> None:
+    # #1324: floor(warm * n) steps at t_start, then the ramp, then the hold.
+    n_steps = 40
+    params = ScheduleParams(shape, 2.0, 0.05, hold, warm)
+    values = temperatures(params.build(n_steps))
+    n_warm, n_hold = math.floor(warm * n_steps), math.floor(hold * n_steps)
+    ramp = temperatures(
+        ScheduleParams(shape, 2.0, 0.05).build(n_steps - n_warm - n_hold)
+    )
+    assert len(values) == n_steps
+    assert values[:n_warm] == [2.0] * n_warm
+    assert values[n_warm : n_steps - n_hold] == ramp
+    assert values[n_steps - n_hold :] == [0.05] * n_hold
+
+
+@pytest.mark.analytic
+@pytest.mark.parametrize("shape", list(ScheduleShape))
+@pytest.mark.parametrize("hold", HOLDS)
+def test_a_warm_of_zero_is_the_schedule_before_it_bitwise(
+    shape: ScheduleShape, hold: float
+) -> None:
+    for n_steps in LENGTHS:
+        if n_steps - math.floor(hold * n_steps) < 2:
+            continue
+        before = ScheduleParams(shape, 2.0, 0.05, hold).build(n_steps)
+        assert ScheduleParams(shape, 2.0, 0.05, hold, 0.0).build(n_steps) == before
+
+
+@pytest.mark.analytic
+def test_a_warm_and_hold_summing_to_one_are_refused() -> None:
+    with pytest.raises(ValueError, match="warm \\+ hold < 1"):
+        ScheduleParams(ScheduleShape.LINEAR, 2.0, 0.05, 0.5, 0.5)
+    with pytest.raises(ValueError, match="warm"):
+        ScheduleParams(ScheduleShape.LINEAR, 2.0, 0.05, 0.0, -0.1)
