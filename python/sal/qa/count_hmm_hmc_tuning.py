@@ -27,7 +27,8 @@ the samplers' forms, k-means++ and the matching are #1393's harness
 restart arm reproduces its first starts.
 
 Run as ``python -m sal.qa.count_hmm_hmc_tuning stress`` (the stress arms)
-and ``python -m sal.qa.count_hmm_hmc_tuning variants <multiple>``; two
+and ``python -m sal.qa.count_hmm_hmc_tuning variants 10 1`` (the
+multiples chosen on stress, the anneal's then the sampler's); two
 worker processes at one thread each.
 """
 
@@ -473,7 +474,7 @@ def settled(table: dict[str, list[Result]]) -> list[int]:
 
 
 def main(argv: list[str]) -> None:
-    """``stress`` runs every stress arm; ``variants <multiple>`` the variants at that multiple."""
+    """``stress`` runs every stress arm; ``variants <T0> <T>`` the variants at the anneal's and the sampler's multiples."""
     torch.set_num_threads(1)
     clock = time.perf_counter()
     if argv[0] == "stress":
@@ -481,12 +482,12 @@ def main(argv: list[str]) -> None:
         report(table)
         print("settled at proposals per candidate:", settled(table))
     else:
-        multiple = float(argv[1])
+        t0, temperature = float(argv[1]), float(argv[2])
         arms = (
             "restart",
             "k-means++",
-            f"anneal T0={multiple:g}",
-            f"sample T={multiple:g}",
+            f"anneal T0={t0:g}",
+            f"sample T={temperature:g}",
         )
         for variant in VARIANTS:
             print(f"## {variant}")
