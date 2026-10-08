@@ -1478,11 +1478,19 @@ def swendsen_wang_heat_bath_sweep(
     with the cluster's size in a strong field; here a large cluster moves to
     its field's preferred label with the probability the law gives it.
 
-    ``backend`` merges the bonds (:func:`bond_roots`); the two give the same
-    roots, so the same chain.
+    ``backend`` names which implementation runs the pass.
+    :data:`~sal.backend.Backend.PYTHON` is this one, the oracle: bonds and
+    labels in NumPy, merged by :func:`bond_roots`' compiled union-find, whose
+    roots are the Python loop's bitwise (#986), so the stream is NumPy's.
+    :data:`~sal.backend.Backend.RUST`, the default, is
+    ``oxisal.swendsen_wang_heat_bath_sweeps`` (:func:`_heat_bath_pass_rust`),
+    the whole pass compiled from one seed: a chain of the same law and not
+    the same chain, at 2.3x the oracle per pass on a 256x256 periodic
+    lattice at the ``q = 3`` transition, min of 3 (#1364).
 
-    Draws: one uniform per edge, then ``q`` per cluster, clusters in
-    increasing root order.
+    Draws: on the oracle's route, one uniform per edge, then ``q`` per
+    cluster, clusters in increasing root order; on the Rust route, one
+    ``integers(0, 2**62)`` seed.
 
     **Forbidden labels** (issue #1146). A ``-inf`` entry gives its label zero
     weight, so a cluster never draws a label any member forbids. A cluster
@@ -1494,13 +1502,19 @@ def swendsen_wang_heat_bath_sweep(
     relabelled in place and is the only argument modified; ``rows`` is
     ``(n_nodes, n_states)`` ``float64`` at temperature 1, or a
     :class:`~sal.sim.potts.SiteField`. Thread-safe given a distinct ``state``
-    and generator per thread; the Rust :func:`bond_roots` releases the GIL.
+    and generator per thread; both compiled routes release the GIL.
     """
     rows = log_weight_of(rows)
+    if backend is Backend.RUST:
+        _heat_bath_pass_rust(state, graph, rows, rng, beta)
+        return
+    refuse_backend(
+        "the heat-bath Swendsen-Wang pass", backend, (Backend.PYTHON, Backend.RUST)
+    )
     n_nodes = graph.n_nodes
     n_states = int(rows.shape[1])
     bonds = _like_bonds(state, graph, rng, beta)
-    roots = bond_roots(n_nodes, bonds, backend=backend)
+    roots = bond_roots(n_nodes, bonds)
     # A root is its own root, so the heads are read without a sort.
     heads = np.flatnonzero(roots == np.arange(n_nodes))
     rank = np.empty(n_nodes, dtype=np.int64)
@@ -1520,6 +1534,44 @@ def swendsen_wang_heat_bath_sweep(
     stuck = np.flatnonzero(np.isneginf(weights).all(axis=1))
     labels[stuck] = state[heads[stuck]]
     state[:] = labels[cluster]
+
+
+def _heat_bath_pass_rust(
+    state: np.ndarray,
+    graph: PottsGraph,
+    rows: np.ndarray,
+    rng: np.random.Generator,
+    beta: float,
+    n_sweeps: int = 1,
+) -> np.ndarray:
+    """``n_sweeps`` :func:`swendsen_wang_heat_bath_sweep` passes on the extension (#1364).
+
+    **The same law, from one seed.** The label draws are one per cluster, a
+    count known only inside the pass, so the kernel takes one draw of
+    ``rng``, ``integers(0, 2**62)``, as a ChaCha8 seed, the protocol
+    :func:`_wolff_rust` follows (#1362), and draws the bonds and the labels
+    from it. The chain is of the oracle's law and
+    is not the oracle's chain, so the referee is the enumerated law
+    (`tests/regression/sample/test_potts_heat_bath_cluster_rust.py`).
+
+    One crossing per ``n_sweeps`` passes, carrying the state, the unscaled
+    field, the flattened edge ends and the couplings; ``beta`` is applied in
+    the kernel, to the bond probability once per call and to each cluster's
+    label sums. Returns each pass's cluster count.
+    """
+    from sal import oxisal
+
+    n_clusters = np.empty(n_sweeps, dtype=np.int64)
+    oxisal.swendsen_wang_heat_bath_sweeps(
+        state,
+        np.ascontiguousarray(rows, dtype=np.float64),
+        np.ascontiguousarray(graph.edge_index, dtype=np.int64).reshape(-1),
+        np.ascontiguousarray(graph.edge_coupling, dtype=np.float64),
+        float(beta),
+        int(rng.integers(0, 2**62)),
+        n_clusters,
+    )
+    return n_clusters
 
 
 def wolff_heat_bath_sweep(

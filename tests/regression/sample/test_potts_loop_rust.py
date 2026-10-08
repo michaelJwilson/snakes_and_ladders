@@ -13,7 +13,7 @@ and is not asserted. The referees:
   and the stop, equal where the move costs are fixed, and replayed through
   :func:`~sal.sample.loop.anneal_spent` on the charges the Rust loop
   returns where they are not;
-* a move set the loop does not run, which runs the Python loop bitwise.
+* a move set the loop has no kernel for, which runs the Python loop bitwise.
 """
 
 from __future__ import annotations
@@ -56,6 +56,8 @@ SEED = 1368
         (PottsMove.WOLFF, PottsMove.SINGLE_SITE),
         (PottsMove.WOLFF_HEAT_BATH,),
         (PottsMove.WOLFF_HEAT_BATH, PottsMove.SINGLE_SITE),
+        (PottsMove.SWENDSEN_WANG_HEAT_BATH,),
+        (PottsMove.SWENDSEN_WANG_HEAT_BATH, PottsMove.SINGLE_SITE),
     ],
     ids=[
         "gibbs",
@@ -65,6 +67,8 @@ SEED = 1368
         "wolff+gibbs",
         "wolff-heat-bath",
         "wolff-heat-bath+gibbs",
+        "sw-heat-bath",
+        "sw-heat-bath+gibbs",
     ],
 )
 @pytest.mark.parametrize("budget", [False, True], ids=["sweeps", "budget"])
@@ -170,21 +174,23 @@ def test_a_wolff_budget_replays_on_the_python_loop(move: PottsMove) -> None:
 
 @pytest.mark.analytic
 def test_a_move_without_a_rust_kernel_runs_the_python_loop_bitwise() -> None:
-    """Heat-bath Swendsen-Wang (#1364) falls back to the Python loop for the whole run."""
+    """Niedermayer has no loop kernel: the default runs the Python loop for the whole run."""
     graph = _graph()
-    assert loop_codes((PottsMove.SWENDSEN_WANG_HEAT_BATH,), Backend.RUST) is None
+    assert loop_codes((PottsMove.NIEDERMAYER,), Backend.RUST) is None
+    assert loop_codes((PottsMove.SWENDSEN_WANG_HEAT_BATH,), None) == [4]
     runs = [
         anneal_potts(
             graph,
             FIELD,
             ramp.linear(2.0, 0.5, 10),
             np.random.default_rng(SEED),
-            move=[PottsMove.SWENDSEN_WANG_HEAT_BATH],
+            move=[PottsMove.NIEDERMAYER],
+            recolour=Recolour.UNIFORM,
             loop_backend=backend,
         )
-        for backend in (Backend.PYTHON, Backend.RUST)
+        for backend in (Backend.PYTHON, None)
     ]
-    assert np.array_equal(runs[0].best, runs[1].best)
+    np.testing.assert_array_equal(runs[0].best, runs[1].best)
     assert runs[0].energy == runs[1].energy
     assert runs[0].spent == runs[1].spent
 

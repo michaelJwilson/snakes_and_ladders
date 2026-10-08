@@ -208,6 +208,15 @@ def swendsen_wang_sweep(
     guard: float,
     first: int,
 ) -> tuple[int, int]: ...
+def swendsen_wang_heat_bath_sweeps(
+    state: np.ndarray,
+    field: np.ndarray,
+    edges: np.ndarray,
+    couplings: np.ndarray,
+    beta: float,
+    seed: int,
+    n_clusters: np.ndarray,
+) -> None: ...
 def wolff_sweeps(
     state: np.ndarray,
     field: np.ndarray,

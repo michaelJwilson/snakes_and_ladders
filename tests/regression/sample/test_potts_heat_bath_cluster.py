@@ -21,12 +21,11 @@ from sal.sample.potts_mcmc import (
     PottsMove,
     adjacency_lists,
     heat_bath_labels,
-    sample_potts,
     sweeps,
     swendsen_wang_heat_bath_sweep,
     wolff_heat_bath_sweep,
 )
-from sal.sim.graph import BoundaryCondition, PottsGraph, lattice_graph
+from sal.sim.graph import PottsGraph
 from sal.sim.potts import energy
 
 #: A triangle and a pendant: clusters of every size from 1 to 4. The
@@ -235,25 +234,3 @@ def test_the_heat_bath_draws_the_softmax() -> None:
 
     error = np.sqrt(law * (1.0 - law) / draws.size)
     assert np.all(np.abs(frequency - law) < SIGMAS * error)
-
-
-@pytest.mark.oracle
-@pytest.mark.backend
-def test_the_compiled_union_find_is_the_same_heat_bath_chain() -> None:
-    # The pass differs between backends in the union-find alone, whose roots
-    # `test_bond_roots.py` pins bitwise, so the chains are equal.
-    graph = lattice_graph((6, 6), BoundaryCondition.OPEN, 0.8)
-    field = np.random.default_rng(7).normal(0.0, 0.6, (graph.n_nodes, N_STATES))
-    runs = [
-        sample_potts(
-            graph,
-            field,
-            PottsMove.SWENDSEN_WANG_HEAT_BATH,
-            np.random.default_rng(1142),
-            200,
-            cluster_backend=backend,
-        ).states
-        for backend in (Backend.PYTHON, Backend.RUST)
-    ]
-
-    assert np.array_equal(runs[0], runs[1])

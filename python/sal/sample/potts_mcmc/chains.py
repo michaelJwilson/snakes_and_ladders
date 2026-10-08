@@ -89,7 +89,6 @@ from sal.sim.potts import (
     log_weight_of,
     site_field,
 )
-from sal.track import NULL as NULL_TRACKED
 from sal.track import current as current_tracked
 
 #: The move sets :func:`balanced_sweep_at` serves.
@@ -104,12 +103,13 @@ _SINGLE_CLUSTER_MOVES = frozenset(
 
 
 #: The moves the Rust loop runs, by the code ``oxisal.potts_loop`` reads
-#: (issue #1368). Heat-bath Swendsen-Wang has no whole Rust kernel yet (#1364).
+#: (issue #1368); heat-bath Swendsen-Wang since #1364.
 _LOOP_CODES = {
     PottsMove.SINGLE_SITE: 0,
     PottsMove.SWENDSEN_WANG: 1,
     PottsMove.WOLFF: 2,
     PottsMove.WOLFF_HEAT_BATH: 3,
+    PottsMove.SWENDSEN_WANG_HEAT_BATH: 4,
 }
 
 
@@ -122,23 +122,15 @@ def loop_codes(
     """``move`` as the Rust loop's codes, or ``None`` where the Python loop runs the whole run (issue #1368).
 
     The Python loop runs where it is asked for, where a move in ``move`` has
-    no Rust kernel the loop can call (heat-bath Swendsen-Wang, #1364; the
-    gradient-informed, ghost-spin, label-directed and Niedermayer moves),
-    where ``backend`` or ``cluster_backend`` asks for a Python oracle the loop
-    does not call, and inside a :func:`~sal.track.track` block, whose
-    per-step records are Python calls.
+    no Rust kernel the loop can call (the gradient-informed, ghost-spin,
+    label-directed and Niedermayer moves), and where ``backend`` or
+    ``cluster_backend`` asks for a Python oracle the loop does not call. A
+    :func:`~sal.track.track` block does not change the route, so a run's
+    result never depends on whether it is tracked (:func:`_record_ran`).
     """
-    if loop_backend is None:
-        # The default: the Rust loop where a step grows a single cluster,
-        # 26.6x to 373x the Python loop (#1368); single-site and
-        # Swendsen-Wang sets measured 1.1x to 1.4x at 256x256, under the 2x
-        # rule, and keep the oracle's chain state for state there.
-        loop_backend = (
-            Backend.RUST
-            if any(each in _SINGLE_CLUSTER_MOVES for each in move)
-            else Backend.PYTHON
-        )
-    if loop_backend is not Backend.RUST or current_tracked() is not NULL_TRACKED:
+    # Python is not the step caller (#1368): ``None``, the default, is the
+    # Rust loop wherever every move has a kernel it calls.
+    if loop_backend is Backend.PYTHON:
         return None
     if backend is not Backend.RUST and PottsMove.SINGLE_SITE in move:
         return None
@@ -408,8 +400,9 @@ def sample_potts(
         :data:`~sal.backend.Backend.RUST` the default
         (:func:`sweep_at`, issue #599).
     cluster_backend : Backend
-        Which implementation runs the **Swendsen-Wang** pass and the two
-        **Wolff** steps (#1362); Niedermayer has one and ignores it. A
+        Which implementation runs the **Swendsen-Wang** pass, its heat-bath
+        relabelling (#1364) and the two **Wolff** steps (#1362); Niedermayer
+        has one and ignores it. A
         separate argument rather than the one above because the two are not the same decision: the Rust pass draws
         the same uniforms in a different order and so returns a chain of the
         same law rather than the same chain (:func:`_cluster_pass_rust`,
@@ -435,8 +428,8 @@ def sample_potts(
         Swendsen-Wang and both Wolff moves; any other move in ``move``, or a
         :func:`~sal.track.track` block, runs the whole chain on the Python
         loop (:func:`loop_codes`). :data:`~sal.backend.Backend.PYTHON` is the
-        oracle. ``None``, the default, runs the Rust loop where ``move``
-        holds a Wolff move and the Python loop otherwise (:func:`loop_codes`).
+        oracle. ``None``, the default, is the Rust loop wherever it applies:
+        Python is not the step caller (``sample/CLAUDE.md``).
 
     Returns
     -------
@@ -988,9 +981,10 @@ def anneal_potts(
         ``energy`` is ``best``'s energy recomputed by :func:`energies`.
         :data:`~sal.backend.Backend.PYTHON`, :func:`~sal.sample.loop.anneal`
         and :func:`~sal.sample.loop.anneal_spent`, is the oracle. ``None``,
-        the default, runs the Rust loop where ``move`` holds a Wolff move,
-        201x to 373x the Python loop on a Wolff anneal at 256x256, and the
-        Python loop otherwise, 1.1x to 1.4x there (:func:`loop_codes`). With ``polish``, the same call descends
+        the default, is the Rust loop wherever it applies (:func:`loop_codes`):
+        201x to 373x the Python loop on a Wolff anneal at 256x256, 1.1x to
+        1.4x on single-site, by the owner's principle that Python is not the
+        step caller. With ``polish``, the same call descends
         ``final`` and ``best`` by the Rust ICM, on the floor's uniforms from
         its own stream.
     polish : Polish | None
@@ -1070,6 +1064,7 @@ def anneal_potts(
             min_sites=min_sites,
         )
         best = np.asarray(ran["best"])
+        _record_ran(schedule, ran, best)
         walked = Walked(
             best=best,
             energy=lattice.energy(best),
@@ -1182,6 +1177,27 @@ def _polished(
         trace=tuple(trace),
         tuned=tuned,
     )
+
+
+def _record_ran(schedule: TempSchedule, ran: dict[str, Any], best: np.ndarray) -> None:
+    """What :func:`~sal.sample.loop.anneal` records per step, from the Rust loop's returns (issue #1368).
+
+    The temperature and the best energy per step; the best state once, at
+    the last step, since the loop keeps no state per step.
+    """
+    tracked = current_tracked()
+    if tracked.is_null:
+        return
+    indices, energies_ = ran["indices"], ran["best_energies"]
+    last = len(indices) - 1
+    for step, (index, energy_) in enumerate(zip(indices, energies_, strict=True)):
+        tracked.record(
+            step,
+            state=best if step == last else None,
+            temperature=schedule(int(index)),
+            energy=float(energy_),
+        )
+    tracked.record_cost(max(last, 0), int(best.nbytes))
 
 
 def _polished_rust(

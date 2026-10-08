@@ -30,12 +30,15 @@ use numpy::{
 };
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rand_distr::{Distribution, StandardUniform, Uniform};
 
 use crate::icm::{icm_sweeps_impl, no_survivor, IcmScratch};
-use crate::potts::{conditional, single_site_sweeps_impl, swendsen_wang_sweep_impl};
+use crate::potts::{
+    conditional, single_site_sweeps_impl, swendsen_wang_heat_bath_sweeps_impl,
+    swendsen_wang_sweep_impl,
+};
 use crate::wolff::{wolff_step, Lattice, WolffDraw, WolffScratch};
 
 /// A heat-bath (Glauber) sweep over every site in index order.
@@ -46,6 +49,9 @@ pub const SWENDSEN_WANG: u8 = 1;
 pub const WOLFF: u8 = 2;
 /// A Wolff step drawing its cluster's label from the field weight.
 pub const WOLFF_HEAT_BATH: u8 = 3;
+/// A Swendsen-Wang pass drawing each cluster's label from its field weight
+/// (#1364).
+pub const SWENDSEN_WANG_HEAT_BATH: u8 = 4;
 
 /// The schedule and the recording rule of one run.
 pub struct Plan<'a> {
@@ -103,6 +109,9 @@ pub struct Ran {
     pub indices: Vec<u32>,
     /// The site visits each main step charged.
     pub charges: Vec<u64>,
+    /// The best energy after each main step, where the best is kept: what a
+    /// `track` run records per step.
+    pub best_energies: Vec<f64>,
     /// The best state descended by the polish; empty unpolished.
     pub best_polished: Vec<i64>,
     /// The polish's sweeps from the final state and from the best.
@@ -148,7 +157,11 @@ pub fn potts_loop_impl(
     if plan.moves.is_empty() || plan.temperatures.is_empty() {
         return Err("a run needs a move and a temperature".to_string());
     }
-    if let Some(&code) = plan.moves.iter().find(|&&code| code > WOLFF_HEAT_BATH) {
+    if let Some(&code) = plan
+        .moves
+        .iter()
+        .find(|&&code| code > SWENDSEN_WANG_HEAT_BATH)
+    {
         return Err(format!("move code {code} is not one this loop runs"));
     }
     if let Some(&t) = plan
@@ -190,7 +203,8 @@ pub fn potts_loop_impl(
     let per_cluster_site = 1 + incident / n_nodes as u64;
 
     // The edges once, each from its lower end, for the Swendsen-Wang pass.
-    let has_sw = plan.moves.contains(&SWENDSEN_WANG);
+    let has_sw =
+        plan.moves.contains(&SWENDSEN_WANG) || plan.moves.contains(&SWENDSEN_WANG_HEAT_BATH);
     let mut edges: Vec<i64> = Vec::new();
     let mut edge_couplings: Vec<f64> = Vec::new();
     if has_sw {
@@ -225,7 +239,8 @@ pub fn potts_loop_impl(
     let mut colour_draws = vec![0i64; if has_sw { n_nodes } else { 0 }];
     let mut accept_draws = vec![0.0f64; if has_sw { n_nodes } else { 0 }];
     let mut labels = vec![0i64; if has_sw { n_nodes } else { 0 }];
-    let compare = plan.moves.len() > 1 || plan.moves[0] <= SWENDSEN_WANG;
+    let compare = plan.moves.len() > 1 || !matches!(plan.moves[0], WOLFF | WOLFF_HEAT_BATH);
+    let mut passes = [0i64; 1];
     let mut before = vec![0i64; if compare { n_nodes } else { 0 }];
 
     let mut energy = energy_of(state, lattice);
@@ -338,6 +353,20 @@ pub fn potts_loop_impl(
                     energy = energy_of(state, lattice);
                     visits += per_sweep;
                 }
+                SWENDSEN_WANG_HEAT_BATH => {
+                    swendsen_wang_heat_bath_sweeps_impl(
+                        state,
+                        lattice.field,
+                        n_states,
+                        &edges,
+                        &edge_couplings,
+                        beta,
+                        rng.next_u64(),
+                        &mut passes,
+                    )?;
+                    energy = energy_of(state, lattice);
+                    visits += per_sweep;
+                }
                 _ => {
                     let (len, _, accept, from) = wolff_step(
                         state,
@@ -388,6 +417,9 @@ pub fn potts_loop_impl(
             ran.spent_main += visits;
             ran.indices.push(at as u32);
             ran.charges.push(visits);
+            if plan.track_best {
+                ran.best_energies.push(ran.best_energy);
+            }
             if plan.record && (index + 1).is_multiple_of(plan.thin) {
                 ran.records.extend_from_slice(state);
             }
@@ -657,6 +689,7 @@ pub fn potts_loop<'py>(
     out.set_item("records", PyArray1::from_vec(py, ran.records))?;
     out.set_item("indices", PyArray1::from_vec(py, ran.indices))?;
     out.set_item("charges", PyArray1::from_vec(py, ran.charges))?;
+    out.set_item("best_energies", PyArray1::from_vec(py, ran.best_energies))?;
     out.set_item("best_polished", PyArray1::from_vec(py, ran.best_polished))?;
     out.set_item("polish_sweeps", ran.polish_sweeps)?;
     Ok(out)

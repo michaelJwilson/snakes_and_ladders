@@ -160,7 +160,17 @@ def test_recording_the_diagnostics_draws_no_random_number() -> None:
     graph = lattice_graph((4, 4), BoundaryCondition.PERIODIC, 1.0)
     field = np.random.default_rng(1314).normal(0.0, 1.0, (16, 3))
     for move in (PottsMove.NIEDERMAYER, PottsMove.SINGLE_SITE, PottsMove.WOLFF):
-        chain = sample_potts(graph, field, move, np.random.default_rng(SEED), 30, 5, 2)
+        # The Python loop's recording; the Rust loop draws its own stream (#1368).
+        chain = sample_potts(
+            graph,
+            field,
+            move,
+            np.random.default_rng(SEED),
+            30,
+            5,
+            2,
+            loop_backend=Backend.PYTHON,
+        )
         rng = np.random.default_rng(SEED)
         rows = site_field(field, graph.n_nodes)
         state = rng.integers(0, 3, size=graph.n_nodes)
