@@ -3,7 +3,7 @@ id: "036"
 date: 2026-10-08
 commit: fc7e2168f3581f4a476e7177f99c57e7f92efa1f
 branch: claude/icm-merge-alternation-1390
-pr: 0
+pr: 1403
 tickets: [1390, 1373]
 problem: potts-lattice
 fixture: tests/regression/fixtures/potts_reference/stress.yaml and its variants margin_0.1, q8, imbalance_50, equal and forbidden
