@@ -3307,7 +3307,11 @@ their budget after 8 rounds with `within_band` `False` (last acceptances
 `0.44, 0.16, 0.27` and `0.16, 0.13, 0.71`), stated by a `Termination`. A given
 ladder is bitwise main's on all three. Pinned in
 `tests/regression/sample/test_schedule_racing.py` and
-`tests/regression/sample/test_ladder_tuning.py`.
+`tests/regression/sample/test_ladder_tuning.py`. On `potts_reference` neither option earns
+a default flip: the one 2x gain in P(full-length best) per pilot visit at
+stress, common at 1/16, is 1 to 5 of 48 seeds and is not repeated at 1/4; and a pilot at 1/4 of the run ranks the
+grid at tau 0.22 against 0.22 at full length on `stress` (#1390,
+[033](docs/experiments/033-schedule-pilot-transfer.md)).
 
 **A Wolff run spends its site-visit budget**
 ([#1344](https://github.com/michaelJwilson/snakes_and_ladders/issues/1344)).

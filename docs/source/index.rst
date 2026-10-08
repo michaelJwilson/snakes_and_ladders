@@ -851,6 +851,9 @@ whether or not it has members yet.
 .. automodule:: sal.qa.potts_schedule
    :members:
 
+.. automodule:: sal.qa.schedule_pilots
+   :members:
+
 .. automodule:: sal.qa.potts_clusters
    :members:
 
