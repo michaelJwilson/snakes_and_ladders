@@ -235,7 +235,9 @@ SAMPLE = 5
 #: `sandbox`, 11 modules of conserved replaced implementations, followed when
 #: `external` (#1282) took it to 205 nodes against the cap, and `external`
 #: itself, 8 modules, when its session (#1282, step 2) took it to 202.
-COLLAPSED = ("qa", "validation", "sandbox", "external")
+#: The top level, 13 shared infrastructure modules, followed when
+#: `emissions.coded` (#1340) took it to 201.
+COLLAPSED = ("qa", "validation", "sandbox", "external", "")
 
 
 def sampled(carried: tuple[Module, ...], take: int = SAMPLE) -> tuple[Module, ...]:

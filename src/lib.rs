@@ -19,6 +19,7 @@ pub mod bcjr;
 pub mod bifurcation;
 pub mod bk;
 pub mod chain;
+pub mod coded_emission;
 pub mod count_hmm;
 pub mod count_mixture;
 pub mod count_mstep;
@@ -48,6 +49,7 @@ pub mod special;
 
 pub use bcjr::bcjr_forward_backward;
 pub use bifurcation::bifurcation_integrate;
+pub use coded_emission::{coded_encode, coded_log_emission};
 pub use count_mixture::count_mixture_value_and_gradient;
 pub use count_mstep::{
     beta_binomial_parameters, negative_binomial_dispersions, negative_binomial_dispersions_exposed,
@@ -113,6 +115,8 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(class_posteriors, m)?)?;
     m.add_function(wrap_pyfunction!(external_field, m)?)?;
     m.add_function(wrap_pyfunction!(count_mixture_value_and_gradient, m)?)?;
+    m.add_function(wrap_pyfunction!(coded_encode, m)?)?;
+    m.add_function(wrap_pyfunction!(coded_log_emission, m)?)?;
     m.add_function(wrap_pyfunction!(dense_log_emission, m)?)?;
     m.add_function(wrap_pyfunction!(factorize, m)?)?;
     m.add_function(wrap_pyfunction!(coupled_log_prior, m)?)?;

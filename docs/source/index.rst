@@ -55,6 +55,9 @@ whether or not it has members yet.
 .. automodule:: sal.emissions.dense
    :members:
 
+.. automodule:: sal.emissions.coded
+   :members:
+
 .. automodule:: sal.fixtures
    :members:
 
