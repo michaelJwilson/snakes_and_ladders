@@ -20,7 +20,6 @@ from sal.sample.schedule import (
     LinearTempSchedule,
     ScheduleParams,
     ScheduleShape,
-    ThermodynamicPilot,
     temperatures,
 )
 
@@ -29,20 +28,12 @@ LENGTHS = (1, 2, 7, 1000)
 HOLDS = (0.0, 0.25, 0.9)
 ENDPOINTS = ((2.0, 0.05), (0.5, 1.5), (1.0, 1.0))
 
-#: A pilot covering every endpoint above, for the one shape that reads one
-#: (#1333): ``sigma_E = 1 + T`` on 40 temperatures.
-PILOT = ThermodynamicPilot(
-    tuple(0.05 + 1.95 * k / 39 for k in range(40)),
-    tuple(1.0 + 0.05 + 1.95 * k / 39 for k in range(40)),
-)
-
 
 def _params(
     shape: ScheduleShape, start: float, end: float, hold: float = 0.0, warm: float = 0.0
 ) -> ScheduleParams:
-    """``ScheduleParams``, with :data:`PILOT` where the shape reads one."""
-    pilot = PILOT if shape is ScheduleShape.THERMODYNAMIC else None
-    return ScheduleParams(shape, start, end, hold, warm, pilot)
+    """``ScheduleParams`` from its fields."""
+    return ScheduleParams(shape, start, end, hold, warm)
 
 
 def _cases() -> list[tuple[ScheduleShape, float, float, float, int]]:

@@ -3261,7 +3261,10 @@ lengths and 3 endpoint pairs; Cauchy with `c` from the endpoints is
 `sigma_E` places equal length to `1e-10`. `adaptive.huang` reproduces its
 recurrence bitwise and `loop.anneal_adaptive` stops on it with a `Termination`.
 The three earlier shapes are bitwise unchanged. Pinned in
-`tests/regression/sample/test_schedule_ramps.py`.
+`tests/regression/sample/test_schedule_ramps.py`. `THERMODYNAMIC` and the Huang
+schedule are declined and moved to `sal.sandbox.adaptive_schedules`, their tests
+to `tests/regression/sandbox/test_adaptive_schedules.py`
+([#1352](https://github.com/michaelJwilson/snakes_and_ladders/issues/1352)).
 
 **One ladder order for the Potts temperings, and a start per rung**
 ([#1343](https://github.com/michaelJwilson/snakes_and_ladders/issues/1343)).

@@ -103,8 +103,9 @@ draws reach it without the module importing their type.
 - **A ramp has one home: its explicit call (#1333).** `schedule.ramp` is a
   `match` on `ScheduleShape` onto `ramp.<shape>`, and every shape makes some
   `g(T)` linear in some `s(k)` with exact endpoints; `ScheduleParams.build`
-  goes through the same `match`. A schedule that reads the chain is not a
-  ramp: it is an `AdaptiveSchedule`, walked by `loop.anneal_adaptive`.
+  goes through the same `match`. A schedule that reads the chain, or a
+  measured `sigma_E(T)`, is not a ramp; the two #1333 built are declined and
+  conserved in `sal.sandbox.adaptive_schedules` (#1352).
   `tests/regression/sample/test_schedule_ramps.py` holds each member to an
   explicit call, a case and a `tune_schedule` candidate.
 - **Schedule pilot options default off (#1337).** `ScheduleTuning`'s
@@ -114,8 +115,8 @@ draws reach it without the module importing their type.
   `tests/regression/sample/test_schedule_racing.py` holds racing to a
   hand-run halving and the polished rank to the polish applied by hand.
 - **A tuned ladder is `"auto"` beside a `LadderTuning` (#1337).**
-  `parallel_tempering`, `cluster_tempering` and `ground_state.run_tempering`
-  resolve it through `tune.resolve_ladder` onto `schedule.adapt_ladder`, on
+  `cluster_tempering` resolves it through `tune.resolve_ladder` onto
+  `schedule.adapt_ladder`, on
   pilots drawn from one child spawned first; a given ladder draws nothing
   for it. `tests/regression/sample/test_ladder_tuning.py` holds the band.
 
