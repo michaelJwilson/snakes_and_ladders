@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 import torch
 from sal.emissions import NegativeBinomialEmission
-from sal.emissions.dense import Order, log_emission
+from sal.emissions.coded import Dense, log_emission
 from sal.emissions.mstep import _beta_binomial_concentration_score
 from sal.emissions.nb import exposure_table, negative_binomial_log_pmf
 from scipy.stats import poisson
@@ -99,10 +99,7 @@ def test_the_tables_are_the_pmf_bitwise_and_rust_and_torch_within_the_route_tole
     ) - dispersion * np.log1p(q)
     assert np.array_equal(tabulated, reference)
     scale = np.maximum(np.abs(reference), 1.0)
-    family_order = log_emission(family, counts, exposure, order=Order.FAMILY)
-    assert np.array_equal(
-        family_order, log_emission(family, counts, exposure, order=Order.TABULATED)
-    )
+    family_order = log_emission(family, Dense(counts, exposure[:, 0]))
     assert np.max(np.abs(family_order - reference) / scale) <= ROUTE_TOLERANCE
     torch_route = (
         family.log_density(torch.tensor(counts), torch.tensor(exposure)).numpy().T

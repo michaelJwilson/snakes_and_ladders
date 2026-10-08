@@ -213,7 +213,7 @@ def test_a_pair_is_its_channels_summed_as_the_family_sums_them(pair: object) -> 
     observations = np.stack([DRAWS["totals"], DRAWS["successes"]], axis=-1)
     covariate = np.concatenate([DRAWS["exposure"], DRAWS["trials"]], axis=-1)
 
-    got = log_emission(pair, observations, covariate)  # type: ignore[arg-type]
+    got = log_emission(pair, observations, covariate)
     channels = log_emission(NB, DRAWS["totals"], DRAWS["exposure"]) + log_emission(
         BB, DRAWS["successes"], DRAWS["trials"]
     )

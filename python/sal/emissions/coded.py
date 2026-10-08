@@ -306,10 +306,11 @@ def _channel(
 ) -> tuple[NDArray[np.uint32], NDArray[np.int32]]:
     """A channel's distinct values and each observation's row in them, ``-1`` kept."""
     distinct, index = np.unique(values, return_inverse=True)
-    rows = np.where(
-        inverse >= 0, index.astype(np.int32)[np.maximum(inverse, 0)], np.int32(-1)
-    ).astype(np.int32)
-    return np.ascontiguousarray(distinct, dtype=np.uint32), rows
+    if distinct.size == values.size:
+        return np.ascontiguousarray(values, dtype=np.uint32), inverse
+    # One gather: a trailing -1 is what an unobserved -1 reads.
+    lookup = np.append(index, -1).astype(np.int32)
+    return np.ascontiguousarray(distinct, dtype=np.uint32), lookup[inverse]
 
 
 def _shift_factor(
