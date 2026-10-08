@@ -2,7 +2,7 @@
 
 A count is an integer, so the integer part of a count family's log-density
 is a function of the count alone. :func:`encode` codes the observations once
-per distinct count, in Rust (``src/coded_emission.rs``): an
+per distinct ``(label, count)``, in Rust (``src/coded_emission.rs``): an
 ``int32`` inverse, ``-1`` where the covariate is zero (unobserved), a weight
 per code, the distinct counts, and the covariate per observation, which is
 never rounded. :func:`log_emission` builds the tables at the distinct counts
@@ -18,9 +18,10 @@ the inverse, so a :class:`Coded` score is its :class:`Dense` score bitwise.
 independent :class:`~sal.emissions.CountPairEmission`, as
 :func:`sal.emissions.dense.log_emission` takes them.
 
-**No label axis.** A caller with labels folds them into the count code
-(``x + Z y``) and a per-label shift into the covariate. The weighted sum and
-the partials are stage 2.
+**Labels.** ``label`` is one integer array, one value per observation,
+which the caller builds (for example ``x + Z y``); any number of distinct
+values is coded. A tuple or a 2-D label is refused. The per-label shift is
+stage 3; the weighted sum and the partials are stage 2.
 """
 
 from __future__ import annotations
@@ -59,10 +60,12 @@ class Dense:
 
 @dataclass(frozen=True)
 class Coded:
-    """Observations coded per distinct count, from :func:`encode`.
+    """Observations coded per distinct ``(label, count)``, from :func:`encode`.
 
     Parameters
     ----------
+    label : np.ndarray
+        ``(U,)`` ``int64``, each code's label; 0 without one.
     counts : np.ndarray
         ``(U,)`` ``uint32`` distinct counts, ascending, or ``(U, 2)`` for a pair.
     inverse : np.ndarray
@@ -73,6 +76,7 @@ class Coded:
         ``(n,)`` or ``(n, 2)`` ``float64`` per observation, as :class:`Dense`.
     """
 
+    label: NDArray[np.int64]
     counts: NDArray[np.uint32]
     inverse: NDArray[np.int32]
     weight: NDArray[np.int64]
@@ -101,11 +105,32 @@ def _covariate(
     return values
 
 
+def _labels(label: object | None, n: int) -> NDArray[np.int64] | None:
+    """``label`` as one ``(n,)`` ``int64`` array, refused otherwise."""
+    if label is None:
+        return None
+    if isinstance(label, tuple | list) and any(np.ndim(one) > 0 for one in label):
+        msg = (
+            "label is one integer array per observation; fold several into "
+            "one code, for example x + Z * y"
+        )
+        raise ValueError(msg)
+    values = np.asarray(label)
+    if values.shape != (n,) or not np.issubdtype(values.dtype, np.integer):
+        msg = f"label is one ({n},) integer array, got {values.dtype} {values.shape}"
+        raise ValueError(msg)
+    return values.astype(np.int64)
+
+
 def encode(
     counts: NDArray[np.float64] | NDArray[np.uint32],
     covariate: NDArray[np.float64] | None = None,
+    *,
+    label: NDArray[np.int64] | None = None,
 ) -> Coded:
-    """Code ``counts`` per distinct count in Rust.
+    """Code ``counts`` per distinct ``(label, count)`` in Rust.
+
+    Codes ascend by label, then by count.
 
     Parameters
     ----------
@@ -114,6 +139,8 @@ def encode(
     covariate : np.ndarray | None
         Shaped as ``counts``; an observation whose covariate is zero in every
         channel is unobserved and coded ``-1``.
+    label : np.ndarray | None
+        ``(n,)`` integer labels, one array built by the caller.
 
     Returns
     -------
@@ -122,13 +149,14 @@ def encode(
     Raises
     ------
     ValueError
-        If a count is not a non-negative integer below ``2**32``, or a shape
-        disagrees.
+        If a count is not a non-negative integer below ``2**32``, a shape
+        disagrees, or ``label`` is a tuple or not one ``(n,)`` integer array.
     """
     values = _counts(counts)
     given = _covariate(covariate, values)
     wide = values.astype(np.uint64)
     keys = wide if wide.ndim == 1 else (wide[:, 0] << np.uint64(32)) | wide[:, 1]
+    labels = _labels(label, values.shape[0])
     observed = None
     if given is not None:
         nonzero = given != 0.0
@@ -138,6 +166,21 @@ def encode(
     distinct, inverse, weight = oxisal.coded_encode(
         np.ascontiguousarray(keys), observed
     )
+    code_label = np.zeros(distinct.size, dtype=np.int64)
+    if labels is not None:
+        # Two passes: the count codes, then (label index, count code) keyed
+        # in 64 bits, so a pair's full 64-bit key and a label both fit.
+        names, index = np.unique(labels, return_inverse=True)
+        seen = inverse >= 0
+        joint = np.zeros(inverse.size, dtype=np.uint64)
+        joint[seen] = (index[seen].astype(np.uint64) << np.uint64(32)) | inverse[
+            seen
+        ].astype(np.uint64)
+        pairs, inverse, weight = oxisal.coded_encode(
+            np.ascontiguousarray(joint), np.ascontiguousarray(seen)
+        )
+        code_label = names[(pairs >> np.uint64(32)).astype(np.int64)]
+        distinct = distinct[(pairs & np.uint64(2**32 - 1)).astype(np.int64)]
     if values.ndim == 1:
         coded = distinct.astype(np.uint32)
     else:
@@ -149,6 +192,7 @@ def encode(
             axis=1,
         )
     return Coded(
+        label=code_label,
         counts=coded,
         inverse=inverse,
         weight=weight,

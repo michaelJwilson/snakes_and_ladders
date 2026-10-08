@@ -108,7 +108,7 @@ def test_dense_equals_its_coded_form_bitwise(
 
 
 @pytest.mark.oracle
-def test_encode_is_a_numpy_unique() -> None:
+def test_encode_is_a_numpy_unique_and_labels_key_the_codes() -> None:
     counts, exposure = DRAWS["totals"], DRAWS["exposure"]
     coded = encode(counts, exposure)
     observed = exposure != 0.0
@@ -120,6 +120,23 @@ def test_encode_is_a_numpy_unique() -> None:
     assert np.array_equal(coded.inverse[observed], inverse)
     assert (coded.inverse[~observed] == -1).all()
     assert np.array_equal(coded.weight, weight)
+    # A label array keys (label, count): np.unique over the pairs, and the
+    # scores, which no label changes until the shift (stage 3), bitwise.
+    label = np.arange(N, dtype=np.int64) % 3 * 5
+    labelled = encode(counts, exposure, label=label)
+    pairs, linv, lweight = np.unique(
+        np.stack([label[observed], counts[observed]], axis=1),
+        axis=0,
+        return_inverse=True,
+        return_counts=True,
+    )
+    assert np.array_equal(labelled.label, pairs[:, 0].astype(np.int64))
+    assert np.array_equal(labelled.counts, pairs[:, 1].astype(np.uint32))
+    assert np.array_equal(labelled.inverse[observed], linv.reshape(-1))
+    assert np.array_equal(labelled.weight, lweight)
+    assert np.array_equal(
+        _bits(log_emission(NB, labelled)), _bits(log_emission(NB, coded))
+    )
 
 
 @pytest.mark.oracle
@@ -131,6 +148,7 @@ def test_decode_is_the_one_hot_product_bitwise(name: str) -> None:
     table = log_emission(
         family,
         Coded(
+            coded.label,
             coded.counts,
             np.arange(coded.weight.size, dtype=np.int32),
             coded.weight,
@@ -220,6 +238,10 @@ def test_the_limits() -> None:
 
 @pytest.mark.analytic
 def test_what_encode_refuses() -> None:
+    with pytest.raises(ValueError, match="one integer array"):
+        encode(np.array([1.0, 2.0]), label=(np.array([0, 1]), np.array([1, 1])))  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="integer array"):
+        encode(np.array([1.0, 2.0]), label=np.zeros((2, 2), dtype=np.int64))
     with pytest.raises(ValueError, match="non-negative integer"):
         encode(np.array([1.5]))
     with pytest.raises(TypeError, match="Dense or Coded"):
