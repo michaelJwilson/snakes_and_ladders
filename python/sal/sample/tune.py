@@ -393,14 +393,16 @@ def _pilot[S, C, R](
     )
 
 
-#: The candidate schedules unless a caller names its own (issue #1317): each
-#: :class:`~sal.sample.schedule.ScheduleShape` from ``t_start`` in {2.0, 0.8}
-#: to ``t_end`` in {0.05, 0.3}, unheld, 12 candidates. The endpoints bracket
+#: The candidate schedules unless a caller names its own (issue #1317): the
+#: exponential, linear and cosine shapes from ``t_start`` in {2.0, 0.8} to
+#: ``t_end`` in {0.05, 0.3}, unheld, 12 candidates. A caller's grid may hold
+#: any :class:`~sal.sample.schedule.ScheduleShape` (#1333); the default stays
+#: #1317's, so a default run's choice does not move. The endpoints bracket
 #: :data:`~sal.search.ground_state.ANNEAL_SCHEDULE` (2.0 to 0.05) and
 #: :data:`~sal.search.ground_state.SWENDSEN_WANG_SCHEDULE` (0.78 to 0.32).
 SCHEDULE_GRID: tuple[ScheduleParams, ...] = tuple(
     ScheduleParams(shape, t_start, t_end)
-    for shape in ScheduleShape
+    for shape in (ScheduleShape.EXPONENTIAL, ScheduleShape.LINEAR, ScheduleShape.COSINE)
     for t_start in (2.0, 0.8)
     for t_end in (0.05, 0.3)
 )

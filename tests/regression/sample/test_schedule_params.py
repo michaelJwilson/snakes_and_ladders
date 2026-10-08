@@ -20,6 +20,7 @@ from sal.sample.schedule import (
     LinearTempSchedule,
     ScheduleParams,
     ScheduleShape,
+    ThermodynamicPilot,
     temperatures,
 )
 
@@ -27,6 +28,21 @@ from sal.sample.schedule import (
 LENGTHS = (1, 2, 7, 1000)
 HOLDS = (0.0, 0.25, 0.9)
 ENDPOINTS = ((2.0, 0.05), (0.5, 1.5), (1.0, 1.0))
+
+#: A pilot covering every endpoint above, for the one shape that reads one
+#: (#1333): ``sigma_E = 1 + T`` on 40 temperatures.
+PILOT = ThermodynamicPilot(
+    tuple(0.05 + 1.95 * k / 39 for k in range(40)),
+    tuple(1.0 + 0.05 + 1.95 * k / 39 for k in range(40)),
+)
+
+
+def _params(
+    shape: ScheduleShape, start: float, end: float, hold: float = 0.0, warm: float = 0.0
+) -> ScheduleParams:
+    """``ScheduleParams``, with :data:`PILOT` where the shape reads one."""
+    pilot = PILOT if shape is ScheduleShape.THERMODYNAMIC else None
+    return ScheduleParams(shape, start, end, hold, warm, pilot)
 
 
 def _cases() -> list[tuple[ScheduleShape, float, float, float, int]]:
@@ -38,6 +54,9 @@ def _cases() -> list[tuple[ScheduleShape, float, float, float, int]]:
         ramp = length - math.floor(hold * length)
         if ramp == 1 and start != end:
             continue
+        # A logarithmic ramp cools only (#1333).
+        if shape is ScheduleShape.LOGARITHMIC and start < end:
+            continue
         cases.append((shape, start, end, hold, length))
     return cases
 
@@ -47,7 +66,7 @@ def _cases() -> list[tuple[ScheduleShape, float, float, float, int]]:
 def test_endpoints_are_exact_the_curve_is_monotone_and_the_length_is_asked(
     shape: ScheduleShape, start: float, end: float, hold: float, length: int
 ) -> None:
-    values = temperatures(ScheduleParams(shape, start, end, hold).build(length))
+    values = temperatures(_params(shape, start, end, hold).build(length))
 
     assert len(values) == length
     assert values[0] == start
@@ -73,7 +92,7 @@ def test_endpoints_are_exact_the_curve_is_monotone_and_the_length_is_asked(
 def test_no_hold_builds_the_shapes_own_schedule(
     shape: ScheduleShape, kind: type[ExponentialTempSchedule]
 ) -> None:
-    built = ScheduleParams(shape, 2.0, 0.05).build(1000)
+    built = _params(shape, 2.0, 0.05).build(1000)
 
     assert built == kind(2.0, 0.05, 1000)
 
@@ -125,12 +144,10 @@ def test_a_warm_holds_t_start_for_its_count_before_the_ramp(
 ) -> None:
     # #1324: floor(warm * n) steps at t_start, then the ramp, then the hold.
     n_steps = 40
-    params = ScheduleParams(shape, 2.0, 0.05, hold, warm)
+    params = _params(shape, 2.0, 0.05, hold, warm)
     values = temperatures(params.build(n_steps))
     n_warm, n_hold = math.floor(warm * n_steps), math.floor(hold * n_steps)
-    ramp = temperatures(
-        ScheduleParams(shape, 2.0, 0.05).build(n_steps - n_warm - n_hold)
-    )
+    ramp = temperatures(_params(shape, 2.0, 0.05).build(n_steps - n_warm - n_hold))
     assert len(values) == n_steps
     assert values[:n_warm] == [2.0] * n_warm
     assert values[n_warm : n_steps - n_hold] == ramp
@@ -146,8 +163,8 @@ def test_a_warm_of_zero_is_the_schedule_before_it_bitwise(
     for n_steps in LENGTHS:
         if n_steps - math.floor(hold * n_steps) < 2:
             continue
-        before = ScheduleParams(shape, 2.0, 0.05, hold).build(n_steps)
-        assert ScheduleParams(shape, 2.0, 0.05, hold, 0.0).build(n_steps) == before
+        before = _params(shape, 2.0, 0.05, hold).build(n_steps)
+        assert _params(shape, 2.0, 0.05, hold, 0.0).build(n_steps) == before
 
 
 @pytest.mark.analytic

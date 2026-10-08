@@ -3202,6 +3202,19 @@ holds `t_start` before the ramp, `warm = 0` bitwise; `from_directed_csr(scale=)`
 is bitwise the hand-scaled graph. Pinned in `test_merge_small_labels.py`,
 `test_forbidden_labels.py`, `test_schedule_params.py` and `test_graph_csr.py`.
 
+**Every common annealing ramp on one definition**
+([#1333](https://github.com/michaelJwilson/snakes_and_ladders/issues/1333)).
+`ScheduleShape` gains `INVERSE_LINEAR`, `POWER`, `LOGARITHMIC` and
+`THERMODYNAMIC`; each has an explicit `ramp.<shape>` call, and `ramp(shape, ...)`
+and `ScheduleParams.build` are a `match` onto them. Every closed form's `g(T)` is
+linear in `s(k)` to `1e-15` of its scale plus 4 ulp, endpoints bitwise, on 4
+lengths and 3 endpoint pairs; Cauchy with `c` from the endpoints is
+`INVERSE_LINEAR` bitwise; `THERMODYNAMIC` on Kaufman's exact `8 x 8` Ising
+`sigma_E` places equal length to `1e-10`. `adaptive.huang` reproduces its
+recurrence bitwise and `loop.anneal_adaptive` stops on it with a `Termination`.
+The three earlier shapes are bitwise unchanged. Pinned in
+`tests/regression/sample/test_schedule_ramps.py`.
+
 ## Milestone 2.0 — RL Definition
 
 **Landed as `app:rl` in the textbook**

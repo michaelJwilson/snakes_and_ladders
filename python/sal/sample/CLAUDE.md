@@ -100,6 +100,14 @@ draws reach it without the module importing their type.
   `tests/regression/sample/test_relabel.py` holds each member to one case and
   each pair of calls to bitwise-equal relabellings.
 
+- **A ramp has one home: its explicit call (#1333).** `schedule.ramp` is a
+  `match` on `ScheduleShape` onto `ramp.<shape>`, and every shape makes some
+  `g(T)` linear in some `s(k)` with exact endpoints; `ScheduleParams.build`
+  goes through the same `match`. A schedule that reads the chain is not a
+  ramp: it is an `AdaptiveSchedule`, walked by `loop.anneal_adaptive`.
+  `tests/regression/sample/test_schedule_ramps.py` holds each member to an
+  explicit call, a case and a `tune_schedule` candidate.
+
 **One field behaviour on every Potts entry point (#1317).** Every entry point
 takes `move` as a move set applied in order and `recolour`: a cluster's
 label is drawn by `Recolour.HEAT_BATH` or proposed by `Recolour.UNIFORM`,

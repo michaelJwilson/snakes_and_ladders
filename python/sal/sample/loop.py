@@ -36,7 +36,7 @@ from typing import NamedTuple
 import numpy as np
 
 from sal.opt.termination import Termination
-from sal.sample.schedule import TempSchedule
+from sal.sample.schedule import AdaptiveSchedule, TempSchedule
 from sal.track import current
 
 
@@ -75,6 +75,9 @@ class Walked[S]:
     energies: tuple[float, ...]
     spent: int
     termination: Termination
+    #: The temperature of each block :func:`anneal_adaptive` ran; empty for
+    #: :func:`anneal`, whose schedule holds them.
+    temperatures: tuple[float, ...] = ()
 
 
 def anneal[S, C, R](
@@ -113,6 +116,63 @@ def anneal[S, C, R](
         energies=tuple(energies),
         spent=spent,
         termination=Termination.after(schedule.n_steps, converged=False),
+    )
+
+
+def anneal_adaptive[S, C, R](
+    step: Step[S, C, R],
+    schedule: AdaptiveSchedule,
+    start: Moved[S, C],
+    rng: R,
+    keep: Callable[[S], S],
+    *,
+    block: int,
+) -> Walked[S]:
+    """:func:`anneal` on an :class:`~sal.sample.schedule.AdaptiveSchedule`: ``block`` steps per temperature (issue #1333).
+
+    Each temperature runs ``block`` steps, and the block's ``block`` energies
+    choose the next through ``schedule.next``. The run ends converged when it
+    returns ``None``, and on budget after ``schedule.budget`` temperatures;
+    the termination counts the temperatures run. The best is kept as
+    :func:`anneal` keeps it.
+
+    Raises
+    ------
+    ValueError
+        If ``block < 2``: ``sigma_E`` needs two energies.
+    """
+    if block < 2:
+        msg = f"a block needs at least two steps to estimate sigma_E, got {block}"
+        raise ValueError(msg)
+    state, energy, carried, spent = start
+    best, best_energy = keep(state), energy
+    energies = [energy]
+    visited: list[float] = []
+    tracked = current()
+    temperature: float | None = schedule.start
+    index = 0
+    while temperature is not None and len(visited) < schedule.budget:
+        visited.append(temperature)
+        for _ in range(block):
+            moved = step(state, energy, carried, temperature, rng)
+            state, energy, carried = moved.state, moved.energy, moved.carried
+            spent += moved.spent
+            energies.append(energy)
+            if energy < best_energy:
+                best, best_energy = keep(state), energy
+            tracked.record(
+                index, state=best, temperature=temperature, energy=best_energy
+            )
+            index += 1
+        temperature = schedule.next(temperature, energies[-block:])
+    return Walked(
+        best=best,
+        energy=best_energy,
+        final=state,
+        energies=tuple(energies),
+        spent=spent,
+        termination=Termination.after(len(visited), converged=temperature is None),
+        temperatures=tuple(visited),
     )
 
 
