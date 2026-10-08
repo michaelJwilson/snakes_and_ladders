@@ -811,6 +811,14 @@ def ladder(values: TempSchedule | Sequence[float]) -> tuple[float, ...]:
     tempering validates about the ladder --- its length, its sign, its order
     --- it validates on the tuple, so the two spellings are refused on the
     same terms.
+
+    **The order is the caller's, and the Potts temperings take it coldest
+    first.** This reads the rungs as given and reorders nothing.
+    :func:`~sal.sample.potts_mcmc.parallel_tempering` and
+    :func:`~sal.sample.potts_mcmc.cluster_tempering` require it strictly
+    increasing, as :data:`Monotone.INCREASING` states, and refuse another
+    order rather than reverse it (issue #1343); rung ``0`` is then the cold
+    end :func:`~sal.sample.tempered.round_trips` counts from.
     """
     if isinstance(values, TempSchedule):
         return tuple(temperatures(values))
@@ -865,9 +873,10 @@ class Monotone(StrEnum):
 
     An order is a requirement of the consumer and not of the ladder: an
     exchange between neighbouring pairs is the same law whichever end is
-    cold, so a tempering states :data:`ANY`, a warm-up that bisects a gap
+    cold, so a tempering may state :data:`ANY`, a warm-up that bisects a gap
     states :data:`EITHER`, and a consumer that reads ``temperatures[0]`` as
-    the coldest states :data:`INCREASING`.
+    the coldest states :data:`INCREASING`. The two Potts temperings state
+    :data:`INCREASING`, so their callers pass one order (issue #1343).
     """
 
     #: Any order; which pairs are neighbours is what the ladder fixes.

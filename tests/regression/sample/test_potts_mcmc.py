@@ -1246,7 +1246,7 @@ def test_annealing_reaches_the_closed_form_ground_energy_where_descent_does_not(
 
 # --- parallel tempering -----------------------------------------------------
 
-LADDER = (4.0, 2.0, 1.0)
+LADDER = (1.0, 2.0, 4.0)
 
 
 def _replica_p_values(
@@ -1325,12 +1325,10 @@ def test_replicas_draw_from_separate_streams_and_one_seed_reproduces_them() -> N
     # bitwise.
     graph = lattice_graph(SHAPE, BoundaryCondition.OPEN, COUPLING)
 
-    first = parallel_tempering(
-        graph, NO_FIELD, (1.0, 1.0), np.random.default_rng(3), 200
-    )
-    second = parallel_tempering(
-        graph, NO_FIELD, (1.0, 1.0), np.random.default_rng(3), 200
-    )
+    # One ulp apart: the ladder is strictly increasing, as it must be (#1343).
+    same = (1.0, float(np.nextafter(1.0, 2.0)))
+    first = parallel_tempering(graph, NO_FIELD, same, np.random.default_rng(3), 200)
+    second = parallel_tempering(graph, NO_FIELD, same, np.random.default_rng(3), 200)
 
     assert not np.array_equal(first.states[:, 0], first.states[:, 1])
     assert np.array_equal(first.states, second.states)
@@ -1359,7 +1357,7 @@ def test_tempering_reaches_the_ground_energy_annealing_reaches() -> None:
     graph = frustrated_triangular_lattice((9, 9), BoundaryCondition.PERIODIC, -1.0)
     field = np.zeros(2)
     ground = float(minimum_frustrated_edges(graph))  # |J| = 1
-    ladder = (2.0, 1.0, 0.5, 0.25)
+    ladder = (0.25, 0.5, 1.0, 2.0)
     coldest = int(np.argmin(ladder))
 
     annealed = [
@@ -1381,7 +1379,7 @@ def test_tempering_reaches_the_ground_energy_annealing_reaches() -> None:
         visited = energies(graph, field, run.states[:, coldest])
         assert float(visited.min()) == pytest.approx(annealing.energy, abs=1e-12)
         assert run.energy == pytest.approx(ground, abs=1e-12)
-        assert run.swap_acceptance[coldest - 1] > 0.2, run.swap_acceptance
+        assert run.swap_acceptance[coldest] > 0.2, run.swap_acceptance
 
 
 @pytest.mark.smoke
@@ -1390,7 +1388,7 @@ def test_a_ladder_of_one_or_a_cold_temperature_is_refused() -> None:
 
     with pytest.raises(ValueError, match="at least two temperatures"):
         parallel_tempering(graph, NO_FIELD, (1.0,), np.random.default_rng(SEED), 10)
-    with pytest.raises(ValueError, match="positive temperature"):
+    with pytest.raises(ValueError, match="positive and increasing"):
         parallel_tempering(graph, NO_FIELD, (1.0, 0.0), np.random.default_rng(SEED), 10)
 
 
@@ -1403,7 +1401,7 @@ def test_tempering_and_annealing_beat_restarts_at_equal_budget_on_the_glass() ->
     # restarts 4/12 (mean gap 0.75); the plan's prediction is retracted.
     # Asserted: restarts below both; both tempered at or below the planted energy.
     budget = Budget(Cost.SWEEPS, 400)
-    ladder = (2.0, 1.2, 0.7, 0.4)
+    ladder = (0.4, 0.7, 1.2, 2.0)
     instances = [
         planted_spin_glass(60, 4.0, 0.2, np.random.default_rng(1000 + seed))
         for seed in range(12)
@@ -1479,7 +1477,7 @@ def test_the_sweep_has_no_numba_backend() -> None:
 #: 20 seeds every warm-up settled inside it, in 4.2 rounds on average.
 BAND = (0.25, 0.75)
 PROBE_SWEEPS = 50
-HAND_LADDER = (2.0, 1.2, 0.7, 0.4)
+HAND_LADDER = (0.4, 0.7, 1.2, 2.0)
 
 
 @pytest.mark.smoke
@@ -1498,7 +1496,7 @@ def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
         adapted = adapt_ladder_potts(
             graph,
             field,
-            (2.0, 0.4),
+            (0.4, 2.0),
             np.random.default_rng(seed),
             PROBE_SWEEPS,
             BAND,
@@ -1507,8 +1505,8 @@ def test_the_adapted_ladder_exchanges_within_the_band_on_the_frustrated_lattice(
             backend=Backend.RUST,
         )
         assert adapted.within_band, adapted
-        assert adapted.temperatures[0] == 2.0
-        assert adapted.temperatures[-1] == 0.4
+        assert adapted.temperatures[0] == 0.4
+        assert adapted.temperatures[-1] == 2.0
         assert all(BAND[0] <= value <= BAND[1] for value in adapted.acceptance)
 
         fresh = parallel_tempering(
@@ -1545,7 +1543,7 @@ def test_the_adapted_ladder_reaches_the_ground_state_at_equal_sweeps(
         adapted = adapt_ladder_potts(
             graph,
             field,
-            (2.0, 0.4),
+            (0.4, 2.0),
             rng,
             PROBE_SWEEPS,
             BAND,

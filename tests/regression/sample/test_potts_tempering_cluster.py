@@ -339,7 +339,7 @@ def test_a_cluster_move_refuses_a_negative_coupling_and_start_is_one_per_rung() 
             5,
             move=PottsMove.WOLFF,
         )
-    with pytest.raises(ValueError, match="one labelling per rung"):
+    with pytest.raises(ValueError, match="one per rung of the ladder given"):
         parallel_tempering(
             _graph(),
             _rows(),
