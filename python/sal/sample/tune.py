@@ -38,21 +38,32 @@ and the polished gap ranks it last.
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, Literal
 
+import numpy as np
+
 from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.opt.termination import Termination
+from sal.parallel import Pool, map_tasks
 from sal.sample import loop
 from sal.sample.loop import Moved, Step
-from sal.sample.schedule import LadderTempSchedule, TempSchedule
+from sal.sample.schedule import (
+    LadderTempSchedule,
+    ScheduleParams,
+    ScheduleShape,
+    TempSchedule,
+)
 from sal.track import NULL_RUN, track
 
 if TYPE_CHECKING:
     from sal.opt.starts import Polished, Polisher
+    from sal.sample.potts_mcmc import PottsMoves, Recolour
+    from sal.sim.graph import PottsGraph
 
 #: The candidate steps unless a caller names its own: nine from 1e-4 to 1 at
 #: half a decade, the range #1195's HMM grid (1e-3 to 3e-2) and a unit
@@ -382,15 +393,270 @@ def _pilot[S, C, R](
     )
 
 
+#: The candidate schedules unless a caller names its own (issue #1317): each
+#: :class:`~sal.sample.schedule.ScheduleShape` from ``t_start`` in {2.0, 0.8}
+#: to ``t_end`` in {0.05, 0.3}, unheld, 12 candidates. The endpoints bracket
+#: :data:`~sal.search.ground_state.ANNEAL_SCHEDULE` (2.0 to 0.05) and
+#: :data:`~sal.search.ground_state.SWENDSEN_WANG_SCHEDULE` (0.78 to 0.32).
+SCHEDULE_GRID: tuple[ScheduleParams, ...] = tuple(
+    ScheduleParams(shape, t_start, t_end)
+    for shape in ScheduleShape
+    for t_start in (2.0, 0.8)
+    for t_end in (0.05, 0.3)
+)
+
+#: What an annealed Potts entry point's ``schedule`` reads as "choose it": a
+#: :class:`ScheduleTuning` beside it says how.
+type Schedule = TempSchedule | Literal["auto"]
+
+
+@dataclass(frozen=True)
+class ScheduleTuning:
+    """How an annealed Potts entry point given ``schedule="auto"`` chooses its schedule (issue #1317).
+
+    Required beside ``"auto"`` rather than defaulted, as :class:`StepTuning`
+    is beside ``step_size="auto"``: a pilot budget right for one instance is
+    wrong for the next, silently.
+
+    Parameters
+    ----------
+    budget : Budget
+        The pilots', in :attr:`~sal.cost.Cost.SITE_VISITS`, split evenly over
+        ``grid``: each candidate anneals for ``(budget.size // len(grid)) //
+        n_nodes`` sweeps.
+    criterion : Criterion
+        What ranks the candidates: :attr:`Criterion.LOWEST_ENERGY` alone.
+    n_steps : int
+        The tuned run's step count, at which the chosen schedule is built.
+    grid : tuple[ScheduleParams, ...]
+        The candidate schedules, :data:`SCHEDULE_GRID` unless named.
+
+    Raises
+    ------
+    ValueError
+        If the budget is not in site visits, the criterion is not
+        :attr:`Criterion.LOWEST_ENERGY`, ``n_steps`` is below one or the grid
+        is empty.
+    """
+
+    budget: Budget
+    criterion: Criterion
+    n_steps: int
+    grid: tuple[ScheduleParams, ...] = field(default=SCHEDULE_GRID)
+
+    def __post_init__(self) -> None:
+        if self.budget.unit is not Cost.SITE_VISITS:
+            msg = (
+                f"a schedule pilot spends {Cost.SITE_VISITS.value!r}, and the "
+                f"budget is in {self.budget.unit.value!r}"
+            )
+            raise ValueError(msg)
+        if self.criterion is not Criterion.LOWEST_ENERGY:
+            msg = (
+                f"a schedule is ranked by {Criterion.LOWEST_ENERGY.name}; "
+                f"{self.criterion.name} has no schedule pilot yet (#1317)"
+            )
+            raise ValueError(msg)
+        if self.n_steps < 1:
+            msg = f"the tuned run needs at least one step, got {self.n_steps}"
+            raise ValueError(msg)
+        if not self.grid:
+            msg = "the schedule grid must hold at least one candidate"
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True)
+class ScheduleCandidate:
+    """One candidate schedule's pilot: its lowest energy and its spend."""
+
+    params: ScheduleParams
+    lowest_energy: float
+    spent: int
+
+
+@dataclass(frozen=True)
+class TunedSchedule:
+    """The schedule a pilot over a grid chose, with every candidate's evidence (issue #1317).
+
+    Parameters
+    ----------
+    params : ScheduleParams
+        The chosen candidate's.
+    criterion : Criterion
+    candidates : tuple[ScheduleCandidate, ...]
+        In grid order.
+    sweeps : int
+        Each pilot's step count.
+    spent : int
+        Site visits of every pilot.
+    unit : Cost
+    termination : Termination
+        After one pilot per candidate, never converged.
+    """
+
+    params: ScheduleParams
+    criterion: Criterion
+    candidates: tuple[ScheduleCandidate, ...]
+    sweeps: int
+    spent: int
+    unit: Cost
+    termination: Termination
+
+
+def _schedule_pilot(
+    params: ScheduleParams,
+    rng: np.random.Generator,
+    *,
+    graph: PottsGraph,
+    field: np.ndarray,
+    move: PottsMoves,
+    recolour: Recolour,
+    sweeps: int,
+) -> ScheduleCandidate:
+    """One candidate's anneal on its own generator; thread-safe, it writes no shared state."""
+    from sal.sample.potts_mcmc import anneal_potts
+
+    run = anneal_potts(
+        graph, field, params.build(sweeps), rng, move=move, recolour=recolour
+    )
+    return ScheduleCandidate(params, run.energy, run.spent)
+
+
+def tune_schedule(
+    graph: PottsGraph,
+    field: np.ndarray,
+    *,
+    move: PottsMoves,
+    recolour: Recolour,
+    budget: Budget,
+    criterion: Criterion,
+    rng: np.random.Generator,
+    grid: Sequence[ScheduleParams] = SCHEDULE_GRID,
+    workers: int = 1,
+    pool: Pool = "serial",
+) -> TunedSchedule:
+    """The schedule of ``grid`` that ``criterion`` ranks first, from one annealing pilot per candidate.
+
+    ``qa.potts_schedule``'s question, asked by the package (issue #1317):
+    every candidate is a :class:`~sal.sample.schedule.ScheduleParams` (shape,
+    start, end and hold), built at ``(budget.size // len(grid)) //
+    graph.n_nodes`` steps and annealed by
+    :func:`~sal.sample.potts_mcmc.anneal_potts` under ``move`` and
+    ``recolour``. Each pilot draws from its own generator spawned from
+    ``rng`` by :func:`sal.parallel.map_tasks`, so a thread pool returns the
+    serial result bitwise. Ranked by the lowest energy, ties to grid order.
+    A pilot is charged its own spend, which for a Wolff move is below its
+    share: Wolff's step visits one cluster, not a sweep.
+
+    Raises
+    ------
+    ValueError
+        As :class:`ScheduleTuning` does, or if the budget leaves a pilot
+        fewer than two steps.
+    """
+    candidates_in = tuple(grid)
+    tuning = ScheduleTuning(budget, criterion, 1, candidates_in)
+    sweeps = (tuning.budget.size // len(candidates_in)) // graph.n_nodes
+    if sweeps < 2:
+        msg = (
+            f"a budget of {budget.size} site visits over {len(candidates_in)} "
+            f"schedules on {graph.n_nodes} sites leaves {sweeps} steps per "
+            "pilot, and a pilot needs two"
+        )
+        raise ValueError(msg)
+    body = functools.partial(
+        _schedule_pilot,
+        graph=graph,
+        field=field,
+        move=move,
+        recolour=recolour,
+        sweeps=sweeps,
+    )
+    with track(NULL_RUN):
+        candidates = map_tasks(
+            body, candidates_in, workers=workers, pool=pool, generator=rng
+        )
+    index = min(range(len(candidates)), key=lambda k: (candidates[k].lowest_energy, k))
+    return TunedSchedule(
+        params=candidates[index].params,
+        criterion=criterion,
+        candidates=tuple(candidates),
+        sweeps=sweeps,
+        spent=sum(candidate.spent for candidate in candidates),
+        unit=Cost.SITE_VISITS,
+        termination=Termination.after(len(candidates), converged=False),
+    )
+
+
+def resolve_schedule(
+    schedule: Schedule,
+    tuning: ScheduleTuning | None,
+    *,
+    graph: PottsGraph,
+    field: np.ndarray,
+    move: PottsMoves,
+    recolour: Recolour,
+    rng: np.random.Generator,
+) -> tuple[TempSchedule, TunedSchedule | None]:
+    """``schedule`` as given, or the one ``tuning``'s pilot chooses under ``"auto"``.
+
+    The refusals of ``step_size="auto"`` (:mod:`sal.sample.hmc`), checked
+    before any draw: ``"auto"`` without a tuning, or a tuning beside a given
+    schedule it would not change. A given schedule draws nothing here, so
+    its run is bitwise the run before #1317.
+
+    Raises
+    ------
+    ValueError
+        If ``"auto"`` comes without a :class:`ScheduleTuning`, or one comes
+        with a given schedule.
+    """
+    if not isinstance(schedule, str):
+        if tuning is not None:
+            msg = (
+                "a tuning chooses schedule='auto', and the schedule is given as "
+                f"{schedule!r}"
+            )
+            raise ValueError(msg)
+        return schedule, None
+    if schedule != AUTO:
+        msg = f"schedule is a TempSchedule or 'auto', got {schedule!r}"
+        raise ValueError(msg)
+    if tuning is None:
+        msg = (
+            "schedule='auto' needs a ScheduleTuning: the pilots' budget, "
+            "criterion, step count and grid"
+        )
+        raise ValueError(msg)
+    tuned = tune_schedule(
+        graph,
+        field,
+        move=move,
+        recolour=recolour,
+        budget=tuning.budget,
+        criterion=tuning.criterion,
+        rng=rng,
+        grid=tuning.grid,
+    )
+    return tuned.params.build(tuning.n_steps), tuned
+
+
 __all__ = [
     "AUTO",
     "GRID",
+    "SCHEDULE_GRID",
     "Candidate",
     "Criterion",
     "Pilot",
+    "Schedule",
+    "ScheduleCandidate",
+    "ScheduleTuning",
     "StepSize",
     "StepTuning",
+    "TunedSchedule",
     "TunedStep",
     "compress",
+    "resolve_schedule",
+    "tune_schedule",
     "tune_step",
 ]

@@ -2494,6 +2494,10 @@ def compose(text: str) -> SolverChain:
 
 #: Swendsen-Wang's tuned schedule: the file's ``moves.swendsen-wang.chosen``,
 #: the lowest mean energy on the tuning seeds at `spatio_only/release`, q = 10.
+#: Produced by `qa.potts_schedule`'s Nelder-Mead over ``(log t_start,
+#: log t_end, hold)`` per shape; :func:`sal.sample.tune.tune_schedule` is the
+#: package's grid form of that search (issue #1317) and does not reproduce
+#: this point, which lies on no finite grid it is handed.
 SWENDSEN_WANG_SCHEDULE = ScheduleParams(
     ScheduleShape.LINEAR, 0.7835758686849045, 0.3235944681535294, 0.0
 )

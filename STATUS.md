@@ -3169,6 +3169,18 @@ at zero coupling to 1.7e-16, keeps `pi` to 2.1e-17 and, composed, is
 irreducible; at `beta = 1e12` the Gibbs sweep is ICM's on all 486 allowed
 starts. Pinned in `tests/regression/sample/test_potts_recolour.py`.
 
+**A tuned schedule on every annealed Potts entry point**
+([#1317](https://github.com/michaelJwilson/snakes_and_ladders/issues/1317), stage 2
+of 2; the default flips are #1323). `schedule="auto"` on `anneal_potts` and `betas="auto"` on
+`annealed_importance_sampling`, `population_annealing` and `simulated_tempering`,
+each with a required `ScheduleTuning`; `sample.tune.tune_schedule` runs one
+`anneal_potts` pilot per `ScheduleParams` candidate on its own spawned generator
+and ranks by the lowest energy. On a 3 x 3, q = 3 lattice it returns the
+brute-force argmin over a four-schedule grid bitwise, its four-thread run equals
+its serial run bitwise, and `"auto"` equals the chosen schedule given explicitly,
+bitwise. `potts_keyed.cluster_moves` takes `move` and `recolour`. Pinned in
+`tests/regression/sample/test_potts_schedule_tuning.py`.
+
 ## Milestone 2.0 — RL Definition
 
 **Landed as `app:rl` in the textbook**
