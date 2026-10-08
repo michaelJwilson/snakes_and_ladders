@@ -88,7 +88,8 @@ ADMITTED: dict[tuple[str, str], str] = {
     ("sample", "search"): (
         "sample.gibbs.anneal_topology and sample.tempered.tempered_topologies score a topology by "
         "search.infer.score_topology, the fit; the one edge #830 could not cut, and the cycle with "
-        "search -> sample it leaves is why score_topology's home is the next question"
+        "search -> sample it leaves is why score_topology's home is the next question; anneal_potts polishes "
+        "by search.icm (#1363)"
     ),
     ("sample", "sim"): "a sampler draws over the graph sim/ declares",
     ("sim", "opt"): (

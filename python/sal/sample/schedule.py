@@ -83,6 +83,7 @@ __all__ = [
     "LinearTempSchedule",
     "LogarithmicTempSchedule",
     "Monotone",
+    "Polish",
     "PowerTempSchedule",
     "Quantity",
     "Ramp",
@@ -1209,8 +1210,15 @@ class Annealed[T]:
         The unit ``spent`` is counted in, so two annealers are compared on a
         budget they both declare.
     termination : Termination
-        Why the run stopped. An annealer runs its schedule to the end, so
-        this is the schedule's length and not converged.
+        Why the run stopped. Unpolished, the schedule's length and not
+        converged. Polished (issue #1363), the polisher's own: converged at
+        its criterion, the budget where its own cap ran out, its iterations.
+    polish_spent : int
+        What the polish cost, in its own unit, inside ``spent``: site visits
+        for :attr:`Polish.ICM`, the polisher's iterations for a continuous
+        polish. ``spent - polish_spent`` is the schedule's. Zero unpolished.
+    polished_by : str | None
+        The polisher whose ``termination`` this is, ``None`` unpolished.
     """
 
     best: T
@@ -1218,6 +1226,20 @@ class Annealed[T]:
     spent: int
     unit: Cost
     termination: Termination
+    polish_spent: int = 0
+    polished_by: str | None = None
+
+
+class Polish(StrEnum):
+    """The polisher an annealer runs from its final state to the polisher's own convergence (issue #1363).
+
+    The schedule runs its full defined length, steps or a budget, with no
+    window and no extra hold; the polish then runs until its own criterion
+    holds, which is the run's convergence criterion.
+    """
+
+    ICM = "icm"
+    """:func:`~sal.search.icm.iterated_conditional_modes` in index order until a full sweep changes no label: a fixed point, each change strictly lowering the energy on a finite space."""
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -27,6 +27,7 @@ from sal.sample.loop import (
     Exchanging,
     Moved,
     Step,
+    Walked,
     anneal,
     anneal_spent,
     swap_log_ratio,
@@ -59,6 +60,7 @@ from sal.sample.potts_mcmc.sweeps import (
 from sal.sample.schedule import (
     Annealed,
     Monotone,
+    Polish,
     Tempered,
     TempSchedule,
     check_ladder,
@@ -75,6 +77,8 @@ from sal.sample.tune import (
     resolve_ladder,
     resolve_schedule,
 )
+from sal.search.alpha_expansion import Labelling
+from sal.search.icm import iterated_conditional_modes
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import (
     SiteField,
@@ -728,6 +732,8 @@ def anneal_potts(
     start: np.ndarray | None = None,
     tuning: ScheduleTuning | None = None,
     budget: Budget | None = None,
+    polish: Polish | None = None,
+    min_sites: int = 0,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -805,6 +811,25 @@ def anneal_potts(
         its clusters, spends the budget and ends its ramp at it; ``n_sweeps``
         is then the steps run. A move set of fixed cost per step ``c`` given
         ``budget.size = schedule.n_steps * c`` is the default run, bitwise.
+    polish : Polish | None
+        The polisher run once the schedule ends (issue #1363). ``None``, the
+        default, is the run before the parameter existed, bitwise.
+        :attr:`~sal.sample.schedule.Polish.ICM` descends from ``final`` in
+        index order until a full sweep changes no label, honouring forbidden
+        labels, and charges a heat-bath sweep's site visits
+        (:func:`step_visits`) per sweep, the clean one included, in
+        ``polish_spent``: the update reads and writes what a sweep at
+        ``T = 0`` does. Where the schedule's ``best`` scores
+        below ``final``'s fixed point it is descended too, also charged, and
+        the lower fixed point is ``best``; ``final`` is the one from
+        ``final``. ``termination`` is the descent's: converged at the fixed
+        point, :attr:`~sal.opt.termination.Stop.INFEASIBLE` where
+        ``min_sites`` meets a site that allows no surviving label.
+    min_sites : int
+        The floor the polish applies (:func:`~sal.search.icm.iterated_conditional_modes`),
+        drawing its uniforms from ``rng`` after the schedule's draws; ``0``,
+        the default, applies none and draws nothing. Refused without
+        ``polish``.
 
     Returns
     -------
@@ -815,10 +840,14 @@ def anneal_potts(
     ValueError
         If ``start`` is not one integer state in range per node, as
         :func:`~sal.sample.tune.resolve_schedule` refuses, or if ``budget``
-        is not in :attr:`~sal.cost.Cost.SITE_VISITS`.
+        is not in :attr:`~sal.cost.Cost.SITE_VISITS`, or if ``min_sites`` is
+        given without ``polish``.
     """
     field = log_weight_of(field)
     site_visits(budget)
+    if min_sites and polish is None:
+        msg = f"min_sites={min_sites} is the polish's floor; it needs a polish"
+        raise ValueError(msg)
     given = move
     move = move_set(move, recolour)
     refuse_negative_coupling(move, graph)
@@ -850,6 +879,8 @@ def anneal_potts(
         if budget is None
         else anneal_spent(step, schedule, origin, rng, np.copy, budget=budget.size)
     )
+    if polish is Polish.ICM:
+        return _polished(graph, rows, walked, rng, min_sites, trace, tuned)
     return AnnealedPotts(
         best=walked.best,
         energy=walked.energy,
@@ -858,6 +889,77 @@ def anneal_potts(
         spent=walked.spent,
         unit=Cost.SITE_VISITS,
         termination=walked.termination,
+        trace=tuple(trace),
+        tuned=tuned,
+    )
+
+
+def _descend(
+    graph: PottsGraph,
+    rows: np.ndarray,
+    start: np.ndarray,
+    rng: Generator,
+    min_sites: int,
+) -> Labelling:
+    """ICM in index order from ``start`` until a full sweep changes no label, or the floor is infeasible.
+
+    Chunks of ``n_nodes`` sweeps, each resumed from the last: an unfloored
+    index-order descent draws nothing, so the chunks are one descent. The
+    returned ``sweeps`` and termination iterations count every chunk's sweeps.
+    """
+    swept, labelling = 0, start
+    while True:
+        descended = iterated_conditional_modes(
+            graph,
+            rows,
+            rng,
+            start=labelling,
+            max_iterations=max(graph.n_nodes, 1),
+            min_sites=min_sites,
+        )
+        swept += descended.sweeps
+        labelling = descended.labelling
+        if descended.termination.reason is not Stop.BUDGET:
+            return Labelling(
+                labelling,
+                descended.energy,
+                swept,
+                termination=Termination(
+                    descended.termination.converged,
+                    swept,
+                    descended.termination.reason,
+                ),
+            )
+
+
+def _polished(
+    graph: PottsGraph,
+    rows: np.ndarray,
+    walked: Walked[np.ndarray],
+    rng: Generator,
+    min_sites: int,
+    trace: list[ClusterCounter],
+    tuned: TunedSchedule | None,
+) -> AnnealedPotts:
+    """``walked`` with :attr:`Polish.ICM` run from its final state, and from its best where that scores lower (issue #1363)."""
+    final = _descend(graph, rows, walked.final, rng, min_sites)
+    polished, sweeps = final, final.sweeps
+    if walked.energy < final.energy:
+        best = _descend(graph, rows, walked.best, rng, min_sites)
+        sweeps += best.sweeps
+        if best.energy < final.energy:
+            polished = best
+    charged = sweeps * step_visits(PottsMove.SINGLE_SITE, graph)
+    return AnnealedPotts(
+        best=polished.labelling,
+        energy=polished.energy,
+        final=final.labelling,
+        n_sweeps=walked.termination.iterations,
+        spent=walked.spent + charged,
+        unit=Cost.SITE_VISITS,
+        termination=polished.termination,
+        polish_spent=charged,
+        polished_by=Polish.ICM.value,
         trace=tuple(trace),
         tuned=tuned,
     )
