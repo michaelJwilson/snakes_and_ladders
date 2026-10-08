@@ -3290,6 +3290,18 @@ ladder is bitwise main's on all three. Pinned in
 `tests/regression/sample/test_schedule_racing.py` and
 `tests/regression/sample/test_ladder_tuning.py`.
 
+**A Wolff run spends its site-visit budget**
+([#1344](https://github.com/michaelJwilson/snakes_and_ladders/issues/1344)).
+`anneal_potts(budget=Budget(Cost.SITE_VISITS, n))` steps until `spent` reaches
+`n`, the schedule read at the spent fraction (`loop.anneal_spent`), and
+`sample_potts` takes the `Budget` as `n_sweeps`. On a 12 x 12 periodic `q = 3`
+lattice at `J = 1.0`, 50 steps of Wolff alone spent 760 to 2,360 of 36,000 site
+visits on 3 seeds; the budgeted run spent 36,350 to 36,665 in 2,020 to 2,214
+steps, within one step of the budget. A budgeted Wolff chain fits #1322's
+enumerated 2 x 3 law at `SIGNIFICANCE = 1e-3`; single-site and Swendsen-Wang
+under `n` steps' cost, and the step-count Wolff run, are main's bitwise. Pinned
+in `tests/regression/sample/test_potts_budget.py`.
+
 ## Milestone 2.0 — RL Definition
 
 **Landed as `app:rl` in the textbook**

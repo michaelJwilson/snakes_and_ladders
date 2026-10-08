@@ -19,10 +19,19 @@ from numpy.random import Generator
 
 from sal.backend import Backend
 from sal.cost import Cost
+from sal.opt.budget import Budget
 from sal.opt.termination import Stop, Termination
 from sal.parallel import Pool, map_tasks
 from sal.sample.accept import accept
-from sal.sample.loop import Exchanging, Moved, Step, anneal, swap_log_ratio, temper
+from sal.sample.loop import (
+    Exchanging,
+    Moved,
+    Step,
+    anneal,
+    anneal_spent,
+    swap_log_ratio,
+    temper,
+)
 from sal.sample.potts_mcmc import sweeps
 from sal.sample.potts_mcmc.moves import (
     PottsMove,
@@ -247,7 +256,7 @@ def sample_potts(
     field: SiteField | np.ndarray,
     move: PottsMoves,
     rng: np.random.Generator,
-    n_sweeps: int,
+    n_sweeps: int | Budget,
     burn_in: int = 0,
     thin: int = 1,
     *,
@@ -273,12 +282,18 @@ def sample_potts(
     rng : np.random.Generator
         Passed in rather than seeded here: seeding inside a call makes every
         draw of an ensemble identical (`sim/CLAUDE.md`, issue #240).
-    n_sweeps : int
+    n_sweeps : int | Budget
         Recorded sweeps. A sweep is ``n_nodes`` heat-bath updates, ``n_nodes``
         gradient-informed proposals, one Swendsen-Wang bond-and-recolour pass
         over the whole lattice, or *one* Wolff or Niedermayer cluster step ---
         see :func:`wolff_sweep` for why a single-cluster sweep cannot be
-        sized to match the others.
+        sized to match the others. A :class:`~sal.opt.budget.Budget` in
+        :attr:`~sal.cost.Cost.SITE_VISITS` is that size instead (issue
+        #1344): after burn-in the chain takes steps, each charged as
+        :func:`step_visits` charges it, until they have spent
+        ``budget.size``, recording every ``thin``-th, so a Wolff chain spends
+        its budget whatever its clusters' sizes. ``states`` then holds as many
+        records as the steps bought.
     burn_in : int
         Sweeps run and discarded before recording starts.
     thin : int
@@ -331,6 +346,7 @@ def sample_potts(
         antiferromagnet has no like-spin clusters to flip.
     """
     field = log_weight_of(field)
+    site_visits(n_sweeps if isinstance(n_sweeps, Budget) else None)
     move = move_set(move, recolour)
     refuse_negative_coupling(move, graph)
 
@@ -362,6 +378,20 @@ def sample_potts(
         recolour=recolour,
     )
 
+    if isinstance(n_sweeps, Budget):
+        return _spend_chain(
+            graph,
+            rows,
+            state,
+            rng,
+            move,
+            n_sweeps.size,
+            burn_in,
+            thin,
+            _Lattice(
+                graph, rows, (offsets, neighbours, couplings), backend, cluster_backend
+            ),
+        )
     recorded = np.empty((n_sweeps, graph.n_nodes), dtype=np.int64)
     before = np.empty_like(state)
     cluster_total, cluster_count, largest, accepted = 0, 0, 0, 0
@@ -388,6 +418,78 @@ def sample_potts(
         ess=ess,
         termination=_mixing(ess, steps),
     )
+
+
+def _spend_chain(
+    graph: PottsGraph,
+    rows: np.ndarray,
+    state: np.ndarray,
+    rng: np.random.Generator,
+    move: Sequence[PottsMove],
+    budget: int,
+    burn_in: int,
+    thin: int,
+    lattice: _Lattice,
+) -> PottsChain:
+    """:func:`sample_potts`' loop under a site-visit budget (issue #1344).
+
+    The moves run in :func:`sweep_for`'s order on the same closures, so a
+    step draws what it draws there; each move is charged by
+    :func:`step_visits`, and the steps after burn-in run until they have
+    spent ``budget``, overspending by less than the last.
+    """
+    parts = [(each, lattice.sweep(each)) for each in move]
+    kept: list[np.ndarray] = []
+    before = np.empty_like(state)
+    cluster_total, cluster_count, largest, accepted = 0, 0, 0, 0
+    steps, spent = -burn_in * thin, 0
+    while steps < 0 or spent < budget:
+        before[:] = state
+        size, visits = 0, 0
+        for each, sweep in parts:
+            built = sweep(state, rng, 1.0)
+            size += built
+            visits += step_visits(each, graph, built)
+        if visits < 1:
+            msg = "a step charged nothing, so a budget in its unit is never spent"
+            raise ValueError(msg)
+        accepted += not np.array_equal(before, state)
+        if size:
+            cluster_total += size
+            cluster_count += 1
+            largest = max(largest, size)
+        if steps >= 0:
+            spent += visits
+            if (steps + 1) % thin == 0:
+                kept.append(state.copy())
+        steps += 1
+    ran = steps + burn_in * thin
+    recorded = np.stack(kept) if kept else np.empty((0, graph.n_nodes), dtype=np.int64)
+    mean_cluster = (
+        cluster_total / cluster_count if cluster_count else float(graph.n_nodes)
+    )
+    ess = effective_draws(observables(graph, rows, recorded))
+    return PottsChain(
+        states=recorded,
+        mean_cluster_size=mean_cluster,
+        acceptance=accepted / ran if ran else 0.0,
+        largest_cluster_share=largest / graph.n_nodes if cluster_count else 1.0,
+        ess=ess,
+        termination=_mixing(ess, ran),
+    )
+
+
+def site_visits(budget: Budget | None) -> None:
+    """Refuse a ``budget`` in any unit but :attr:`~sal.cost.Cost.SITE_VISITS`, the unit a Potts step charges (issue #1344).
+
+    Raises
+    ------
+    ValueError
+        If ``budget`` is given in another unit.
+    """
+    if budget is not None and budget.unit is not Cost.SITE_VISITS:
+        msg = f"a Potts run spends {Cost.SITE_VISITS}, got a budget in {budget.unit}"
+        raise ValueError(msg)
 
 
 def step_visits(move: PottsMove, graph: PottsGraph, cluster_sites: int = 0) -> int:
@@ -603,7 +705,8 @@ class AnnealedPotts(Annealed[np.ndarray]):
     energy : float
         ``best``'s energy, in :func:`energies`' convention.
     n_sweeps : int
-        Sweeps run, one per schedule step.
+        Sweeps run: one per schedule step, or under a ``budget`` the steps
+        that spent it (issue #1344).
     trace : tuple[ClusterCounter, ...]
         One counter per schedule step for a cluster move set, empty for
         single-site. Kept per step because the quantity issue #551 predicts
@@ -631,6 +734,7 @@ def anneal_potts(
     cluster_backend: Backend = Backend.RUST,
     start: np.ndarray | None = None,
     tuning: ScheduleTuning | None = None,
+    budget: Budget | None = None,
 ) -> AnnealedPotts:
     """Simulated annealing by heat-bath sweeps on a temperature schedule.
 
@@ -699,6 +803,15 @@ def anneal_potts(
     tuning : ScheduleTuning | None
         The pilots that choose ``schedule="auto"``, required with it and
         refused without it (issue #1317).
+    budget : Budget | None
+        Site visits to spend (issue #1344). ``None``, the default, runs one
+        step per schedule entry, bitwise the run before the parameter
+        existed. Given, the run takes steps until ``spent`` reaches
+        ``budget.size`` and reads the schedule at the spent fraction
+        (:func:`~sal.sample.loop.anneal_spent`), so a Wolff run, charged by
+        its clusters, spends the budget and ends its ramp at it; ``n_sweeps``
+        is then the steps run. A move set of fixed cost per step ``c`` given
+        ``budget.size = schedule.n_steps * c`` is the default run, bitwise.
 
     Returns
     -------
@@ -707,10 +820,12 @@ def anneal_potts(
     Raises
     ------
     ValueError
-        If ``start`` is not one integer state in range per node, or as
-        :func:`~sal.sample.tune.resolve_schedule` refuses.
+        If ``start`` is not one integer state in range per node, as
+        :func:`~sal.sample.tune.resolve_schedule` refuses, or if ``budget``
+        is not in :attr:`~sal.cost.Cost.SITE_VISITS`.
     """
     field = log_weight_of(field)
+    site_visits(budget)
     given = move
     move = move_set(move, recolour)
     refuse_negative_coupling(move, graph)
@@ -736,12 +851,17 @@ def anneal_potts(
         graph, rows, graph.compressed_adjacency(), backend, cluster_backend
     )
     origin = Moved(state, lattice.energy(state), None, 0)
-    walked = anneal(lattice.rung(move, trace), schedule, origin, rng, np.copy)
+    step = lattice.rung(move, trace)
+    walked = (
+        anneal(step, schedule, origin, rng, np.copy)
+        if budget is None
+        else anneal_spent(step, schedule, origin, rng, np.copy, budget=budget.size)
+    )
     return AnnealedPotts(
         best=walked.best,
         energy=walked.energy,
         final=walked.final,
-        n_sweeps=schedule.n_steps,
+        n_sweeps=walked.termination.iterations,
         spent=walked.spent,
         unit=Cost.SITE_VISITS,
         termination=walked.termination,
