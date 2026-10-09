@@ -21,6 +21,8 @@ use oxisal::double;
 use oxisal::maxflow::{max_flow_impl, FlowNetwork};
 #[cfg(feature = "sandbox")]
 use oxisal::maxflow_declined::{max_flow_with, Algorithm};
+use oxisal::potts_problem::{Descend, PottsProblem, AT_SWEEP, INDEX, UNIFORM};
+use oxisal::potts_trws::Chains;
 use oxisal::pruning::{pruning_log_likelihood_impl, LeafObservations};
 #[cfg(feature = "sandbox")]
 use oxisal::pruning_burn::pruning_gradient_impl;
@@ -577,6 +579,151 @@ fn bench_count_pair_hmm(c: &mut Criterion) {
             );
         });
     }
+/// `PottsProblem`'s descent and merge (#1413) on the `potts_labelling`
+/// stress shape: a periodic triangular 50 x 60 lattice, degree 6, q = 5,
+/// a seeded field; the descent with and without skipping clean sites.
+fn bench_potts_problem(c: &mut Criterion) {
+    let (width, height, q) = (50usize, 60usize, 5usize);
+    let n = width * height;
+    let mut offsets = vec![0i64];
+    let mut neighbours = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            for (dx, dy) in [(1i64, 0i64), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)] {
+                let nx = (x as i64 + dx).rem_euclid(width as i64);
+                let ny = (y as i64 + dy).rem_euclid(height as i64);
+                neighbours.push(ny * width as i64 + nx);
+            }
+            offsets.push(neighbours.len() as i64);
+        }
+    }
+    let couplings = vec![1.0f64; neighbours.len()];
+    let mut state = 12345u64;
+    let field: Vec<f64> = (0..n * q)
+        .map(|_| {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((state >> 11) as f64 / (1u64 << 53) as f64) * 4.0
+        })
+        .collect();
+    let start: Vec<i64> = (0..n)
+        .map(|node| {
+            let row = &field[node * q..(node + 1) * q];
+            (0..q).fold(0, |best, k| if row[k] > row[best] { k } else { best }) as i64
+        })
+        .collect();
+    let mut problem =
+        PottsProblem::build(&offsets, &neighbours, &couplings, field, q, true, false).unwrap();
+    let mut group = c.benchmark_group("potts_problem_50x60");
+    for skip_clean in [true, false] {
+        let ask = Descend {
+            order: INDEX,
+            min_sites: 0,
+            policy: UNIFORM,
+            floor_at: AT_SWEEP,
+            max_iterations: 200,
+            skip_clean,
+        };
+        group.bench_function(format!("icm_skip_clean_{skip_clean}"), |b| {
+            b.iter(|| {
+                problem.load(&start).unwrap();
+                problem.descend(&ask, 0).unwrap()
+            });
+        });
+    }
+    group.bench_function("merge_full", |b| {
+        b.iter(|| {
+            problem.load(&start).unwrap();
+            problem.merge_held(false, false)
+        });
+    });
+    // The edges once each, lower end first, in row order: what
+    // `PottsGraph.endpoints` and `trws.chain_layout` read.
+    let (mut first, mut second) = (Vec::new(), Vec::new());
+    for node in 0..n {
+        for &far in &neighbours[offsets[node] as usize..offsets[node + 1] as usize] {
+            let far = far as usize;
+            if far > node {
+                first.push(node);
+                second.push(far);
+            }
+        }
+    }
+    let unit = vec![1.0f64; first.len()];
+    problem.set_cut(&first, &second, &unit).unwrap();
+    group.bench_function("alpha_expansion_held_cut", |b| {
+        b.iter(|| {
+            problem.load(&start).unwrap();
+            problem.expand_held(50, false, 200).unwrap().cycles
+        });
+    });
+    problem.set_chains(chain_layout(n, q, &first, &second));
+    group.bench_function("trws_100_iterations", |b| {
+        b.iter(|| problem.trws_held(100, 0.0).unwrap().trace.len());
+    });
+    group.finish();
+}
+
+/// `sal.search.trws.chain_layout` of unit-coupled edges `first[e] < second[e]`.
+fn chain_layout(n: usize, q: usize, first: &[usize], second: &[usize]) -> Chains {
+    let n_edges = first.len();
+    let mut rows: Vec<Vec<i64>> = vec![Vec::new(); n];
+    let (mut outgoing, mut rank, mut seen) =
+        (vec![Vec::new(); n], vec![0usize; n_edges], vec![0usize; n]);
+    let mut neighbours = vec![0i64; 2 * n_edges];
+    let mut ends = Vec::with_capacity(2 * n_edges);
+    for edge in 0..n_edges {
+        let (low, high) = (first[edge], second[edge]);
+        rows[low].push(2 * edge as i64);
+        rows[high].push(2 * edge as i64 + 1);
+        neighbours[2 * edge] = high as i64;
+        neighbours[2 * edge + 1] = low as i64;
+        ends.extend([low as i64, high as i64]);
+        outgoing[low].push(edge);
+        rank[edge] = seen[high];
+        seen[high] += 1;
+    }
+    let mut offsets = vec![0i64];
+    let mut slots = Vec::new();
+    for row in &rows {
+        slots.extend(row);
+        offsets.push(slots.len() as i64);
+    }
+    let weight: Vec<f64> = (0..n)
+        .map(|node| 1.0 / outgoing[node].len().max(seen[node]).max(1) as f64)
+        .collect();
+    let (mut heads, mut walked, mut bounds) = (Vec::new(), Vec::new(), vec![0i64]);
+    for node in 0..n {
+        if outgoing[node].is_empty() && seen[node] == 0 {
+            heads.push(node as i64);
+            bounds.push(walked.len() as i64);
+        }
+        for &start in &outgoing[node][seen[node].min(outgoing[node].len())..] {
+            heads.push(node as i64);
+            let mut edge = Some(start);
+            while let Some(at) = edge {
+                walked.push(at as i64);
+                let high = second[at];
+                edge = outgoing[high].get(rank[at]).copied();
+            }
+            bounds.push(walked.len() as i64);
+        }
+    }
+    Chains::build(
+        n,
+        q,
+        &offsets,
+        &slots,
+        &neighbours,
+        &ends,
+        &vec![1.0; n_edges],
+        &weight,
+        &bounds,
+        &heads,
+        &walked,
+    )
+    .unwrap()
 }
 
 #[cfg(feature = "sandbox")]
@@ -591,7 +738,8 @@ criterion_group!(
     bench_pruning_gradient,
     bench_exposed_dispersion,
     bench_ragged_posteriors,
-    bench_count_pair_hmm
+    bench_count_pair_hmm,
+    bench_potts_problem
 );
 #[cfg(not(feature = "sandbox"))]
 criterion_group!(
@@ -603,6 +751,7 @@ criterion_group!(
     bench_max_flow,
     bench_exposed_dispersion,
     bench_ragged_posteriors,
-    bench_count_pair_hmm
+    bench_count_pair_hmm,
+    bench_potts_problem
 );
 criterion_main!(benches);

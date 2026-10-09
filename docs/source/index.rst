@@ -551,6 +551,9 @@ whether or not it has members yet.
 .. automodule:: sal.search.icm.numba
    :members:
 
+.. automodule:: sal.search.potts_problem
+   :members:
+
 .. automodule:: sal.search.trws
    :members:
 
@@ -866,6 +869,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: sal.qa.known_ground_states
+   :members:
+
+.. automodule:: sal.qa.potts_labelling
    :members:
 
 .. automodule:: sal.scripts
