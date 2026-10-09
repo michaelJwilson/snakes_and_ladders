@@ -35,7 +35,7 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 from sal.backend import Backend
-from sal.sample.potts_mcmc import PottsMove, sweep_for
+from sal.sample.potts_mcmc import PottsMove, Recolour, sweep_for
 from sal.sample.statistics import integrated_autocorrelation_time
 from sal.sim.graph import BoundaryCondition, lattice_graph
 from sal.sim.potts import (
@@ -146,7 +146,22 @@ def _chain(
     field = np.zeros(n_states)
     rows = site_field(field, graph.n_nodes)
     offsets, neighbours, couplings = graph.compressed_adjacency()
-    advance = sweep_for(move, graph, rows, offsets, neighbours, couplings, Backend.RUST)
+    # The move alone under its own recolouring, as before #1323 composed a
+    # bare Wolff or Swendsen-Wang with a Gibbs sweep and made heat bath the
+    # default; Wolff on the Python stream, as before #1362 routed it to Rust.
+    # On either change the ESS of the five cases in SHORT_OF_THE_FLOOR moves
+    # off #1320's measurement, and the referee is of the move, not the set.
+    advance = sweep_for(
+        [move],
+        graph,
+        rows,
+        offsets,
+        neighbours,
+        couplings,
+        Backend.RUST,
+        Backend.PYTHON if move in SINGLE_CLUSTER else Backend.RUST,
+        recolour=Recolour.UNIFORM,
+    )
     state = (
         np.zeros(graph.n_nodes, dtype=np.int64)
         if cold
