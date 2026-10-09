@@ -724,6 +724,7 @@ class PhasedCountPairHmm:
         self, posterior: np.ndarray, solver: str
     ) -> tuple[bool, bool, int, float, list[int], list[int]]: ...
     def viterbi(self) -> tuple[np.ndarray, np.ndarray]: ...
+
 class PottsProblem:
     """One Potts problem held across solves (#1413): ``sal.search.potts_problem``'s backend."""
 
