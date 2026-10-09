@@ -171,9 +171,9 @@ def tied_m_step(
 
 
 def start(
-    cell: CountHmm, k: int, stay: float
+    cell: CountHmm, n_states: int, stay: float
 ) -> tuple[torch.Tensor, torch.Tensor, CountPairEmission]:
-    """One start for every semantics: the ``k`` most occupied levels' means and rates, perturbed.
+    """One start for every semantics: the ``n_states`` most occupied levels' means and rates, perturbed.
 
     Each log mean moves by ``N(0, 0.1)`` and each rate's logit by
     ``N(0, 0.5)``, from ``default_rng(START_SEED)``: a start at the truth
@@ -182,25 +182,25 @@ def start(
     probability ``stay``.
     """
     order = np.argsort(-np.bincount(cell.states, minlength=cell.components.n_states))[
-        :k
+        :n_states
     ]
     truth = cell.components
     rng = np.random.default_rng(START_SEED)
-    mean = truth.total.mean.numpy()[order] * np.exp(rng.normal(0.0, 0.1, k))
+    mean = truth.total.mean.numpy()[order] * np.exp(rng.normal(0.0, 0.1, n_states))
     logit = np.log(truth.rate.numpy()[order] / (1.0 - truth.rate.numpy()[order]))
-    rate = 1.0 / (1.0 + np.exp(-(logit + rng.normal(0.0, 0.5, k))))
+    rate = 1.0 / (1.0 + np.exp(-(logit + rng.normal(0.0, 0.5, n_states))))
     family = CountPairEmission(
-        np.full(k, 1.0 / START_INVERSE_DISPERSION),
+        np.full(n_states, 1.0 / START_INVERSE_DISPERSION),
         mean,
         rate * START_CONCENTRATION,
         (1.0 - rate) * START_CONCENTRATION,
-        np.ones(k, dtype=np.int64),
+        np.ones(n_states, dtype=np.int64),
         joint=False,
     )
-    transition = np.full((k, k), (1.0 - stay) / (k - 1))
+    transition = np.full((n_states, n_states), (1.0 - stay) / (n_states - 1))
     np.fill_diagonal(transition, stay)
     return (
-        torch.full((k,), -float(np.log(k)), dtype=torch.float64),
+        torch.full((n_states,), -float(np.log(n_states)), dtype=torch.float64),
         torch.as_tensor(np.log(transition)),
         family,
     )
@@ -224,9 +224,9 @@ def missed(cell: CountHmm, fitted: EmFit) -> int:
     return int(cell.states.size - confusion[rows, cols].sum())
 
 
-def fit(cell: CountHmm, k: int, semantics: Semantics, stay: float) -> Fitted:
-    """``baum_welch_family`` on ``cell`` with ``k`` states under ``semantics``, from :func:`start`."""
-    log_initial, log_transition, family = start(cell, k, stay)
+def fit(cell: CountHmm, n_states: int, semantics: Semantics, stay: float) -> Fitted:
+    """``baum_welch_family`` on ``cell`` with ``n_states`` states under ``semantics``, from :func:`start`."""
+    log_initial, log_transition, family = start(cell, n_states, stay)
     spent = {"m_step": 0.0}
 
     def timed(components: EmissionFamily, observations: torch.Tensor, posterior: torch.Tensor,
