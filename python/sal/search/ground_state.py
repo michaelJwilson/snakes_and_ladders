@@ -622,6 +622,7 @@ def run_annealed(
     schedule: ScheduleParams = ANNEAL_SCHEDULE,
     steps: int | None = None,
     start: np.ndarray | None = None,
+    loop_backend: Backend | None = None,
 ) -> MethodRun:
     """One annealed run, its step count fixed before the run starts.
 
@@ -640,6 +641,10 @@ def run_annealed(
     with one a caller fixed beforehand, still not read from the run's state;
     ``start`` starts the chain from a labelling instead of a uniform draw
     (``initial`` until issue #1052 gave every solver the one name).
+    ``loop_backend`` is :func:`~sal.sample.potts_mcmc.anneal_potts`'s:
+    ``None``, the default, runs the Rust loop since #1370, and
+    :data:`~sal.backend.Backend.PYTHON` the loop a record made before it was
+    measured on (issue #1424).
     """
     problem = _problem(problem)
     count = max(1, budget.size // step_cost(problem, move)) if steps is None else steps
@@ -660,6 +665,7 @@ def run_annealed(
         recolour=Recolour.UNIFORM,
         cluster_backend=Backend.RUST if move in _COMPILED_CLUSTERS else Backend.PYTHON,
         start=start,
+        loop_backend=loop_backend,
     )
     return MethodRun(
         labelling=run.best,

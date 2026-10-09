@@ -47,6 +47,7 @@ from typing import Any
 import numpy as np
 from scipy.optimize import minimize
 
+from sal.backend import Backend
 from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.parallel import map_tasks
@@ -151,7 +152,8 @@ class Evaluation:
 def _cell_generator(seed: int) -> np.random.Generator:
     """``default_rng([seed, 0])``: the generator :class:`~sal.opt.starts.StartsBenchmark` hands cell ``(instance 0, seed)``.
 
-    A run here on it is therefore the notebook's run at that seed.
+    A run here on it is therefore the notebook's run at that seed, on the
+    Python loop the search was recorded on (:func:`handover`).
     """
     return np.random.default_rng([seed, 0])
 
@@ -162,10 +164,22 @@ def handover(
     steps: int | None,
     rng: np.random.Generator,
 ) -> tuple[float, int]:
-    """One annealed run on the notebook's rung and budget: its energy and spend."""
+    """One annealed run on the notebook's rung and budget: its energy and spend.
+
+    On the Python loop, the one ``docs/nb/data/potts_schedule.json`` was
+    recorded on: the Rust loop, the default since #1370, is the same law on
+    another stream, on which the recorded Swendsen-Wang evaluation reruns at
+    -10116.42 against -10142.33 (issue #1424).
+    """
     rung = release_rung()
     run = run_annealed(
-        rung, solver_budget(rung), rng, move, schedule=params, steps=steps
+        rung,
+        solver_budget(rung),
+        rng,
+        move,
+        schedule=params,
+        steps=steps,
+        loop_backend=Backend.PYTHON,
     )
     return run.energy, run.spent
 

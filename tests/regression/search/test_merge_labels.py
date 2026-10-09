@@ -113,14 +113,19 @@ def test_a_shared_field_is_its_rows_repeated() -> None:
 @pytest.mark.oracle
 def test_the_stage_is_the_solver_then_the_merge_run_by_hand() -> None:
     # The anneal holds one sweep back for the merge, which lowers its energy.
+    # The seed is one whose anneal the merge lowers, so the equality is not
+    # vacuous: 3 and 4 of seeds 0..15 on the Python and Rust loops. Seed 5,
+    # -114.415 -> -115.648 on the Python loop, ends at -118.304 on the Rust
+    # loop, the default since #1370, where no merge lowers it; seed 2 on the
+    # Rust loop is -117.032 -> -118.443.
     chained = ground_state(
         GRAPH,
         FIELD,
         "anneal(reserve_sweeps=1)>merge-labels",
         BUDGET,
-        np.random.default_rng(5),
+        np.random.default_rng(2),
     )
-    rng = np.random.default_rng(5)
+    rng = np.random.default_rng(2)
     held = Budget(BUDGET.unit, BUDGET.size - VISITS_PER_SWEEP)
     annealed = ground_state(GRAPH, FIELD, "anneal", held, rng)
     merged = merge_labels(GRAPH, FIELD, annealed.labelling)

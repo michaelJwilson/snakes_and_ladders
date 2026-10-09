@@ -94,6 +94,20 @@ BEFORE = {
     "release/warm-anneal": "0b81269cf9db1847",
     "release/expansion>swendsen-wang": "9ccfe74792ba2496",
 }
+#: The cells #1370 moved (issue #1368): the Rust loop, the default where
+#: every move in the set has a kernel, draws its own stream. With the Python
+#: loop forced (`loop_codes` returning ``None``) all eight reproduce their
+#: `BEFORE` value bitwise on 28a9e621, so the loop is the only change.
+RUST_LOOP = {
+    "ci/anneal": "aff2e837877a7b27",
+    "ci/swendsen-wang": "bd73d9ea3a3c2931",
+    "release/anneal": "570852d478bbca77",
+    "release/swendsen-wang": "047b36690145443f",
+    "ci/tuned-swendsen-wang": "63e9b2238aa963dd",
+    "ci/warm-anneal": "cedea74f5b4f41a8",
+    "ci/swendsen-wang>expansion": "a97638989361f12a",
+    "release/tuned-swendsen-wang": "79f4d2b5643c62b5",
+}
 #: Cells near or over the per-PR cap of 10 s: 41,250 Wolff steps a seed,
 #: 12.6 s for five, and max-product's 40 flooding iterations at 5,041 sites,
 #: 9 s for five.
@@ -133,7 +147,7 @@ def test_no_start_is_the_run_before_the_entry_took_one(cell: str) -> None:
         digest.update(np.asarray(run.labelling, dtype=np.int64).tobytes())
         digest.update(repr(float(run.energy)).encode())
         digest.update(str(int(run.spent)).encode())
-    assert digest.hexdigest()[:16] == BEFORE[cell]
+    assert digest.hexdigest()[:16] == RUST_LOOP.get(cell, BEFORE[cell])
 
 
 def _takes_start() -> list[str]:
