@@ -221,6 +221,8 @@ def test_a_wolff_step_is_potts_mcmcs_own_sweep_bitwise() -> None:
             beta=1.0 / temperature,
             root=5,
             proposed=1,
+            # The stream `WolffMove` replays; Rust is the default since #1362.
+            backend=Backend.PYTHON,
         )
 
         assert np.array_equal(keyed, direct)
@@ -337,6 +339,10 @@ def test_keys_draw_the_same_cluster_size_law_as_seeds() -> None:
                     beta=1.0,
                     root=5,
                     proposed=1,
+                    # The route a keyed `WolffMove` feeds; Rust, the default
+                    # since #1362, draws one seed from the key and not the
+                    # stream this law was measured on.
+                    backend=Backend.PYTHON,
                 )
                 for generator in generators
             ]
