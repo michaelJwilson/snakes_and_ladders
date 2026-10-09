@@ -206,7 +206,30 @@ pub fn solve_exposed_dispersion(
     tolerance: f64,
     start: f64,
 ) -> Dispersion {
-    let score = |r: f64| exposed_score(problem, r);
+    solve_bracketed_newton(
+        |r| exposed_score(problem, r),
+        |r| exposed_score_slope(problem, r),
+        problem.total,
+        lower,
+        upper,
+        tolerance,
+        start,
+    )
+}
+
+/// The safeguarded Newton of [`solve_exposed_dispersion`] on any score decreasing in `log r`:
+/// `score` at a point, `score_slope` the score and its derivative in `log r` in one pass, and
+/// `total` the weight the residual is divided by. The tied solve (issue #1412) sums the states'
+/// scores and takes the same steps.
+pub fn solve_bracketed_newton(
+    score: impl Fn(f64) -> f64,
+    score_slope: impl Fn(f64) -> (f64, f64),
+    total: f64,
+    lower: f64,
+    upper: f64,
+    tolerance: f64,
+    start: f64,
+) -> Dispersion {
     if score(upper) > 0.0 {
         return Dispersion {
             value: upper,
@@ -233,7 +256,7 @@ pub fn solve_exposed_dispersion(
     let mut iterations = 0;
     while high - low > tolerance && iterations < MAX_NEWTON_STEPS {
         let r = x.exp();
-        let (value, slope) = exposed_score_slope(problem, r);
+        let (value, slope) = score_slope(r);
         iterations += 1;
         if value > 0.0 {
             low = x;
@@ -246,7 +269,7 @@ pub fn solve_exposed_dispersion(
                 value: r,
                 at_boundary: false,
                 iterations,
-                residual: value.abs() / problem.total,
+                residual: value.abs() / total,
             };
         }
         let next = x - newton;
@@ -263,7 +286,7 @@ pub fn solve_exposed_dispersion(
         value,
         at_boundary: false,
         iterations,
-        residual: score(value).abs() / problem.total,
+        residual: score(value).abs() / total,
     }
 }
 
@@ -320,7 +343,12 @@ pub struct Bisection {
     pub margin: f64,
 }
 
-fn bisect(mut low: f64, mut high: f64, settings: Bisection, score: impl Fn(f64) -> f64) -> f64 {
+pub(crate) fn bisect(
+    mut low: f64,
+    mut high: f64,
+    settings: Bisection,
+    score: impl Fn(f64) -> f64,
+) -> f64 {
     for _ in 0..settings.max_bisections {
         if high - low <= settings.tolerance {
             break;
@@ -377,6 +405,99 @@ pub fn solve_beta_binomial(problem: BetaBinomialProblem<'_>, settings: Bisection
     BetaBinomial {
         alpha: rate * concentration,
         beta: (1.0 - rate) * concentration,
+        at_boundary,
+        converged: residual <= settings.tolerance,
+        iterations,
+        residual,
+    }
+}
+
+/// The tied beta-binomial solve: every state's rate at one shared concentration (issue #1412).
+#[derive(Clone, Debug, PartialEq)]
+pub struct TiedBetaBinomial {
+    /// Each state's mean rate `a / (a + b)`.
+    pub rates: Vec<f64>,
+    /// The shared concentration `a + b`.
+    pub concentration: f64,
+    /// Whether the concentration stopped at its identifiable bound.
+    pub at_boundary: bool,
+    /// Whether the last outer step moved less than the tolerance.
+    pub converged: bool,
+    /// Outer iterations taken.
+    pub iterations: u32,
+    /// The last outer step's largest relative move.
+    pub residual: f64,
+}
+
+/// `sal.emissions.mstep.solve_beta_binomial_tied`, on tails (issue #1412).
+///
+/// The alternation of [`solve_beta_binomial`] with one concentration: each state's rate by
+/// bisection at the held concentration, then the concentration by bisection on `log M` of the
+/// concentration score summed over the states at their rates. `problems` carry each state's
+/// tails and weight; their `rate`, `concentration`, `bound` and bracket are not read, the
+/// shared `bound` and `concentration` (already capped at it) are. A sum of decreasing scores
+/// is decreasing, so the bracket `[bound 1e-9, bound]` is the oracle's.
+pub fn solve_beta_binomial_tied(
+    problems: &[BetaBinomialProblem<'_>],
+    rates: &[f64],
+    concentration: f64,
+    bound: f64,
+    bracket_ratio: f64,
+    settings: Bisection,
+) -> TiedBetaBinomial {
+    let rate_score = |p: &BetaBinomialProblem<'_>, rate: f64, held: f64| {
+        rising(p.success, rate * held) - rising(p.failure, (1.0 - rate) * held)
+    };
+    let concentration_score = |p: &BetaBinomialProblem<'_>, held: f64, total: f64| {
+        held * rising(p.success, held * total)
+            + (1.0 - held) * rising(p.failure, (1.0 - held) * total)
+            - rising(p.depth, total)
+    };
+    let mut rate = rates.to_vec();
+    let mut concentration = concentration;
+    let (log_high, log_low) = (bound.ln(), bound.ln() + bracket_ratio.ln());
+    let mut at_boundary = false;
+    let mut residual = f64::INFINITY;
+    let mut iterations = 0;
+    while iterations < settings.max_iterations {
+        iterations += 1;
+        let (previous_rate, previous_concentration) = (rate.clone(), concentration);
+        let held = concentration;
+        for (state, p) in problems.iter().enumerate() {
+            rate[state] = bisect(settings.margin, 1.0 - settings.margin, settings, |r| {
+                rate_score(p, r, held)
+            });
+        }
+        let summed = |log_total: f64| {
+            let total = log_total.exp();
+            problems
+                .iter()
+                .zip(&rate)
+                .map(|(p, &r)| concentration_score(p, r, total))
+                .sum::<f64>()
+        };
+        if summed(log_high) > 0.0 {
+            concentration = bound;
+            at_boundary = true;
+        } else {
+            at_boundary = false;
+            concentration = bisect(log_low, log_high, settings, summed).exp();
+        }
+        residual = rate
+            .iter()
+            .zip(&previous_rate)
+            .map(|(a, b)| (a - b).abs())
+            .fold(
+                (concentration - previous_concentration).abs() / concentration,
+                f64::max,
+            );
+        if residual <= settings.tolerance {
+            break;
+        }
+    }
+    TiedBetaBinomial {
+        rates: rate,
+        concentration,
         at_boundary,
         converged: residual <= settings.tolerance,
         iterations,
