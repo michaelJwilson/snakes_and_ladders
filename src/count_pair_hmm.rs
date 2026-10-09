@@ -201,6 +201,20 @@ impl Data {
         })
     }
 
+    /// Replace every observed exposure by `base[t] * factor[t]`, keeping the unobserved ones.
+    #[allow(clippy::needless_range_loop)]
+    fn rescale(&mut self, base: &[f64], factor: impl Fn(usize) -> f64) {
+        for t in 0..self.len() {
+            if base[t] > 0.0 {
+                self.exposures[t] = base[t] * factor(t);
+                self.log_exposure[t] = self.exposures[t].ln();
+            }
+        }
+        let mut observed = self.exposures.iter().copied().filter(|&e| e > 0.0);
+        let first = observed.next();
+        self.varying = first.is_some_and(|f| observed.any(|e| e != f));
+    }
+
     /// Positions.
     #[must_use]
     pub fn len(&self) -> usize {
@@ -265,6 +279,66 @@ pub struct Options {
     pub fit_transition: bool,
 }
 
+/// The hidden chain over the copy states.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Chain {
+    /// `K` states, one first-order chain.
+    Unphased,
+    /// `2 K` states `2 k + a`: copy state `k` and phase `a`, the phase switched per position
+    /// by the Kronecker kind given (issue #1133); the successes read `n - z` at `a = 1`.
+    Phased(SwitchKind),
+}
+
+impl Chain {
+    /// Hidden states per copy state.
+    #[must_use]
+    pub fn layers(self) -> usize {
+        match self {
+            Self::Unphased => 1,
+            Self::Phased(_) => 2,
+        }
+    }
+
+    fn kind(self) -> SwitchKind {
+        match self {
+            Self::Unphased => SwitchKind::StayOrMove,
+            Self::Phased(kind) => kind,
+        }
+    }
+}
+
+/// A covariate rescaled per sequence group from the decode (issue #1412, gap 5): after each E
+/// step, with `d_t` the copy state of largest posterior at position `t`, group `g`'s exposures
+/// become `e_t exp(-S_g)` with `S_g = ln sum_{t in g} lambda_t mu_{d_t}` at the current means;
+/// the M step then conditions on them, held, and the next E step scores against them.
+#[derive(Clone, Debug)]
+pub struct Shift {
+    /// Each position's group, `0..groups`.
+    pub group: Vec<u32>,
+    /// `ln lambda_t` per position.
+    pub log_weight: Vec<f64>,
+    /// The exposures as given, which every rescale starts from.
+    base: Vec<f64>,
+}
+
+/// How the joint L-BFGS M step runs.
+#[derive(Clone, Copy, Debug)]
+pub struct Inner {
+    /// Iterations each M step may take.
+    pub iterations: u32,
+    /// Whether the curvature pairs carry from one M step to the next.
+    pub carry: bool,
+}
+
+impl Default for Inner {
+    fn default() -> Self {
+        Self {
+            iterations: 500,
+            carry: false,
+        }
+    }
+}
+
 /// What one emission M step reported.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Report {
@@ -312,6 +386,9 @@ struct Moments {
     failure_width: usize,
     depth_tails: Vec<f64>,
     depth_width: usize,
+    /// The count and depth tails summed over states, read where `r` and `tau` are shared.
+    pooled_count_tails: Vec<f64>,
+    pooled_depth_tails: Vec<f64>,
     /// Per state: weight on observed totals, `sum w y`, `sum w e`.
     total_weight: Vec<f64>,
     count_sum: Vec<f64>,
@@ -327,17 +404,23 @@ struct Moments {
 }
 
 /// `T[k, j] = sum_{u_t > j} w_tk` for each state, row-major `(K, max u)`.
+///
+/// `values` yields `(t, layer, u)`: the weight of state `k` at position `t` is
+/// `weights[t * K * layers + k * layers + layer]`, the Kronecker layout `2 k + a` under two
+/// layers and the plain `(n, K)` one under one.
 fn tails_of(
     k: usize,
+    layers: usize,
     weights: &[f64],
-    values: impl Iterator<Item = (usize, usize)>,
+    values: impl Iterator<Item = (usize, usize, usize)>,
     width: usize,
 ) -> Vec<f64> {
     let mut dense = vec![0.0; k * (width + 1)];
-    for (t, u) in values {
-        let row = &weights[t * k..(t + 1) * k];
-        for (state, &w) in row.iter().enumerate() {
-            dense[state * (width + 1) + u] += w;
+    let hidden = k * layers;
+    for (t, layer, u) in values {
+        let row = &weights[t * hidden..(t + 1) * hidden];
+        for state in 0..k {
+            dense[state * (width + 1) + u] += row[state * layers + layer];
         }
     }
     let mut tails = vec![0.0; k * width];
@@ -352,9 +435,18 @@ fn tails_of(
     tails
 }
 
+/// The tails summed over states, `(max u,)`: what a parameter shared by every state reads.
+fn pooled(tails: &[f64], k: usize, width: usize) -> Vec<f64> {
+    (0..width)
+        .map(|j| (0..k).map(|s| tails[s * width + j]).sum())
+        .collect()
+}
+
 impl Moments {
-    /// `weights` are `(n, K)` probabilities.
-    fn new(data: &Data, weights: &[f64], k: usize) -> Self {
+    /// `weights` are `(n, K layers)` probabilities: one layer unphased, two phased, where the
+    /// second layer reads the successes as failures (`z <-> n - z`, the phase switched).
+    #[allow(clippy::too_many_lines)]
+    fn new(data: &Data, weights: &[f64], k: usize, layers: usize) -> Self {
         let observed: Vec<usize> = (0..data.len())
             .filter(|&t| data.exposures[t] > 0.0)
             .collect();
@@ -364,47 +456,88 @@ impl Moments {
             .map(|&t| data.counts[t] as usize)
             .max()
             .unwrap_or(0);
-        let success_width = scored
+        let failure_of = |t: usize| (data.trials[t] - data.successes[t]) as usize;
+        let success_max = scored
             .iter()
             .map(|&t| data.successes[t] as usize)
             .max()
             .unwrap_or(0);
-        let failure_width = scored
-            .iter()
-            .map(|&t| (data.trials[t] - data.successes[t]) as usize)
-            .max()
-            .unwrap_or(0);
+        let failure_max = scored.iter().map(|&t| failure_of(t)).max().unwrap_or(0);
+        let (success_width, failure_width) = if layers == 2 {
+            let both = success_max.max(failure_max);
+            (both, both)
+        } else {
+            (success_max, failure_max)
+        };
         let depth_width = scored
             .iter()
             .map(|&t| data.trials[t] as usize)
             .max()
             .unwrap_or(0);
+        let each = |values: &dyn Fn(usize, usize) -> usize, positions: &[usize]| {
+            positions
+                .iter()
+                .flat_map(move |&t| (0..layers).map(move |a| (t, a, values(t, a))))
+                .collect::<Vec<_>>()
+        };
         let count_tails = tails_of(
             k,
+            layers,
             weights,
-            observed.iter().map(|&t| (t, data.counts[t] as usize)),
+            each(&|t, _| data.counts[t] as usize, &observed).into_iter(),
             count_width,
         );
         let success_tails = tails_of(
             k,
+            layers,
             weights,
-            scored.iter().map(|&t| (t, data.successes[t] as usize)),
+            each(
+                &|t, a| {
+                    if a == 0 {
+                        data.successes[t] as usize
+                    } else {
+                        failure_of(t)
+                    }
+                },
+                &scored,
+            )
+            .into_iter(),
             success_width,
         );
         let failure_tails = tails_of(
             k,
+            layers,
             weights,
-            scored
-                .iter()
-                .map(|&t| (t, (data.trials[t] - data.successes[t]) as usize)),
+            each(
+                &|t, a| {
+                    if a == 0 {
+                        failure_of(t)
+                    } else {
+                        data.successes[t] as usize
+                    }
+                },
+                &scored,
+            )
+            .into_iter(),
             failure_width,
         );
         let depth_tails = tails_of(
             k,
+            layers,
             weights,
-            scored.iter().map(|&t| (t, data.trials[t] as usize)),
+            each(&|t, _| data.trials[t] as usize, &scored).into_iter(),
             depth_width,
         );
+        let hidden = k * layers;
+        // The copy-state weight, the layers summed: what the total reads.
+        let weight = |t: usize, state: usize| -> f64 {
+            let row = &weights[t * hidden + state * layers..t * hidden + (state + 1) * layers];
+            if layers == 1 {
+                row[0]
+            } else {
+                row.iter().sum()
+            }
+        };
         let mut total_weight = vec![0.0; k];
         let mut count_sum = vec![0.0; k];
         let mut exposure_sum = vec![0.0; k];
@@ -412,7 +545,7 @@ impl Moments {
         for (i, &t) in observed.iter().enumerate() {
             let (y, e) = (f64::from(data.counts[t]), data.exposures[t]);
             for state in 0..k {
-                let w = weights[t * k + state];
+                let w = weight(t, state);
                 total_weight[state] += w;
                 count_sum[state] += w * y;
                 exposure_sum[state] += w * e;
@@ -424,7 +557,7 @@ impl Moments {
         for &t in &scored {
             let n = f64::from(data.trials[t]);
             for state in 0..k {
-                let w = weights[t * k + state];
+                let w = weight(t, state);
                 success_weight[state] += w;
                 depth_sum[state] += w * n;
             }
@@ -436,6 +569,8 @@ impl Moments {
         let exposures = observed.iter().map(|&t| data.exposures[t]).collect();
         Self {
             k,
+            pooled_count_tails: pooled(&count_tails, k, count_width),
+            pooled_depth_tails: pooled(&depth_tails, k, depth_width),
             count_tails,
             count_width,
             success_tails,
@@ -486,15 +621,18 @@ fn log_share(r: f64, rate: f64) -> f64 {
     (rate / r).ln_1p()
 }
 
-/// Every position's log-density under every state, `(n, K)` row-major, into `out`.
+/// Every position's log-density under every hidden state, `(n, K layers)` row-major, into
+/// `out`: `layers` is 1 for the unphased chain, and 2 for the phased one, whose state
+/// `2 k + a` reads the successes `z` at `a = 0` and `n - z` at `a = 1` (the phase switched).
 ///
 /// The total: `lgamma(y + r) - lgamma(r) - y ln r - ln y! - (r + y) ln(1 + m / r) + y ln m` at
 /// `m = e mu`, zero where the exposure is. The successes: `ln C(n, z) + lgamma(z + a) -
 /// lgamma(a) + lgamma(n - z + b) - lgamma(b) - lgamma(n + tau) + lgamma(tau)`, zero where `n`
 /// is. Each `lgamma` difference is taken directly: at the fixtures' `r <= 1e6` its rounding is
 /// below 3e-9 absolute a term against a log-likelihood of 1e4 to 1e5.
-pub fn log_density_into(data: &Data, params: &Params, out: &mut [f64]) {
+pub fn log_density_into(data: &Data, params: &Params, layers: usize, out: &mut [f64]) {
     let k = params.n_states();
+    let hidden = k * layers;
     let ln_gamma_r: Vec<f64> = params.dispersion.iter().map(|&r| ln_gamma(r)).collect();
     let ln_r: Vec<f64> = params.dispersion.iter().map(|r| r.ln()).collect();
     let ln_mean: Vec<f64> = params.mean.iter().map(|m| m.ln()).collect();
@@ -508,10 +646,10 @@ pub fn log_density_into(data: &Data, params: &Params, out: &mut [f64]) {
         .collect();
     let ln_gamma_tau: Vec<f64> = tau.iter().map(|&t| ln_gamma(t)).collect();
     let tied_r = params.dispersion.iter().all(|&r| r == params.dispersion[0]);
-    out.par_chunks_mut(k * 256)
+    out.par_chunks_mut(hidden * 256)
         .enumerate()
         .for_each(|(tile, rows)| {
-            for (i, row) in rows.chunks_mut(k).enumerate() {
+            for (i, row) in rows.chunks_mut(hidden).enumerate() {
                 let t = tile * 256 + i;
                 let (y, e) = (f64::from(data.counts[t]), data.exposures[t]);
                 if e > 0.0 {
@@ -528,11 +666,12 @@ pub fn log_density_into(data: &Data, params: &Params, out: &mut [f64]) {
                         } else {
                             ln_gamma(y + r) - ln_gamma_r[state]
                         };
-                        row[state] = rise
+                        let value = rise
                             - y * ln_r[state]
                             - data.log_factorial_count[t]
                             - (r + y) * log_share(r, rate)
                             + y * (data.log_exposure[t] + ln_mean[state]);
+                        row[state * layers..(state + 1) * layers].fill(value);
                     }
                 } else {
                     row.fill(0.0);
@@ -543,11 +682,21 @@ pub fn log_density_into(data: &Data, params: &Params, out: &mut [f64]) {
                     let rest = f64::from(n) - z;
                     for state in 0..k {
                         let (a, b) = (params.alpha[state], params.beta[state]);
-                        row[state] += data.log_choose[t] + ln_gamma(z + a) - ln_gamma_a[state]
-                            + ln_gamma(rest + b)
+                        let common = data.log_choose[t]
+                            - ln_gamma_a[state]
                             - ln_gamma_b[state]
                             - ln_gamma(f64::from(n) + tau[state])
                             + ln_gamma_tau[state];
+                        if layers == 1 {
+                            row[state] += data.log_choose[t] + ln_gamma(z + a) - ln_gamma_a[state]
+                                + ln_gamma(rest + b)
+                                - ln_gamma_b[state]
+                                - ln_gamma(f64::from(n) + tau[state])
+                                + ln_gamma_tau[state];
+                        } else {
+                            row[2 * state] += common + ln_gamma(z + a) + ln_gamma(rest + b);
+                            row[2 * state + 1] += common + ln_gamma(rest + a) + ln_gamma(z + b);
+                        }
                     }
                 }
             }
@@ -557,6 +706,10 @@ pub fn log_density_into(data: &Data, params: &Params, out: &mut [f64]) {
 /// The negative expected complete-data log-likelihood of the emission at `theta`, per unit
 /// weight, and its gradient in `theta = (log mu, logit p, log r, log tau)` (the last two one
 /// entry each under `tied`), less the terms constant in the parameters.
+///
+/// Under `tied` the count tails' and the depth tails' terms depend on the shared `r` and `tau`
+/// alone, so they are summed over the states' pooled tails once rather than per state: `K`
+/// times fewer of the walks to the largest count each evaluation makes.
 fn emission_objective(moments: &Moments, theta: &[f64], tied: bool, gradient: &mut [f64]) -> f64 {
     let k = moments.k;
     let shared = if tied { 1 } else { k };
@@ -570,19 +723,43 @@ fn emission_objective(moments: &Moments, theta: &[f64], tied: bool, gradient: &m
         .sum::<f64>()
         .max(f64::MIN_POSITIVE);
     let mut value = 0.0;
+    // sum_j T_j ln(1 + j / r) and its `r` derivative; sum_j T_j ln(tau + j) and its `tau` one.
+    let count_walk = |tails: &[f64], r: f64| {
+        let (mut nb, mut d_r) = (0.0, 0.0);
+        for (j, &tail) in tails.iter().enumerate() {
+            let jf = j as f64;
+            nb += tail * (jf / r).ln_1p();
+            d_r += tail * (1.0 / (r + jf) - 1.0 / r);
+        }
+        (nb, d_r)
+    };
+    let depth_walk = |tails: &[f64], tau: f64| {
+        let (mut bb, mut d_tau) = (0.0, 0.0);
+        for (j, &tail) in tails.iter().enumerate() {
+            bb -= tail * (tau + j as f64).ln();
+            d_tau += tail / (tau + j as f64);
+        }
+        (bb, d_tau)
+    };
+    if tied {
+        let (r, tau) = (theta[2 * k].exp(), theta[2 * k + 1].exp());
+        let (nb, d_r) = count_walk(&moments.pooled_count_tails, r);
+        let (bb, d_tau) = depth_walk(&moments.pooled_depth_tails, tau);
+        value += nb + bb;
+        gradient[2 * k] -= d_r * r;
+        gradient[2 * k + 1] += d_tau * tau;
+    }
     for state in 0..k {
         let mu = theta[state].exp();
         let p = 1.0 / (1.0 + (-theta[k + state]).exp());
         let r = theta[index_r(state)].exp();
         let tau = theta[index_tau(state)].exp();
         // The total: sum_j T_j ln(1 + j / r) + sum_t w [-(r + y) ln(1 + m / r) + y ln mu].
-        let mut nb = 0.0;
-        let mut d_r = 0.0;
-        for (j, &tail) in moments.count_tail(state).iter().enumerate() {
-            let jf = j as f64;
-            nb += tail * (jf / r).ln_1p();
-            d_r += tail * (1.0 / (r + jf) - 1.0 / r);
-        }
+        let (mut nb, mut d_r) = if tied {
+            (0.0, 0.0)
+        } else {
+            count_walk(moments.count_tail(state), r)
+        };
         let mut d_mu = 0.0;
         let column = moments.column(state);
         for (i, &w) in column.iter().enumerate() {
@@ -603,7 +780,7 @@ fn emission_objective(moments: &Moments, theta: &[f64], tied: bool, gradient: &m
         let (a, b) = (p * tau, (1.0 - p) * tau);
         let (success, failure, depth) = moments.beta_binomial(state);
         let mut bb = 0.0;
-        let (mut d_a, mut d_b, mut d_tau) = (0.0, 0.0, 0.0);
+        let (mut d_a, mut d_b) = (0.0, 0.0);
         for (j, &tail) in success.iter().enumerate() {
             bb += tail * (a + j as f64).ln();
             d_a += tail / (a + j as f64);
@@ -612,10 +789,13 @@ fn emission_objective(moments: &Moments, theta: &[f64], tied: bool, gradient: &m
             bb += tail * (b + j as f64).ln();
             d_b += tail / (b + j as f64);
         }
-        for (j, &tail) in depth.iter().enumerate() {
-            bb -= tail * (tau + j as f64).ln();
-            d_tau += tail / (tau + j as f64);
-        }
+        let d_tau = if tied {
+            0.0
+        } else {
+            let (walked, d_tau) = depth_walk(depth, tau);
+            bb += walked;
+            d_tau
+        };
         let g_a = d_a - d_tau;
         let g_b = d_b - d_tau;
         value += nb + bb;
@@ -629,6 +809,9 @@ fn emission_objective(moments: &Moments, theta: &[f64], tied: bool, gradient: &m
     }
     -value / scale
 }
+
+/// L-BFGS curvature pairs `(s, y, 1 / s . y)`, oldest first.
+pub type Pairs = std::collections::VecDeque<(Vec<f64>, Vec<f64>, f64)>;
 
 /// How an L-BFGS solve ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -649,12 +832,18 @@ pub enum LbfgsStop {
 /// the gradient's largest entry is at most `gradient_tolerance`, or a step lowers the value by
 /// at most `value_tolerance` relative to it (scipy's `ftol`), or the search finds no decrease.
 ///
+/// `pairs` holds the curvature pairs: empty for a cold start, or those a previous solve left,
+/// so a sequence of related solves carries its Hessian estimate across them as one BFGS run over
+/// a changing objective does (the downstream caller's M step).
+///
 /// # Returns
 /// The final value, the iterations taken and how it stopped.
+#[allow(clippy::too_many_arguments)]
 pub fn lbfgs(
     mut objective: impl FnMut(&[f64], &mut [f64]) -> f64,
     x: &mut [f64],
     memory: usize,
+    pairs: &mut Pairs,
     gradient_tolerance: f64,
     value_tolerance: f64,
     max_iterations: u32,
@@ -662,8 +851,10 @@ pub fn lbfgs(
     let d = x.len();
     let mut g = vec![0.0; d];
     let mut f = objective(x, &mut g);
-    let mut pairs: std::collections::VecDeque<(Vec<f64>, Vec<f64>, f64)> =
-        std::collections::VecDeque::with_capacity(memory);
+    pairs.retain(|(s, _, _)| s.len() == d);
+    while pairs.len() > memory {
+        pairs.pop_front();
+    }
     let mut direction = vec![0.0; d];
     let mut trial = vec![0.0; d];
     let mut g_trial = vec![0.0; d];
@@ -754,11 +945,21 @@ fn norm(a: &[f64]) -> f64 {
     dot(a, a).sqrt()
 }
 
-/// The unphased count-pair HMM: data, parameters and buffers.
+/// The count-pair HMM, unphased or phased: data, parameters, chain and buffers.
 pub struct Model {
     pub data: Data,
     pub params: Params,
     pub options: Options,
+    /// The hidden chain.
+    pub chain: Chain,
+    /// One switch probability per position under [`Chain::Phased`], else empty.
+    switch: Vec<f64>,
+    /// The decode-driven exposure rescale, if any.
+    shift: Option<Shift>,
+    /// The joint M step's settings.
+    pub inner: Inner,
+    /// Curvature pairs carried between joint M steps under `inner.carry`.
+    pairs: Pairs,
     density: Vec<f64>,
     gamma: Vec<f64>,
     weights: Vec<f64>,
@@ -767,21 +968,60 @@ pub struct Model {
 }
 
 impl Model {
+    /// The unphased model.
+    ///
     /// # Errors
     /// Parameters of the wrong length or outside their domains, more than [`MAX_STATES`]
     /// states, or a tied model whose dispersions or concentrations differ.
     pub fn new(data: Data, params: Params, options: Options) -> Result<Self, String> {
+        Self::with_chain(data, params, options, Chain::Unphased, Vec::new())
+    }
+
+    /// The model over `chain`: `params.log_initial` holds one entry per hidden state, `K` or
+    /// `2 K`, and `params.log_transition` is the copy states' `K x K` either way.
+    ///
+    /// # Errors
+    /// As [`Model::new`], and a phased chain without one switch probability in `[0, 1]` per
+    /// position, or an unphased one with any.
+    pub fn with_chain(
+        data: Data,
+        params: Params,
+        options: Options,
+        chain: Chain,
+        switch: Vec<f64>,
+    ) -> Result<Self, String> {
         let k = params.n_states();
         if !(2..=MAX_STATES).contains(&k) {
             return Err(format!("a model takes 2 to {MAX_STATES} states, got {k}"));
         }
+        let hidden = k * chain.layers();
         if params.dispersion.len() != k
             || params.alpha.len() != k
             || params.beta.len() != k
-            || params.log_initial.len() != k
+            || params.log_initial.len() != hidden
             || params.log_transition.len() != k * k
         {
-            return Err("every emission parameter holds K values, the transition K x K".into());
+            return Err(format!(
+                "every emission parameter holds K values, the initial distribution {hidden} \
+                 and the transition K x K"
+            ));
+        }
+        match chain {
+            Chain::Unphased if !switch.is_empty() => {
+                return Err("an unphased chain takes no switch".into());
+            }
+            Chain::Phased(SwitchKind::StayOrMove) => {
+                return Err("a phased chain switches by a Kronecker kind".into());
+            }
+            Chain::Phased(_)
+                if switch.len() != data.len()
+                    || switch.iter().any(|s| !(0.0..=1.0).contains(s)) =>
+            {
+                return Err(
+                    "a phased chain takes one switch probability in [0, 1] per position".into(),
+                );
+            }
+            _ => {}
         }
         if params
             .dispersion
@@ -811,21 +1051,89 @@ impl Model {
         }
         let n = data.len();
         Ok(Self {
-            density: vec![0.0; n * k],
-            gamma: vec![0.0; n * k],
-            weights: vec![0.0; n * k],
-            counts: vec![0.0; k * k],
+            density: vec![0.0; n * hidden],
+            gamma: vec![0.0; n * hidden],
+            weights: vec![0.0; n * hidden],
+            counts: vec![0.0; hidden * hidden],
             evidence: vec![0.0; data.lengths.len()],
             data,
             params,
             options,
+            chain,
+            switch,
+            shift: None,
+            inner: Inner::default(),
+            pairs: Pairs::new(),
         })
     }
 
-    /// States.
+    /// Rescale the exposures from the decode at every iteration of [`Model::fit`] ([`Shift`]).
+    ///
+    /// # Errors
+    /// Arrays not one per position, or a non-finite weight.
+    pub fn set_shift(&mut self, group: Vec<u32>, log_weight: Vec<f64>) -> Result<(), String> {
+        let n = self.data.len();
+        if group.len() != n || log_weight.len() != n {
+            return Err("a shift takes one group and one log weight per position".into());
+        }
+        if log_weight.iter().any(|w| w.is_nan() || *w == f64::INFINITY) {
+            return Err("every shift log weight is finite or -inf".into());
+        }
+        self.shift = Some(Shift {
+            group,
+            log_weight,
+            base: self.data.exposures.clone(),
+        });
+        Ok(())
+    }
+
+    /// The exposures the model holds, rescaled or not.
+    #[must_use]
+    pub fn exposures(&self) -> &[f64] {
+        &self.data.exposures
+    }
+
+    /// Copy states.
     #[must_use]
     pub fn n_states(&self) -> usize {
         self.params.n_states()
+    }
+
+    /// Hidden states: `K` unphased, `2 K` phased.
+    #[must_use]
+    pub fn n_hidden(&self) -> usize {
+        self.params.n_states() * self.chain.layers()
+    }
+
+    /// Each group's `S_g` at the decode of the last E step and the held means, then the
+    /// exposures rescaled by it.
+    fn apply_shift(&mut self) {
+        let Some(shift) = &self.shift else {
+            return;
+        };
+        let (k, layers) = (self.n_states(), self.chain.layers());
+        let hidden = k * layers;
+        let ln_mean: Vec<f64> = self.params.mean.iter().map(|m| m.ln()).collect();
+        let groups = shift.group.iter().max().map_or(0, |&g| g as usize + 1);
+        let mut terms: Vec<Vec<f64>> = vec![Vec::new(); groups];
+        for t in 0..self.data.len() {
+            let row = &self.gamma[t * hidden..(t + 1) * hidden];
+            let decode = (0..k)
+                .map(|state| log_sum(&row[state * layers..(state + 1) * layers]))
+                .enumerate()
+                .fold((0, f64::NEG_INFINITY), |best, (state, v)| {
+                    if v > best.1 {
+                        (state, v)
+                    } else {
+                        best
+                    }
+                })
+                .0;
+            terms[shift.group[t] as usize].push(ln_mean[decode] + shift.log_weight[t]);
+        }
+        let factor: Vec<f64> = terms.iter().map(|v| (-log_sum(v)).exp()).collect();
+        let (group, base) = (shift.group.clone(), shift.base.clone());
+        self.data.rescale(&base, |t| factor[group[t] as usize]);
     }
 
     /// Score and run the E step at the held parameters; the log-likelihood.
@@ -833,33 +1141,39 @@ impl Model {
     /// # Errors
     /// The ragged kernel's refusal.
     pub fn e_step(&mut self) -> Result<f64, String> {
-        log_density_into(&self.data, &self.params, &mut self.density);
+        log_density_into(
+            &self.data,
+            &self.params,
+            self.chain.layers(),
+            &mut self.density,
+        );
         ragged_posteriors_into(
             &self.density,
-            self.n_states(),
+            self.n_hidden(),
             &self.data.lengths,
             &self.params.log_initial,
             &self.params.log_transition,
             &mut self.gamma,
             &mut self.counts,
             &mut self.evidence,
-            &[],
-            SwitchKind::StayOrMove,
+            &self.switch,
+            self.chain.kind(),
         )?;
         Ok(self.evidence.iter().sum())
     }
 
-    /// The log posterior `(n, K)`, log transition counts `(K, K)` and evidences of the last E step.
+    /// The log posterior `(n, H)`, log transition counts `(H, H)` and evidences of the last E
+    /// step, `H` the hidden states.
     #[must_use]
     pub fn posterior_buffers(&self) -> (&[f64], &[f64], &[f64]) {
         (&self.gamma, &self.counts, &self.evidence)
     }
 
-    /// The emission M step on `(n, K)` posterior probabilities, into the held parameters.
+    /// The emission M step on `(n, H)` posterior probabilities, into the held parameters.
     #[must_use]
     pub fn emission_m_step(&mut self, weights: &[f64], solver: Solver) -> Report {
         let k = self.n_states();
-        let moments = Moments::new(&self.data, weights, k);
+        let moments = Moments::new(&self.data, weights, k, self.chain.layers());
         match solver {
             Solver::Newton => self.newton(&moments),
             Solver::Lbfgs => self.joint(&moments),
@@ -1103,13 +1417,17 @@ impl Model {
             theta[2 * k + i] = p.dispersion[i].ln();
             theta[2 * k + shared + i] = (p.alpha[i] + p.beta[i]).ln();
         }
+        if !self.inner.carry {
+            self.pairs.clear();
+        }
         let (_, iterations, stop) = lbfgs(
             |x, g| emission_objective(m, x, tied, g),
             &mut theta,
             10,
+            &mut self.pairs,
             1e-10,
             1e-14,
-            500,
+            self.inner.iterations,
         );
         for state in 0..k {
             let index = if tied { 0 } else { state };
@@ -1129,8 +1447,10 @@ impl Model {
             .chain(&p.alpha)
             .chain(&p.beta)
             .all(|&v| v.is_finite() && v > 0.0);
+        // A cap the caller set is its stopping rule, not a failure to settle.
+        let capped = self.inner.iterations < Inner::default().iterations;
         Report {
-            converged: finite && stop != LbfgsStop::Budget,
+            converged: finite && (capped || stop != LbfgsStop::Budget),
             at_boundary: false,
             iterations,
             residual: gradient.iter().fold(0.0_f64, |a, b| a.max(b.abs())),
@@ -1141,7 +1461,8 @@ impl Model {
 
     /// The initial distribution and transition from the last E step, as the options select.
     fn chain_m_step(&mut self) {
-        let k = self.n_states();
+        let k = self.n_hidden();
+        let slow = self.n_states();
         if self.options.fit_initial {
             let segments = self.data.lengths.len() as f64;
             let mut first = 0;
@@ -1157,11 +1478,30 @@ impl Model {
             debug_assert_eq!(first, self.data.len());
         }
         if self.options.fit_transition {
-            for row in 0..k {
-                let counts = &self.counts[row * k..(row + 1) * k];
-                let norm = log_sum(counts);
+            // The copy states' counts: under either Kronecker kind the step factors as
+            // `A[i, j]` times a phase term free of `A`, so `A`'s M step reads the `2 x 2` blocks
+            // of the `2 K x 2 K` counts summed.
+            let layers = self.chain.layers();
+            let mut block = vec![0.0; layers * layers];
+            for row in 0..slow {
+                let counts: Vec<f64> = (0..slow)
+                    .map(|to| {
+                        for a in 0..layers {
+                            for b in 0..layers {
+                                block[a * layers + b] =
+                                    self.counts[(row * layers + a) * k + to * layers + b];
+                            }
+                        }
+                        if layers == 1 {
+                            block[0]
+                        } else {
+                            log_sum(&block)
+                        }
+                    })
+                    .collect();
+                let norm = log_sum(&counts);
                 for (to, &c) in counts.iter().enumerate() {
-                    self.params.log_transition[row * k + to] = c - norm;
+                    self.params.log_transition[row * slow + to] = c - norm;
                 }
             }
         }
@@ -1197,6 +1537,7 @@ impl Model {
             for (w, g) in self.weights.iter_mut().zip(&self.gamma) {
                 *w = g.exp();
             }
+            self.apply_shift();
             let weights = std::mem::take(&mut self.weights);
             let report = self.emission_m_step(&weights, solver);
             self.weights = weights;
@@ -1246,17 +1587,22 @@ impl Model {
     /// # Errors
     /// The ragged kernel's refusal.
     pub fn viterbi(&mut self) -> Result<(Vec<i64>, Vec<f64>), String> {
-        log_density_into(&self.data, &self.params, &mut self.density);
+        log_density_into(
+            &self.data,
+            &self.params,
+            self.chain.layers(),
+            &mut self.density,
+        );
         let mut path = vec![0_i64; self.data.len()];
         let mut joint = vec![0.0; self.data.lengths.len()];
         ragged_viterbi_into(
             &self.density,
-            self.n_states(),
+            self.n_hidden(),
             &self.data.lengths,
             &self.params.log_initial,
             &self.params.log_transition,
-            &[],
-            SwitchKind::StayOrMove,
+            &self.switch,
+            self.chain.kind(),
             &mut path,
             &mut joint,
         )?;
@@ -1275,13 +1621,6 @@ fn slice<'a, T: numpy::Element>(
         .map_err(|_| PyValueError::new_err(format!("{name} must be C-contiguous")))
 }
 
-/// `sal.opt.hmm.CountPairHmm`'s compiled half: one object per model, its parameters read and
-/// written through it, each method one crossing with the GIL released.
-#[pyclass(name = "CountPairHmm", module = "sal.oxisal")]
-pub struct PyCountPairHmm {
-    model: Model,
-}
-
 /// The parameters as `(dispersion, mean, alpha, beta, log_initial, log_transition)`.
 type Arrays<'py> = (
     Bound<'py, PyArray1<f64>>,
@@ -1292,70 +1631,85 @@ type Arrays<'py> = (
     Bound<'py, PyArray2<f64>>,
 );
 
-#[pymethods]
-impl PyCountPairHmm {
-    #[new]
-    #[allow(clippy::too_many_arguments)]
-    #[pyo3(signature = (counts, exposures, successes, trials, lengths, dispersion, mean, alpha, beta, log_initial, log_transition, *, tied, fit_initial, fit_transition))]
-    fn new(
-        counts: PyReadonlyArray1<'_, u32>,
-        exposures: PyReadonlyArray1<'_, f64>,
-        successes: PyReadonlyArray1<'_, u32>,
-        trials: PyReadonlyArray1<'_, u32>,
-        lengths: PyReadonlyArray1<'_, i64>,
-        dispersion: PyReadonlyArray1<'_, f64>,
-        mean: PyReadonlyArray1<'_, f64>,
-        alpha: PyReadonlyArray1<'_, f64>,
-        beta: PyReadonlyArray1<'_, f64>,
-        log_initial: PyReadonlyArray1<'_, f64>,
-        log_transition: PyReadonlyArray2<'_, f64>,
-        tied: bool,
-        fit_initial: bool,
-        fit_transition: bool,
-    ) -> PyResult<Self> {
-        let widths = slice(&lengths, "lengths")?
-            .iter()
-            .map(|&l| {
-                usize::try_from(l)
-                    .map_err(|_| PyValueError::new_err("lengths must be non-negative"))
-            })
-            .collect::<PyResult<Vec<usize>>>()?;
-        let data = Data::new(
-            slice(&counts, "counts")?.to_vec(),
-            slice(&exposures, "exposures")?.to_vec(),
-            slice(&successes, "successes")?.to_vec(),
-            slice(&trials, "trials")?.to_vec(),
-            widths,
-        )
-        .map_err(PyValueError::new_err)?;
-        let params = Params {
-            dispersion: slice(&dispersion, "dispersion")?.to_vec(),
-            mean: slice(&mean, "mean")?.to_vec(),
-            alpha: slice(&alpha, "alpha")?.to_vec(),
-            beta: slice(&beta, "beta")?.to_vec(),
-            log_initial: slice(&log_initial, "log_initial")?.to_vec(),
-            log_transition: log_transition
-                .as_slice()
-                .map_err(|_| PyValueError::new_err("log_transition must be C-contiguous"))?
-                .to_vec(),
-        };
-        let model = Model::new(
-            data,
-            params,
-            Options {
-                tied,
-                fit_initial,
-                fit_transition,
-            },
-        )
-        .map_err(PyValueError::new_err)?;
-        Ok(Self { model })
-    }
+/// The data and parameters a constructor reads, checked.
+#[allow(clippy::too_many_arguments)]
+fn build(
+    counts: &PyReadonlyArray1<'_, u32>,
+    exposures: &PyReadonlyArray1<'_, f64>,
+    successes: &PyReadonlyArray1<'_, u32>,
+    trials: &PyReadonlyArray1<'_, u32>,
+    lengths: &PyReadonlyArray1<'_, i64>,
+    dispersion: &PyReadonlyArray1<'_, f64>,
+    mean: &PyReadonlyArray1<'_, f64>,
+    alpha: &PyReadonlyArray1<'_, f64>,
+    beta: &PyReadonlyArray1<'_, f64>,
+    log_initial: &PyReadonlyArray1<'_, f64>,
+    log_transition: &PyReadonlyArray2<'_, f64>,
+) -> PyResult<(Data, Params)> {
+    let widths = slice(lengths, "lengths")?
+        .iter()
+        .map(|&l| {
+            usize::try_from(l).map_err(|_| PyValueError::new_err("lengths must be non-negative"))
+        })
+        .collect::<PyResult<Vec<usize>>>()?;
+    let data = Data::new(
+        slice(counts, "counts")?.to_vec(),
+        slice(exposures, "exposures")?.to_vec(),
+        slice(successes, "successes")?.to_vec(),
+        slice(trials, "trials")?.to_vec(),
+        widths,
+    )
+    .map_err(PyValueError::new_err)?;
+    let params = Params {
+        dispersion: slice(dispersion, "dispersion")?.to_vec(),
+        mean: slice(mean, "mean")?.to_vec(),
+        alpha: slice(alpha, "alpha")?.to_vec(),
+        beta: slice(beta, "beta")?.to_vec(),
+        log_initial: slice(log_initial, "log_initial")?.to_vec(),
+        log_transition: log_transition
+            .as_slice()
+            .map_err(|_| PyValueError::new_err("log_transition must be C-contiguous"))?
+            .to_vec(),
+    };
+    Ok((data, params))
+}
 
-    /// States.
+/// The methods both models share, on the one [`Model`] each holds.
+macro_rules! count_pair_methods {
+    ($ty:ident, { $($new:tt)* }) => {
+        #[pymethods]
+        impl $ty {
+            $($new)*
+
+    /// Copy states.
     #[getter]
     fn n_states(&self) -> usize {
         self.model.n_states()
+    }
+
+    /// Hidden states: `K` unphased, `2 K` phased.
+    #[getter]
+    fn n_hidden(&self) -> usize {
+        self.model.n_hidden()
+    }
+
+    /// The exposures the model holds, rescaled by a shift or as given.
+    fn exposures<'py>(&self, py: Python<'py>) -> Bound<'py, PyArray1<f64>> {
+        self.model.exposures().to_vec().into_pyarray(py)
+    }
+
+    /// Rescale the exposures per group from the decode at every fit iteration.
+    fn set_shift(
+        &mut self,
+        group: PyReadonlyArray1<'_, u32>,
+        log_weight: PyReadonlyArray1<'_, f64>,
+    ) -> PyResult<()> {
+        self.model
+            .set_shift(
+                slice(&group, "group")?.to_vec(),
+                slice(&log_weight, "log_weight")?.to_vec(),
+            )
+            .map_err(PyValueError::new_err)
     }
 
     /// The held parameters, copied out.
@@ -1376,7 +1730,8 @@ impl PyCountPairHmm {
 
     /// The whole fit; `(log_likelihood, iterations, stop, at_boundary, frozen, unsettled)`,
     /// `unsettled` `(iterations, residual, degenerate states)` or `None`.
-    #[allow(clippy::type_complexity)]
+    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
+    #[pyo3(signature = (max_iterations, tolerance, parameter_tolerance, solver, inner_iterations = 500, carry = false))]
     fn fit(
         &mut self,
         py: Python<'_>,
@@ -1384,6 +1739,8 @@ impl PyCountPairHmm {
         tolerance: f64,
         parameter_tolerance: f64,
         solver: &str,
+        inner_iterations: u32,
+        carry: bool,
     ) -> PyResult<(
         f64,
         u32,
@@ -1393,7 +1750,14 @@ impl PyCountPairHmm {
         Option<(u32, f64, Vec<usize>)>,
     )> {
         let solver = Solver::parse(solver).map_err(PyValueError::new_err)?;
+        if inner_iterations == 0 {
+            return Err(PyValueError::new_err("inner_iterations must be positive"));
+        }
         let model = &mut self.model;
+        model.inner = Inner {
+            iterations: inner_iterations,
+            carry,
+        };
         let fitted = py
             .detach(|| model.fit(max_iterations, tolerance, parameter_tolerance, solver))
             .map_err(PyValueError::new_err)?;
@@ -1422,7 +1786,7 @@ impl PyCountPairHmm {
         let model = &mut self.model;
         py.detach(|| model.e_step())
             .map_err(PyValueError::new_err)?;
-        let k = model.n_states();
+        let k = model.n_hidden();
         let (gamma, counts, evidence) = model.posterior_buffers();
         let shape = |rows: usize, values: &[f64]| {
             numpy::ndarray::Array2::from_shape_vec((rows, k), values.to_vec())
@@ -1441,7 +1805,7 @@ impl PyCountPairHmm {
         py.detach(|| model.e_step()).map_err(PyValueError::new_err)
     }
 
-    /// The emission M step on `(n, K)` posterior probabilities, into the held parameters:
+    /// The emission M step on `(n, H)` posterior probabilities, into the held parameters:
     /// `(converged, at_boundary, iterations, residual, frozen, degenerate)`.
     #[allow(clippy::type_complexity)]
     fn m_step(
@@ -1455,8 +1819,8 @@ impl PyCountPairHmm {
             .as_slice()
             .map_err(|_| PyValueError::new_err("posterior must be C-contiguous"))?;
         let model = &mut self.model;
-        if weights.len() != model.data.len() * model.n_states() {
-            return Err(PyValueError::new_err("posterior must be (n, K)"));
+        if weights.len() != model.data.len() * model.n_hidden() {
+            return Err(PyValueError::new_err("posterior must be (n, hidden states)"));
         }
         let report = py.detach(|| model.emission_m_step(weights, solver));
         Ok((
@@ -1481,7 +1845,120 @@ impl PyCountPairHmm {
             .map_err(PyValueError::new_err)?;
         Ok((path.into_pyarray(py), joint.into_pyarray(py)))
     }
+
+        }
+    };
 }
+
+/// `sal.opt.hmm.CountPairHmm`'s compiled half: one object per model, its parameters read and
+/// written through it, each method one crossing with the GIL released.
+#[pyclass(name = "CountPairHmm", module = "sal.oxisal")]
+pub struct PyCountPairHmm {
+    model: Model,
+}
+
+count_pair_methods!(PyCountPairHmm, {
+    #[new]
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (counts, exposures, successes, trials, lengths, dispersion, mean, alpha, beta, log_initial, log_transition, *, tied, fit_initial, fit_transition))]
+    fn new(
+        counts: PyReadonlyArray1<'_, u32>,
+        exposures: PyReadonlyArray1<'_, f64>,
+        successes: PyReadonlyArray1<'_, u32>,
+        trials: PyReadonlyArray1<'_, u32>,
+        lengths: PyReadonlyArray1<'_, i64>,
+        dispersion: PyReadonlyArray1<'_, f64>,
+        mean: PyReadonlyArray1<'_, f64>,
+        alpha: PyReadonlyArray1<'_, f64>,
+        beta: PyReadonlyArray1<'_, f64>,
+        log_initial: PyReadonlyArray1<'_, f64>,
+        log_transition: PyReadonlyArray2<'_, f64>,
+        tied: bool,
+        fit_initial: bool,
+        fit_transition: bool,
+    ) -> PyResult<Self> {
+        let (data, params) = build(
+            &counts,
+            &exposures,
+            &successes,
+            &trials,
+            &lengths,
+            &dispersion,
+            &mean,
+            &alpha,
+            &beta,
+            &log_initial,
+            &log_transition,
+        )?;
+        let options = Options {
+            tied,
+            fit_initial,
+            fit_transition,
+        };
+        let model = Model::new(data, params, options).map_err(PyValueError::new_err)?;
+        Ok(Self { model })
+    }
+});
+
+/// `sal.opt.hmm.PhasedCountPairHmm`'s compiled half: the same [`Model`] over the `2 K` phased
+/// chain, the switch per position held with the data.
+#[pyclass(name = "PhasedCountPairHmm", module = "sal.oxisal")]
+pub struct PyPhasedCountPairHmm {
+    model: Model,
+}
+
+count_pair_methods!(PyPhasedCountPairHmm, {
+    #[new]
+    #[allow(clippy::too_many_arguments)]
+    #[pyo3(signature = (counts, exposures, successes, trials, lengths, dispersion, mean, alpha, beta, log_initial, log_transition, switch, *, switch_kind, tied, fit_initial, fit_transition))]
+    fn new(
+        counts: PyReadonlyArray1<'_, u32>,
+        exposures: PyReadonlyArray1<'_, f64>,
+        successes: PyReadonlyArray1<'_, u32>,
+        trials: PyReadonlyArray1<'_, u32>,
+        lengths: PyReadonlyArray1<'_, i64>,
+        dispersion: PyReadonlyArray1<'_, f64>,
+        mean: PyReadonlyArray1<'_, f64>,
+        alpha: PyReadonlyArray1<'_, f64>,
+        beta: PyReadonlyArray1<'_, f64>,
+        log_initial: PyReadonlyArray1<'_, f64>,
+        log_transition: PyReadonlyArray2<'_, f64>,
+        switch: PyReadonlyArray1<'_, f64>,
+        switch_kind: &str,
+        tied: bool,
+        fit_initial: bool,
+        fit_transition: bool,
+    ) -> PyResult<Self> {
+        let (data, params) = build(
+            &counts,
+            &exposures,
+            &successes,
+            &trials,
+            &lengths,
+            &dispersion,
+            &mean,
+            &alpha,
+            &beta,
+            &log_initial,
+            &log_transition,
+        )?;
+        let kind = SwitchKind::parse(switch_kind).map_err(PyValueError::new_err)?;
+        let options = Options {
+            tied,
+            fit_initial,
+            fit_transition,
+        };
+        let model = Model::with_chain(
+            data,
+            params,
+            options,
+            Chain::Phased(kind),
+            slice(&switch, "switch")?.to_vec(),
+        )
+        .map_err(PyValueError::new_err)?;
+        Ok(Self { model })
+    }
+});
 
 #[cfg(test)]
 mod tests {
@@ -1499,6 +1976,7 @@ mod tests {
             },
             &mut x,
             5,
+            &mut Pairs::new(),
             1e-12,
             0.0,
             100,
@@ -1520,7 +1998,7 @@ mod tests {
         )
         .unwrap();
         let weights = [0.3, 0.7, 0.9, 0.1, 0.5, 0.5, 0.2, 0.8, 0.6, 0.4, 0.1, 0.9];
-        let moments = Moments::new(&data, &weights, 2);
+        let moments = Moments::new(&data, &weights, 2, 1);
         for tied in [false, true] {
             let theta: Vec<f64> = if tied {
                 vec![1.0, 1.5, -0.2, 0.4, 0.7, 2.0]
@@ -1545,6 +2023,143 @@ mod tests {
                     gradient[i]
                 );
             }
+        }
+    }
+
+    /// The phased density reads the successes at phase 0 and the failures at phase 1, the
+    /// total at both: the unphased density on the data, and on the data switched.
+    #[test]
+    fn the_phased_density_is_the_unphased_on_each_phase() {
+        let make = |z: Vec<u32>| {
+            Data::new(
+                vec![3, 10, 0, 7],
+                vec![1.0, 2.0, 0.0, 1.5],
+                z,
+                vec![5, 8, 0, 6],
+                vec![4],
+            )
+            .unwrap()
+        };
+        let params = Params {
+            dispersion: vec![2.0, 5.0],
+            mean: vec![3.0, 1.5],
+            alpha: vec![2.0, 7.0],
+            beta: vec![3.0, 1.0],
+            log_initial: vec![-std::f64::consts::LN_2; 2],
+            log_transition: vec![-0.1, -2.3, -2.3, -0.1],
+        };
+        let (z, flipped) = (vec![1, 4, 0, 2], vec![4, 4, 0, 4]);
+        let (mut zero, mut one, mut phased) = (vec![0.0; 8], vec![0.0; 8], vec![0.0; 16]);
+        log_density_into(&make(z.clone()), &params, 1, &mut zero);
+        log_density_into(&make(flipped), &params, 1, &mut one);
+        log_density_into(&make(z), &params, 2, &mut phased);
+        for t in 0..4 {
+            for state in 0..2 {
+                for (a, unphased) in [&zero, &one].iter().enumerate() {
+                    let (got, want) = (phased[t * 4 + 2 * state + a], unphased[t * 2 + state]);
+                    assert!(
+                        (got - want).abs() <= 1e-12 * want.abs().max(1.0),
+                        "{t} {state} {a}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The phased moments are the unphased on the positions doubled, the second copy switched.
+    #[test]
+    fn the_phased_moments_are_the_unfolded_ones() {
+        let (counts, exposures, z, n) = (
+            vec![3, 10, 0, 7],
+            vec![1.0, 2.0, 0.5, 1.5],
+            vec![1, 4, 0, 2],
+            vec![5, 8, 0, 6],
+        );
+        let phased = Data::new(
+            counts.clone(),
+            exposures.clone(),
+            z.clone(),
+            n.clone(),
+            vec![4],
+        )
+        .unwrap();
+        let flipped: Vec<u32> = z.iter().zip(&n).map(|(z, n)| n - z).collect();
+        let unfolded = Data::new(
+            [counts.clone(), counts].concat(),
+            [exposures.clone(), exposures].concat(),
+            [z, flipped].concat(),
+            [n.clone(), n].concat(),
+            vec![8],
+        )
+        .unwrap();
+        let gamma = [
+            0.1, 0.2, 0.3, 0.4, 0.25, 0.25, 0.4, 0.1, 0.7, 0.1, 0.1, 0.1, 0.05, 0.15, 0.6, 0.2,
+        ];
+        let mut weights = vec![0.0; 16];
+        for t in 0..4 {
+            for state in 0..2 {
+                for a in 0..2 {
+                    weights[(a * 4 + t) * 2 + state] = gamma[t * 4 + 2 * state + a];
+                }
+            }
+        }
+        let (left, right) = (
+            Moments::new(&phased, &gamma, 2, 2),
+            Moments::new(&unfolded, &weights, 2, 1),
+        );
+        {
+            for state in 0..2 {
+                assert!((left.success_weight[state] - right.success_weight[state]).abs() < 1e-12);
+                assert!((left.depth_sum[state] - right.depth_sum[state]).abs() < 1e-12);
+                let (a, b, c) = left.beta_binomial(state);
+                let (x, y, w) = right.beta_binomial(state);
+                assert_eq!(a.len(), x.len().max(y.len()));
+                for (j, t) in a.iter().enumerate() {
+                    assert!((t - x.get(j).copied().unwrap_or(0.0)).abs() < 1e-12);
+                }
+                for (j, t) in b.iter().enumerate() {
+                    assert!((t - y.get(j).copied().unwrap_or(0.0)).abs() < 1e-12);
+                }
+                for (j, t) in c.iter().enumerate() {
+                    assert!((t - w[j]).abs() < 1e-12);
+                }
+            }
+        }
+    }
+
+    /// Wall of one objective evaluation, tied (pooled tails) against per state, at the easy
+    /// instance's shape: 4,688 positions, K = 7, counts to 3,898, trials to 876. Run with
+    /// `cargo test --release --lib objective_wall -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "a timing, not a check"]
+    fn objective_wall() {
+        let n = 4688_usize;
+        let k = 7;
+        let hash = |t: usize, m: u32| ((t as u64 * 2_654_435_761) % u64::from(m)) as u32;
+        let counts: Vec<u32> = (0..n).map(|t| 50 + hash(t, 3848)).collect();
+        let trials: Vec<u32> = (0..n).map(|t| 20 + hash(t + 7, 856)).collect();
+        let successes: Vec<u32> = trials
+            .iter()
+            .enumerate()
+            .map(|(t, &m)| hash(t + 3, m + 1))
+            .collect();
+        let exposures: Vec<f64> = (0..n)
+            .map(|t| 100.0 + f64::from(hash(t + 11, 900)))
+            .collect();
+        let data = Data::new(counts, exposures, successes, trials, vec![n]).unwrap();
+        let weights: Vec<f64> = (0..n * k).map(|i| f64::from(hash(i, 97) + 1)).collect();
+        let moments = Moments::new(&data, &weights, k, 1);
+        for tied in [true, false] {
+            let size = 2 * k + if tied { 2 } else { 2 * k };
+            let theta: Vec<f64> = (0..size).map(|i| 0.1 * i as f64).collect();
+            let mut gradient = vec![0.0; size];
+            let start = std::time::Instant::now();
+            let mut sink = 0.0;
+            for _ in 0..200 {
+                sink += emission_objective(&moments, &theta, tied, &mut gradient);
+            }
+            let wall = start.elapsed().as_secs_f64() / 200.0 * 1e3;
+            println!("tied {tied}: {wall:.4} ms per evaluation ({sink:.3e})");
         }
     }
 }
