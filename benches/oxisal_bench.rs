@@ -19,6 +19,7 @@ use oxisal::double;
 use oxisal::maxflow::{max_flow_impl, FlowNetwork};
 #[cfg(feature = "sandbox")]
 use oxisal::maxflow_declined::{max_flow_with, Algorithm};
+use oxisal::potts_problem::{Descend, PottsProblem, AT_SWEEP, INDEX, UNIFORM};
 use oxisal::pruning::{pruning_log_likelihood_impl, LeafObservations};
 #[cfg(feature = "sandbox")]
 use oxisal::pruning_burn::pruning_gradient_impl;
@@ -388,6 +389,68 @@ fn bench_max_flow_kernels(c: &mut Criterion) {
     group.finish();
 }
 
+/// `PottsProblem`'s descent and merge (#1413) on the `potts_labelling`
+/// stress shape: a periodic triangular 50 x 60 lattice, degree 6, q = 5,
+/// a seeded field; the descent with and without skipping clean sites.
+fn bench_potts_problem(c: &mut Criterion) {
+    let (width, height, q) = (50usize, 60usize, 5usize);
+    let n = width * height;
+    let mut offsets = vec![0i64];
+    let mut neighbours = Vec::new();
+    for y in 0..height {
+        for x in 0..width {
+            for (dx, dy) in [(1i64, 0i64), (-1, 0), (0, 1), (0, -1), (1, -1), (-1, 1)] {
+                let nx = (x as i64 + dx).rem_euclid(width as i64);
+                let ny = (y as i64 + dy).rem_euclid(height as i64);
+                neighbours.push(ny * width as i64 + nx);
+            }
+            offsets.push(neighbours.len() as i64);
+        }
+    }
+    let couplings = vec![1.0f64; neighbours.len()];
+    let mut state = 12345u64;
+    let field: Vec<f64> = (0..n * q)
+        .map(|_| {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((state >> 11) as f64 / (1u64 << 53) as f64) * 4.0
+        })
+        .collect();
+    let start: Vec<i64> = (0..n)
+        .map(|node| {
+            let row = &field[node * q..(node + 1) * q];
+            (0..q).fold(0, |best, k| if row[k] > row[best] { k } else { best }) as i64
+        })
+        .collect();
+    let mut problem =
+        PottsProblem::build(&offsets, &neighbours, &couplings, field, q, true).unwrap();
+    let mut group = c.benchmark_group("potts_problem_50x60");
+    for skip_clean in [true, false] {
+        let ask = Descend {
+            order: INDEX,
+            min_sites: 0,
+            policy: UNIFORM,
+            floor_at: AT_SWEEP,
+            max_iterations: 200,
+            skip_clean,
+        };
+        group.bench_function(format!("icm_skip_clean_{skip_clean}"), |b| {
+            b.iter(|| {
+                problem.load(&start).unwrap();
+                problem.descend(&ask, 0).unwrap()
+            });
+        });
+    }
+    group.bench_function("merge_full", |b| {
+        b.iter(|| {
+            problem.load(&start).unwrap();
+            problem.merge_held(2.0, false)
+        });
+    });
+    group.finish();
+}
+
 #[cfg(feature = "sandbox")]
 criterion_group!(
     benches,
@@ -397,6 +460,7 @@ criterion_group!(
     bench_class_posteriors,
     bench_max_flow,
     bench_max_flow_kernels,
+    bench_potts_problem,
     bench_pruning_gradient
 );
 #[cfg(not(feature = "sandbox"))]
@@ -406,6 +470,7 @@ criterion_group!(
     bench_pruning_log_likelihood,
     bench_sample_rows,
     bench_class_posteriors,
-    bench_max_flow
+    bench_max_flow,
+    bench_potts_problem
 );
 criterion_main!(benches);

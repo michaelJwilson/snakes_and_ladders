@@ -549,6 +549,9 @@ whether or not it has members yet.
 .. automodule:: sal.search.icm.numba
    :members:
 
+.. automodule:: sal.search.potts_problem
+   :members:
+
 .. automodule:: sal.search.trws
    :members:
 

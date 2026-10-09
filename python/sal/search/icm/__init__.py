@@ -102,6 +102,13 @@ class SweepOrder(StrEnum):
 
     Greedy best-first; the Python route only.
     """
+    WORKLIST = "worklist"
+    """A first-in first-out queue of sites, every site in index order first, a changed site queueing each neighbour not queued (issue #1413).
+
+    The downstream labelling step's ``icm_sweep_deque`` read from index
+    order; :meth:`sal.search.potts_problem.PottsProblem.icm` runs it, and
+    :func:`iterated_conditional_modes` refuses it.
+    """
 
 
 def colouring(graph: PottsGraph, *, backend: Backend = Backend.NUMBA) -> np.ndarray:
@@ -291,6 +298,9 @@ def iterated_conditional_modes(
     )
     lazy = sweep_order is SweepOrder.RANDOM and stop_when_clean
     compiled = backend in (Backend.NUMBA, Backend.RUST)
+    if sweep_order is SweepOrder.WORKLIST:
+        msg = f"{sweep_order} order is PottsProblem.icm's (sal.search.potts_problem)"
+        raise ValueError(msg)
     if compiled and sweep_order is SweepOrder.RESIDUAL:
         msg = f"{sweep_order} order reorders from each sweep's labels; it needs {Backend.PYTHON}"
         raise ValueError(msg)

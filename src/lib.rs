@@ -40,6 +40,7 @@ pub mod metropolis;
 pub mod mixture_stream;
 pub mod potts;
 pub mod potts_loop;
+pub mod potts_problem;
 pub mod pruning;
 #[cfg(feature = "sandbox")]
 pub mod pruning_burn;
@@ -113,6 +114,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ragged_sample::ragged_sample_paths, m)?)?;
     m.add_function(wrap_pyfunction!(max_flow, m)?)?;
     m.add_class::<LatticeCut>()?;
+    m.add_class::<potts_problem::PottsProblem>()?;
     m.add_function(wrap_pyfunction!(ising_ground_state, m)?)?;
     m.add_function(wrap_pyfunction!(ising_ground_states, m)?)?;
     #[cfg(feature = "sandbox")]
