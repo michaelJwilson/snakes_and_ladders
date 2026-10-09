@@ -1012,6 +1012,18 @@ $8^{8000}$ paths: the referee is the log-likelihood at the generating
 parameters, Equation~\ref{eq:hmm-ragged} at the truth, below which no fit
 ought to land.
 
+\paragraph{A joint count-pair chain with rare states.}
+\label{par:hmm:joint-counts}
+The pair may instead be joint: successes $y_t$ beta-binomial over the total
+$n_t$ itself, with no exposure and no separate trial count. The instance
+declares $K = 7$ states over one segment of 8,000 positions: five share the
+dominant total level and hold 98\% of the stationary law, two rare states sit
+on their own total levels at 1\% each and share the dominant state's success
+rate, so every pair of states differs in one channel at least. The chain is
+reversible with that stationary law, a rare state dwelling 50 positions on
+average. The referee is the log-likelihood at the generating parameters,
+Equation~\ref{eq:hmm-ragged} at the truth.
+
 \paragraph{Chains of unequal length.}
 \label{par:hmm:ragged}
 A batch need not be rectangular. Writing $y^{(r)}_{1:T_r}$ for the $r$th

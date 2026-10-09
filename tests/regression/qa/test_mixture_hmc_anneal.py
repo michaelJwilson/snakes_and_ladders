@@ -12,6 +12,7 @@ from collections.abc import Iterator
 import pytest
 import torch
 from sal.qa import mixture_hmc_anneal as study
+from sal.sim.fixtures import fixture
 
 
 @pytest.fixture(autouse=True)
@@ -27,7 +28,9 @@ def _single_thread() -> Iterator[None]:
 def test_restarts_reach_further_than_the_tuned_anneal_on_three_starts() -> None:
     # Realized on starts [0, 0..2] at one thread, 6.7 s: restarts' mean gap
     # 1.95 nats (1113.548 from all three), the anneal's 4.97.
-    measurement = study.measure(study.fixture(), study.TUNED_RAMP, 3)
+    measurement = study.measure(
+        study.instance(fixture("mixture", "ci")), study.TUNED_RAMP, 3
+    )
     gaps = measurement.comparison.mean_gap()
     margin = study.TOLERANCE * study.BEST_KNOWN
     assert float(measurement.comparison.best.min()) >= study.BEST_KNOWN - margin
