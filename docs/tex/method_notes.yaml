@@ -347,6 +347,10 @@ untested pairings:
     The instance exists to defeat descent, and what it is pinned against is
     descent. Separating a sampler from descent on it is the comparison it was
     declared for and is not yet run.
+  potts_labelling / samplers: >-
+    The cell mirrors a downstream labelling step, on which every arm reaches
+    the TRW-S bound; the anneal is measured there as an experiment, and its
+    referee as a sampler is `potts_reference`'s (issue #1413).
   potts_lattice / surrogates: >-
     The relaxation is refereed against enumerated maximum cuts, which fixes
     the size at what enumeration reaches rather than at the declared one.
