@@ -29,6 +29,7 @@ from sal.emissions import (
     PoissonEmission,
     settle_collapse,
 )
+from sal.emissions.rising import reusing_distinct
 from sal.opt.em import EM, Degenerate, EmConfig, Unsettled, check_stages, em_loop
 from sal.opt.hmm.forward import Posteriors, forward_messages
 from sal.opt.m_step import MStep
@@ -1108,11 +1109,17 @@ def baum_welch_family(
         degenerate.update(step.degenerate)
         return (log_initial, log_transition, kernels, step.components), log_likelihood
 
-    (log_initial, log_transition, _, components), log_likelihood, termination = em_loop(
-        iterate,
-        (log_initial, log_transition, kernels, components),
-        config=config,
-    )
+    # Every E step scores the same counts, so their distinct values are taken
+    # once per fit and not once per iteration (issue #1410): the cache returns
+    # `torch.unique`'s own output, so the fit is unchanged bitwise.
+    with reusing_distinct({}):
+        (log_initial, log_transition, _, components), log_likelihood, termination = (
+            em_loop(
+                iterate,
+                (log_initial, log_transition, kernels, components),
+                config=config,
+            )
+        )
     termination, unsettled = _held_degenerate(termination, unsettled, degenerate)
     return EmFit(
         log_initial=log_initial,

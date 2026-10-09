@@ -14,6 +14,7 @@
 //! and `--baseline`.
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use oxisal::count_mstep::{solve_exposed_dispersion, Exposed};
 use oxisal::coupled::{class_posteriors_into, external_field_into, CoupledShape, EmissionTables};
 use oxisal::double;
 use oxisal::maxflow::{max_flow_impl, FlowNetwork};
@@ -22,6 +23,7 @@ use oxisal::maxflow_declined::{max_flow_with, Algorithm};
 use oxisal::pruning::{pruning_log_likelihood_impl, LeafObservations};
 #[cfg(feature = "sandbox")]
 use oxisal::pruning_burn::pruning_gradient_impl;
+use oxisal::ragged::{ragged_posteriors_into, SwitchKind};
 use oxisal::sampling::sample_rows_impl;
 
 fn bench_double(c: &mut Criterion) {
@@ -388,6 +390,104 @@ fn bench_max_flow_kernels(c: &mut Criterion) {
     group.finish();
 }
 
+/// A uniform draw in `[0, 1)` from 53 bits.
+fn unit(rng: &mut SplitMix64) -> f64 {
+    (rng.next_u64() >> 11) as f64 / (1_u64 << 53) as f64
+}
+
+/// The exposed dispersion solve (issue #1410) at `count_hmm_reference`'s
+/// stress and release sizes, one state of weight one per observation, counts
+/// to 400 and exposures in `[0.67, 1.5]`: from the bracket's midpoint and
+/// from 1.1 times the answer, the warm start EM hands it. The kernel alone;
+/// the fit through the binding is the PR's per-iteration table.
+fn bench_exposed_dispersion(c: &mut Criterion) {
+    for &n in &[8_000_usize, 100_000] {
+        let mut rng = SplitMix64::new(1410);
+        let exposures: Vec<f64> = (0..n).map(|_| 0.67 + 0.83 * unit(&mut rng)).collect();
+        let counts: Vec<f64> = (0..n).map(|_| (400.0 * unit(&mut rng)).floor()).collect();
+        let weights = vec![1.0; n];
+        let mut dense = vec![0.0; 401];
+        for &y in &counts {
+            dense[y as usize] += 1.0;
+        }
+        let mut tails = vec![0.0; 400];
+        let mut running = 0.0;
+        for j in (0..400).rev() {
+            running += dense[j + 1];
+            tails[j] = running;
+        }
+        let total = n as f64;
+        let mean = counts.iter().sum::<f64>() / exposures.iter().sum::<f64>();
+        let problem = Exposed {
+            tails: &tails,
+            weights: &weights,
+            exposures: &exposures,
+            counts: &counts,
+            mean,
+            total,
+            varying: true,
+        };
+        let upper = mean * (total / 2.0).sqrt();
+        let lower = upper * 1e-9;
+        let answer = solve_exposed_dispersion(problem, lower, upper, 1e-12, f64::NAN).value;
+        for (name, start) in [("cold", f64::NAN), ("warm", 1.1 * answer)] {
+            c.bench_function(&format!("exposed_dispersion/{name}/{n}"), |b| {
+                b.iter(|| {
+                    solve_exposed_dispersion(
+                        std::hint::black_box(problem),
+                        lower,
+                        upper,
+                        1e-12,
+                        start,
+                    )
+                })
+            });
+        }
+    }
+}
+
+/// The ragged forward-backward (issue #1410) at `count_hmm_reference`'s
+/// stress and release sizes: seven states, segments of 20, a sticky kernel,
+/// on the current `rayon` pool.
+fn bench_ragged_posteriors(c: &mut Criterion) {
+    let m = 7;
+    let log_transition: Vec<f64> = (0..m * m)
+        .map(|i| {
+            if i % (m + 1) == 0 {
+                0.94_f64.ln()
+            } else {
+                0.01_f64.ln()
+            }
+        })
+        .collect();
+    let log_initial = vec![-(m as f64).ln(); m];
+    for &n in &[8_000_usize, 100_000] {
+        let mut rng = SplitMix64::new(1410);
+        let log_density: Vec<f64> = (0..n * m).map(|_| -8.0 * unit(&mut rng)).collect();
+        let lengths = vec![20_usize; n / 20];
+        let mut gamma = vec![0.0; n * m];
+        let mut counts = vec![0.0; m * m];
+        let mut evidence = vec![0.0; n / 20];
+        c.bench_function(&format!("ragged_posteriors/{n}"), |b| {
+            b.iter(|| {
+                ragged_posteriors_into(
+                    std::hint::black_box(&log_density),
+                    m,
+                    &lengths,
+                    &log_initial,
+                    &log_transition,
+                    &mut gamma,
+                    &mut counts,
+                    &mut evidence,
+                    &[],
+                    SwitchKind::StayOrMove,
+                )
+                .unwrap()
+            })
+        });
+    }
+}
+
 #[cfg(feature = "sandbox")]
 criterion_group!(
     benches,
@@ -397,7 +497,9 @@ criterion_group!(
     bench_class_posteriors,
     bench_max_flow,
     bench_max_flow_kernels,
-    bench_pruning_gradient
+    bench_pruning_gradient,
+    bench_exposed_dispersion,
+    bench_ragged_posteriors
 );
 #[cfg(not(feature = "sandbox"))]
 criterion_group!(
@@ -406,6 +508,8 @@ criterion_group!(
     bench_pruning_log_likelihood,
     bench_sample_rows,
     bench_class_posteriors,
-    bench_max_flow
+    bench_max_flow,
+    bench_exposed_dispersion,
+    bench_ragged_posteriors
 );
 criterion_main!(benches);

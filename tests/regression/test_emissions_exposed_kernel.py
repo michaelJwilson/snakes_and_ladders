@@ -6,7 +6,9 @@ exposure keeps, per observation; `_solve_dispersion`, one torch solve per
 state over every observation, stays as the oracle. The sums are reordered,
 so bitwise is the target and #648's 2e-6 the floor; each draw's measured
 difference is stated. Past `EXPOSED_TAIL_RATIO` the route falls back to the
-oracle.
+oracle. Since #1410 the kernel steps by safeguarded Newton from a start, and
+the oracle bisects: each lands within half the solve's 1e-12 of the root in
+``log r``, so the two are held to that 1e-12.
 """
 
 from __future__ import annotations
@@ -22,6 +24,8 @@ from tests._rows import every_row
 
 #: The declared floor for a reordered sum through a bisection (#648).
 FLOOR = 2e-06
+#: The solve's own tolerance, on the bracket in ``log r``.
+SOLVE_TOLERANCE = 1e-12
 
 
 def _draw(
@@ -46,22 +50,30 @@ def _draw(
 @pytest.mark.oracle
 @pytest.mark.backend
 def test_the_kernel_is_the_per_state_solve() -> None:
-    # Measured: bitwise at scale 5, a relative 1.8e-12 at 500, bitwise at a
-    # constant exposure; every state's steps and boundary decision agree.
+    # Measured (#1410): a relative 2.4e-13 at scale 5, 6.0e-13 at 500 and
+    # 8.6e-13 at a constant exposure from the bracket's midpoint, in 8 to 11
+    # score evaluations where the bisection takes 45; from 1.1 times the
+    # answer, 2.6e-13, 3.9e-13 and 8.6e-13 in 5 or 6. Every boundary decision
+    # agrees.
     def check(scale: float, varying: bool) -> None:
         values, weights, offsets = _draw(2_000, scale, 0, varying)
         means = ((weights.T @ values) / (weights.T @ offsets)).tolist()
-        rust = mstep.solve_dispersion_exposed_rust(values, weights, means, offsets)
         oracle = [
             mstep.solve_dispersion(values, weights[:, k], offsets * means[k])
             for k in range(4)
         ]
-        assert [r.at_boundary for r in rust] == [o.at_boundary for o in oracle]
-        assert [r.iterations for r in rust] == [o.iterations for o in oracle]
-        moved = max(
-            abs(r.value - o.value) / o.value for r, o in zip(rust, oracle, strict=True)
-        )
-        assert moved < FLOOR
+        assert [o.iterations for o in oracle] == [45] * 4
+        for starts in (None, [1.1 * o.value for o in oracle]):
+            rust = mstep.solve_dispersion_exposed_rust(
+                values, weights, means, offsets, starts=starts
+            )
+            assert [r.at_boundary for r in rust] == [o.at_boundary for o in oracle]
+            assert max(r.iterations for r in rust) <= (11 if starts is None else 6)
+            moved = max(
+                abs(r.value - o.value) / o.value
+                for r, o in zip(rust, oracle, strict=True)
+            )
+            assert moved < SOLVE_TOLERANCE
 
     every_row([(5.0, True), (500.0, True), (50.0, False)], check)
 

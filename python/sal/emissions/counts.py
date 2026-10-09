@@ -385,7 +385,10 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         on** ``log r``, not by Newton: from the method-of-moments start Newton
         overshoots and underflows to zero on a near-Poisson sample, arriving
         as a domain error. Bisection cannot leave its bracket, whose upper end
-        is where "not identified" is detected rather than approached.
+        is where "not identified" is detected rather than approached. Under
+        an exposure the compiled solve keeps that bracket and steps inside it
+        by Newton on ``log r`` from the state's current dispersion, bisecting
+        wherever Newton would leave it (issue #1410).
 
         Returns
         -------
@@ -495,8 +498,14 @@ class NegativeBinomialEmission(EmissionFamily, CountEmissionFamily):
         # the per-state torch solve below stays as its oracle.
         if mstep.M_STEP_BACKEND is Backend.RUST:
             try:
+                # Warm: each state starts from its dispersion of the last
+                # iteration, which EM moves little (issue #1410).
                 exposed = solve_dispersion_exposed_rust(
-                    values, weights, [float(m) for m in mean], offsets
+                    values,
+                    weights,
+                    [float(m) for m in mean],
+                    offsets,
+                    starts=self._dispersion.tolist(),
                 )
             except NoTails:
                 exposed = None

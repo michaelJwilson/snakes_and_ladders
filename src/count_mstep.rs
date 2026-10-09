@@ -17,7 +17,10 @@
 //! to the oracle at a tolerance rather than bitwise.
 //!
 //! **Within one component the loop is the oracle's:** the same brackets, the
-//! same bisection steps, the same stops. The components are solved in
+//! same bisection steps, the same stops --- except under an exposure, where
+//! the bracket ends are the oracle's and the interior steps are safeguarded
+//! Newton from a warm start (issue #1410), stopping within the oracle's
+//! bound on the root. The components are solved in
 //! sequence and not over `rayon`: one M step is milliseconds, and its caller
 //! is already parallel one level up --- the starts notebooks run four worker
 //! processes, each of which would otherwise start a pool the size of the host.
@@ -140,13 +143,68 @@ fn exposed_score(problem: Exposed<'_>, r: f64) -> f64 {
     rising(problem.tails, r) + logs + drift
 }
 
-/// Bisection on `log r` inside `[lower, upper]` at per-observation rates,
-/// as `_solve_dispersion` under an exposure.
+/// [`exposed_score`] and its derivative in `log r`, in one pass (issue #1410).
+///
+/// With `d = r + e_t mu`, the derivative in `r` is
+/// `-sum_j T_j / (r + j)^2 + sum_t w_t e_t mu / (r d)` and, where the
+/// exposure varies, `- sum_t w_t (e_t mu - y_t) / d^2`; in `log r` it is
+/// that times `r`.
+fn exposed_score_slope(problem: Exposed<'_>, r: f64) -> (f64, f64) {
+    let mut logs = 0.0;
+    let mut logs_slope = 0.0;
+    let mut drift = 0.0;
+    let mut drift_slope = 0.0;
+    for t in 0..problem.weights.len() {
+        let rate = problem.exposures[t] * problem.mean;
+        let weight = problem.weights[t];
+        let inverse = 1.0 / (r + rate);
+        logs += weight * (r * inverse).ln();
+        logs_slope += weight * rate * inverse;
+        if problem.varying {
+            let term = weight * (rate - problem.counts[t]) * inverse;
+            drift += term;
+            drift_slope -= term * inverse;
+        }
+    }
+    let mut rise = 0.0;
+    let mut rise_slope = 0.0;
+    for (j, &tail) in problem.tails.iter().enumerate() {
+        let inverse = 1.0 / (r + j as f64);
+        rise += tail * inverse;
+        rise_slope -= tail * inverse * inverse;
+    }
+    (
+        rise + logs + drift,
+        r * (rise_slope + drift_slope) + logs_slope,
+    )
+}
+
+/// The most score evaluations an interior solve takes. Every step at least
+/// halves the bracket when Newton is refused, and nine decades in `log r`
+/// halve to `1e-12` in 45, so the cap is reached only by a score that is not
+/// finite.
+const MAX_NEWTON_STEPS: u32 = 200;
+
+/// Safeguarded Newton on `log r` inside `[lower, upper]`, from `start`, at
+/// per-observation rates: `_solve_dispersion` under an exposure (issue #1410).
+///
+/// The bracket ends are scored first, as the oracle's bisection scores them,
+/// so the boundary decisions are the oracle's. Inside, each step evaluates
+/// the score and its slope in one pass and keeps the bracket on the score's
+/// sign; a Newton step that leaves the bracket, or shrinks the last step by
+/// less than half, is replaced by the bisection step. `start` is the previous
+/// EM iteration's dispersion where there is one, held into the bracket; a
+/// value that is not finite starts from the bracket's midpoint in `log r`.
+/// The solve stops at the point whose Newton step is at most `tolerance / 2`
+/// in `log r`, the bisection's own bound on its distance from the root, or
+/// when the bracket is narrower than `tolerance`, at its midpoint.
+/// `iterations` counts the interior score evaluations.
 pub fn solve_exposed_dispersion(
     problem: Exposed<'_>,
     lower: f64,
     upper: f64,
     tolerance: f64,
+    start: f64,
 ) -> Dispersion {
     let score = |r: f64| exposed_score(problem, r);
     if score(upper) > 0.0 {
@@ -166,15 +224,39 @@ pub fn solve_exposed_dispersion(
         };
     }
     let (mut low, mut high) = (lower.ln(), upper.ln());
+    let mut x = if start.is_finite() && start > 0.0 {
+        start.ln().clamp(low, high)
+    } else {
+        0.5 * (low + high)
+    };
+    let mut last_step = high - low;
     let mut iterations = 0;
-    while high - low > tolerance {
-        let middle = 0.5 * (low + high);
-        if score(middle.exp()) > 0.0 {
-            low = middle;
-        } else {
-            high = middle;
-        }
+    while high - low > tolerance && iterations < MAX_NEWTON_STEPS {
+        let r = x.exp();
+        let (value, slope) = exposed_score_slope(problem, r);
         iterations += 1;
+        if value > 0.0 {
+            low = x;
+        } else {
+            high = x;
+        }
+        let newton = value / slope;
+        if slope < 0.0 && newton.abs() <= 0.5 * tolerance {
+            return Dispersion {
+                value: r,
+                at_boundary: false,
+                iterations,
+                residual: value.abs() / problem.total,
+            };
+        }
+        let next = x - newton;
+        let step = if slope < 0.0 && next > low && next < high && newton.abs() <= 0.5 * last_step {
+            next
+        } else {
+            0.5 * (low + high)
+        };
+        last_step = (step - x).abs();
+        x = step;
     }
     let value = (0.5 * (low + high)).exp();
     Dispersion {
@@ -382,8 +464,10 @@ pub fn negative_binomial_dispersions(
 /// Every state's dispersion under a per-observation exposure (issue #933).
 ///
 /// `tails` is `(K, J)` and `weights` `(K, n)`, row-major; `exposures` and
-/// `counts` are `(n,)`; `total`, `mean`, `lower` and `upper` are `(K,)`.
-/// Results as [`negative_binomial_dispersions`]'s.
+/// `counts` are `(n,)`; `total`, `mean`, `lower`, `upper` and `start` are
+/// `(K,)`, `start` NaN where a state has no previous dispersion (issue
+/// #1410). Results as [`negative_binomial_dispersions`]'s, `iterations` the
+/// interior score evaluations.
 #[pyfunction]
 #[allow(clippy::too_many_arguments)]
 pub fn negative_binomial_dispersions_exposed(
@@ -396,6 +480,7 @@ pub fn negative_binomial_dispersions_exposed(
     mean: PyReadonlyArray1<'_, f64>,
     lower: PyReadonlyArray1<'_, f64>,
     upper: PyReadonlyArray1<'_, f64>,
+    start: PyReadonlyArray1<'_, f64>,
     tolerance: f64,
     mut value: PyReadwriteArray1<'_, f64>,
     mut at_boundary: PyReadwriteArray1<'_, u8>,
@@ -410,10 +495,16 @@ pub fn negative_binomial_dispersions_exposed(
     let mean = borrowed(&mean, "mean")?;
     let lower = borrowed(&lower, "lower")?;
     let upper = borrowed(&upper, "upper")?;
+    let start = borrowed(&start, "start")?;
     let (k, n) = (total.len(), exposures.len());
-    if k == 0 || tails.len() % k != 0 || weights.len() != k * n || counts.len() != n {
+    if k == 0
+        || tails.len() % k != 0
+        || weights.len() != k * n
+        || counts.len() != n
+        || start.len() != k
+    {
         return Err(PyValueError::new_err(
-            "tails must be (K, J) and weights (K, n), with n exposures and counts",
+            "tails must be (K, J) and weights (K, n), with n exposures and counts and K starts",
         ));
     }
     let width = tails.len() / k;
@@ -437,6 +528,7 @@ pub fn negative_binomial_dispersions_exposed(
                 lower[state],
                 upper[state],
                 tolerance,
+                start[state],
             );
             value[state] = one.value;
             at_boundary[state] = u8::from(one.at_boundary);
