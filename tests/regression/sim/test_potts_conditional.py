@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from sal.backend import Backend
 from sal.sample.potts_mcmc import PottsMove, sample_potts
 from sal.sim import fixtures
 from sal.sim.graph import lattice_graph
@@ -180,8 +181,16 @@ def test_the_vectorized_simulator_draws_what_it_drew_before_the_extraction() -> 
 def test_the_sequential_sampler_draws_what_it_drew_before_the_extraction() -> None:
     rows = site_field(FIELD, LATTICE.n_nodes)
 
+    # The Python loop: the Rust loop draws its own stream (#1368), and the
+    # pin is the sampler's draws before the extraction.
     chain = sample_potts(
-        LATTICE, rows, PottsMove.SINGLE_SITE, np.random.default_rng(3), 20, 5
+        LATTICE,
+        rows,
+        PottsMove.SINGLE_SITE,
+        np.random.default_rng(3),
+        20,
+        5,
+        loop_backend=Backend.PYTHON,
     )
 
     assert np.array_equal(chain.states[:4], SINGLE_SITE_DRAWS)
