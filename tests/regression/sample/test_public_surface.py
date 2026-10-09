@@ -35,7 +35,8 @@ SUBMODULE_PREFIX = f"{potts_mcmc.__name__}."
 
 #: Each exported kernel's signature, as :func:`inspect.signature` prints it.
 #: Annotations are strings under ``from __future__ import annotations``, so
-#: the text is the source's and does not depend on the import order.
+#: the text is the source's and does not depend on the import order. The
+#: Wolff kernels gained ``backend``, Rust by default, in #1362.
 SIGNATURES = {
     "adjacency_lists": (
         "(offsets: 'np.ndarray', neighbours: 'np.ndarray',"
@@ -66,7 +67,8 @@ SIGNATURES = {
         " couplings: 'np.ndarray', rng: 'np.random.Generator',"
         " counter: 'ClusterCounter | None' = None,"
         " graph: 'PottsGraph | None' = None, beta: 'float' = 1.0,"
-        " lists: 'AdjacencyLists | None' = None) -> 'int'"
+        " lists: 'AdjacencyLists | None' = None,"
+        " backend: 'Backend' = <Backend.RUST: 'rust'>) -> 'int'"
     ),
     "wolff_sweep": (
         "(state: 'np.ndarray', rows: 'SiteField | np.ndarray',"
@@ -75,7 +77,8 @@ SIGNATURES = {
         " counter: 'ClusterCounter | None' = None,"
         " graph: 'PottsGraph | None' = None, beta: 'float' = 1.0,"
         " root: 'int | None' = None, proposed: 'int | None' = None,"
-        " lists: 'AdjacencyLists | None' = None) -> 'int'"
+        " lists: 'AdjacencyLists | None' = None,"
+        " backend: 'Backend' = <Backend.RUST: 'rust'>) -> 'int'"
     ),
 }
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from sal.backend import Backend
 from sal.sample.accept import accept
 from sal.sample.potts_mcmc import (
     PottsMove,
@@ -95,6 +96,9 @@ def test_the_folded_move_is_the_deleted_one_bitwise() -> None:
                 new_rng,
                 beta=beta,
                 lists=lists,
+                # The Python sweep the deleted update was folded into; Rust,
+                # the default since #1362, is the same law on another stream.
+                backend=Backend.PYTHON,
             )
             assert np.array_equal(old, new)
 

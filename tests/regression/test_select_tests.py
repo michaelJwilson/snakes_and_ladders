@@ -445,7 +445,12 @@ def test_python_imports_no_sal_module_outside_the_static_closure() -> None:
         capture_output=True,
         text=True,
         cwd=REPO_ROOT,
-        env={**os.environ, "PYTHONPATH": f"{REPO_ROOT}:{REPO_ROOT / 'infra'}"},
+        # The tree's own `python/` first: an installed `sal` from another
+        # checkout would otherwise answer the import (issue #1424).
+        env={
+            **os.environ,
+            "PYTHONPATH": f"{REPO_ROOT / 'python'}:{REPO_ROOT}:{REPO_ROOT / 'infra'}",
+        },
         check=True,
     )
     loaded = json.loads(result.stdout.splitlines()[-1])
