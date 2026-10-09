@@ -42,7 +42,12 @@ another's: :mod:`sal.opt.hmm.jax` reads
 
 from __future__ import annotations
 
-from sal.opt.hmm.count_pair import CountPairHmm, MStepSolver
+from sal.opt.hmm.count_pair import (
+    CountPairHmm,
+    DecodeShift,
+    MStepSolver,
+    PhasedCountPairHmm,
+)
 from sal.opt.hmm.estimation import (
     CategoricalFit,
     CovariateUpdate,
@@ -81,6 +86,7 @@ __all__ = [
     "CategoricalFit",
     "CountPairHmm",
     "CovariateUpdate",
+    "DecodeShift",
     "EStep",
     "EmFit",
     "EmissionHmmObjective",
@@ -90,6 +96,7 @@ __all__ = [
     "HmmObjective",
     "MStepSolver",
     "NegativeBinomialHmmObjective",
+    "PhasedCountPairHmm",
     "PoissonHmmObjective",
     "Posteriors",
     "SwitchKind",

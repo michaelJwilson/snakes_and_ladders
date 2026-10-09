@@ -642,6 +642,10 @@ class CountPairHmm:
     ) -> None: ...
     @property
     def n_states(self) -> int: ...
+    @property
+    def n_hidden(self) -> int: ...
+    def exposures(self) -> np.ndarray: ...
+    def set_shift(self, group: np.ndarray, log_weight: np.ndarray) -> None: ...
     def parameters(
         self,
     ) -> tuple[
@@ -653,6 +657,58 @@ class CountPairHmm:
         tolerance: float,
         parameter_tolerance: float,
         solver: str,
+        inner_iterations: int = ...,
+        carry: bool = ...,
+    ) -> tuple[
+        float, int, str, bool, list[int], tuple[int, float, list[int]] | None
+    ]: ...
+    def posteriors(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]: ...
+    def log_likelihood(self) -> float: ...
+    def m_step(
+        self, posterior: np.ndarray, solver: str
+    ) -> tuple[bool, bool, int, float, list[int], list[int]]: ...
+    def viterbi(self) -> tuple[np.ndarray, np.ndarray]: ...
+
+class PhasedCountPairHmm:
+    def __init__(
+        self,
+        counts: np.ndarray,
+        exposures: np.ndarray,
+        successes: np.ndarray,
+        trials: np.ndarray,
+        lengths: np.ndarray,
+        dispersion: np.ndarray,
+        mean: np.ndarray,
+        alpha: np.ndarray,
+        beta: np.ndarray,
+        log_initial: np.ndarray,
+        log_transition: np.ndarray,
+        switch: np.ndarray,
+        *,
+        switch_kind: str,
+        tied: bool,
+        fit_initial: bool,
+        fit_transition: bool,
+    ) -> None: ...
+    @property
+    def n_states(self) -> int: ...
+    @property
+    def n_hidden(self) -> int: ...
+    def exposures(self) -> np.ndarray: ...
+    def set_shift(self, group: np.ndarray, log_weight: np.ndarray) -> None: ...
+    def parameters(
+        self,
+    ) -> tuple[
+        np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+    ]: ...
+    def fit(
+        self,
+        max_iterations: int,
+        tolerance: float,
+        parameter_tolerance: float,
+        solver: str,
+        inner_iterations: int = ...,
+        carry: bool = ...,
     ) -> tuple[
         float, int, str, bool, list[int], tuple[int, float, list[int]] | None
     ]: ...

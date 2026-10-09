@@ -15,7 +15,7 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use oxisal::count_mstep::{solve_exposed_dispersion, Exposed};
-use oxisal::count_pair_hmm::{Data, Model, Options, Params, Solver};
+use oxisal::count_pair_hmm::{Chain, Data, Model, Options, Params, Solver};
 use oxisal::coupled::{class_posteriors_into, external_field_into, CoupledShape, EmissionTables};
 use oxisal::double;
 use oxisal::maxflow::{max_flow_impl, FlowNetwork};
@@ -491,7 +491,8 @@ fn bench_ragged_posteriors(c: &mut Criterion) {
 
 /// One Baum-Welch iteration of the unphased count-pair HMM (issue #1412) at the
 /// `count_hmm_reference` `downstream` variant's size, 10,240 positions in segments of 128 and
-/// seven states, per-state and tied, under each M-step solver. Counts are uniform draws, not the
+/// seven states, per-state and tied, under each M-step solver, and the phased chain's `2 K = 14`
+/// hidden states under each Kronecker kind. Counts are uniform draws, not the
 /// cell, so the numbers rank the paths and the PR's table carries the fixture's.
 fn bench_count_pair_hmm(c: &mut Criterion) {
     let (n, k) = (10_240_usize, 7_usize);
@@ -541,6 +542,37 @@ fn bench_count_pair_hmm(c: &mut Criterion) {
             b.iter_batched(
                 || Model::new(data.clone(), params.clone(), options).unwrap(),
                 |mut model| model.fit(1, 0.0, 0.0, solver).unwrap(),
+                criterion::BatchSize::LargeInput,
+            );
+        });
+    }
+    let switch: Vec<f64> = (0..n).map(|t| 0.02 + 0.04 * (t % 7) as f64).collect();
+    let phased = Params {
+        log_initial: vec![-(2.0 * k as f64).ln(); 2 * k],
+        ..params
+    };
+    for (name, kind) in [
+        ("phased_kronecker", SwitchKind::Kronecker),
+        ("phased_kronecker_diagonal", SwitchKind::KroneckerDiagonal),
+    ] {
+        let options = Options {
+            tied: true,
+            fit_initial: false,
+            fit_transition: false,
+        };
+        c.bench_function(&format!("count_pair_hmm/{name}/{n}"), |b| {
+            b.iter_batched(
+                || {
+                    Model::with_chain(
+                        data.clone(),
+                        phased.clone(),
+                        options,
+                        Chain::Phased(kind),
+                        switch.clone(),
+                    )
+                    .unwrap()
+                },
+                |mut model| model.fit(1, 0.0, 0.0, Solver::Newton).unwrap(),
                 criterion::BatchSize::LargeInput,
             );
         });
