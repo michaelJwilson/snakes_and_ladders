@@ -104,8 +104,9 @@ INCIDENCE_OWNER = "incidence.py"
 #: left with #858; `qa/potts_clusters.py` joined with #1041, `search/trws.py`
 #: with #1060; `sandbox/potts_tempering.py` with #1352, carrying the Potts
 #: `parallel_tempering` out of `sample/potts_mcmc/chains.py`, which keeps
-#: `cluster_tempering`. A PR adding or removing a consumer moves the pin.
-SEAM_CONSUMERS = 14
+#: `cluster_tempering`; `search/potts_problem.py` with #1413. A PR adding or
+#: removing a consumer moves the pin.
+SEAM_CONSUMERS = 15
 
 #: Files this guard does not read, each against the reason, rather than an
 #: allow-list nobody can audit. The first two are measurements the
