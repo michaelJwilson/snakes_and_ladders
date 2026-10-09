@@ -1,0 +1,21 @@
+model: potts-reference
+oracle: none
+
+# The Potts labelling cell (issue #1413) at the per-pull-request size: the
+# stress cell's every factor on a periodic triangular lattice of 20 x 15,
+# 300 sites. stress.yaml states what the cell mirrors and the numbers read
+# off the downstream stream. Past enumeration (5**300): refereed by the
+# TRW-S bound (sal.qa.potts_labelling).
+seed: 7
+shape: [20, 15]
+graph: triangular
+boundary: periodic
+n_states: 5
+coupling: 1.0
+shares: [0.006, 0.05, 0.15, 0.27, 0.524]
+margin_ratio: 0.2833
+margin_spread: 1.0
+mislead: 0.30
+jitter: 0.25
+frequency: 0.15
+planted_digest: fef4f43eece3a49d
