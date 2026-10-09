@@ -21,13 +21,22 @@
 //! deduplicated (no row repeats on the stream) and the field stays `f64`
 //! (`f32` is not exact).
 //!
+//! **The expansion and TRW-S hold their own structures.** The expansion's
+//! [`LatticeCut`] over the symmetric edges and TRW-S's chain layout
+//! ([`Chains`]) are handed over on the first call and kept, so each later
+//! solve crosses once; every run starts from zero flow and zero messages,
+//! as the per-call functions do, and is bitwise theirs.
+//!
+//! **Directed rows** hold a directed adjacency as given: a descent reads a
+//! site's own row (the downstream labelling step's conditional), the energy
+//! halves every entry, and a clean site is not skipped, since a row need not
+//! name every site that names it.
+//!
 //! **Skipping a clean site is exact.** A site's conditional reads its field
 //! row and its neighbours' labels only; a site visited since any of them
 //! changed, and not itself moved since by a floor, recomputes the argmax it
 //! already holds. The descent keeps that set (`dirty`) and visits only the
 //! rest, so a later sweep costs the sites near a change.
-
-use std::collections::VecDeque;
 
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods};
 use pyo3::exceptions::PyValueError;
@@ -37,7 +46,9 @@ use rand_chacha::ChaCha8Rng;
 use rand_distr::{Distribution, StandardUniform};
 
 use crate::icm::no_survivor;
+use crate::lattice_cut::LatticeCut;
 use crate::potts_loop::{potts_loop_impl, ran_dict, Plan};
+use crate::potts_trws::{Chains, TrwsRun};
 use crate::wolff::Lattice;
 
 /// `SweepOrder.INDEX`: `range(n_nodes)` every sweep.
@@ -46,9 +57,12 @@ pub const INDEX: u8 = 0;
 pub const RANDOM: u8 = 1;
 /// `SweepOrder.CHECKERBOARD`: the greedy colouring's classes in turn.
 pub const CHECKERBOARD: u8 = 2;
-/// `SweepOrder.WORKLIST`: a first-in first-out queue of sites, initially
-/// every site in index order; a site that changes queues each neighbour not
-/// already queued.
+/// `SweepOrder.WORKLIST`: the downstream two-queue descent with its
+/// shuffles replaced by index order. An epoch visits its queue ascending; a
+/// site that changes queues each site of its row not already queued, for the
+/// next epoch. The descent stops after an epoch that changed nothing (and
+/// whose floor did not count against the guard), once at most one label is
+/// in use, or when the next queue is empty.
 pub const WORKLIST: u8 = 3;
 
 /// `FloorPolicy.UNIFORM`: every state below the floor dissolved at once onto
@@ -58,11 +72,17 @@ pub const UNIFORM: u8 = 0;
 /// site onto its best-field live state; no draws.
 pub const SMALLEST_FIRST_BEST_FIELD: u8 = 1;
 
-/// `FloorAt.SWEEP`: the floor after every sweep.
+/// `FloorAt.SWEEP`: the floor after every sweep, wherever a used label is
+/// below it.
 pub const AT_SWEEP: u8 = 0;
-/// `FloorAt.EPOCH_GUARDED`: the floor once a sweep is clean; the descent
-/// resumes where it moved a site, until it moves none or the sweeps run out.
+/// `FloorAt.EPOCH_GUARDED`: the downstream floor. After every sweep or
+/// epoch, and only while every label is in use and one is below the floor;
+/// a firing with two or more labels at the floor counts against a guard,
+/// and the descent stops once the guard passes [`GUARD`].
 pub const AT_EPOCH: u8 = 1;
+/// The firings `EPOCH_GUARDED` allows before it stops the descent: the
+/// downstream `min_spot_guard > 10`.
+pub const GUARD: usize = 10;
 
 /// The stop codes the Python class reads as `Stop`.
 pub const CONVERGED: u8 = 0;
@@ -101,6 +121,17 @@ impl Label for u32 {
     }
 }
 
+impl Label for usize {
+    #[inline]
+    fn get(self) -> usize {
+        self
+    }
+    #[inline]
+    fn put(value: usize) -> Self {
+        value
+    }
+}
+
 impl Label for i64 {
     #[inline]
     fn get(self) -> usize {
@@ -124,6 +155,9 @@ pub struct Graph<'a> {
     pub neighbours: &'a [u32],
     /// Each entry's coupling.
     pub couplings: &'a [f64],
+    /// Whether the rows are directed: a row then need not name every site
+    /// that names it, so a change marks no neighbour clean or dirty exactly.
+    pub directed: bool,
 }
 
 impl Graph<'_> {
@@ -139,6 +173,32 @@ impl Graph<'_> {
         let mut best = 0usize;
         for label in 1..q {
             if local[label] > local[best] {
+                best = label;
+            }
+        }
+        best
+    }
+
+    /// [`Graph::best`] with the row's couplings summed per label first and
+    /// then added to the field, the downstream descent's arithmetic.
+    #[inline]
+    pub fn best_split<L: Label>(
+        &self,
+        local: &mut [f64],
+        sums: &mut [f64],
+        labels: &[L],
+        node: usize,
+    ) -> usize {
+        let q = self.n_states;
+        sums.fill(0.0);
+        for entry in self.offsets[node] as usize..self.offsets[node + 1] as usize {
+            sums[labels[self.neighbours[entry] as usize].get()] += self.couplings[entry];
+        }
+        let row = &self.field[node * q..(node + 1) * q];
+        let mut best = 0usize;
+        for label in 0..q {
+            local[label] = row[label] + sums[label];
+            if label > 0 && local[label] > local[best] {
                 best = label;
             }
         }
@@ -196,11 +256,11 @@ pub struct Buffers {
     stuck: Vec<bool>,
     dirty: Vec<bool>,
     order: Vec<u32>,
-    queue: VecDeque<u32>,
+    next: Vec<u32>,
     moved: Vec<u32>,
+    sums: Vec<f64>,
     field_sums: Vec<f64>,
     bond_sums: Vec<f64>,
-    touching: Vec<u32>,
     admissible: Vec<usize>,
 }
 
@@ -217,11 +277,11 @@ impl Buffers {
             stuck: vec![false; n_states],
             dirty: vec![true; n_nodes],
             order: (0..n_nodes as u32).collect(),
-            queue: VecDeque::with_capacity(n_nodes),
+            next: Vec::with_capacity(n_nodes),
             moved: Vec::with_capacity(n_nodes),
+            sums: vec![0.0; n_states],
             field_sums: vec![0.0; square],
             bond_sums: vec![0.0; square],
-            touching: vec![0; square],
             admissible: vec![0; square],
         }
     }
@@ -233,15 +293,13 @@ impl Buffers {
             + self.counts.capacity()
             + self.surviving.capacity()
             + self.allowed.capacity()
+            + self.sums.capacity()
             + self.field_sums.capacity()
             + self.bond_sums.capacity()
             + self.admissible.capacity())
             + self.stuck.capacity()
             + self.dirty.capacity()
-            + 4 * (self.order.capacity()
-                + self.queue.capacity()
-                + self.moved.capacity()
-                + self.touching.capacity())
+            + 4 * (self.order.capacity() + self.next.capacity() + self.moved.capacity())
     }
 }
 
@@ -281,10 +339,12 @@ fn below(rng: &mut ChaCha8Rng, n: usize) -> usize {
     ((u128::from(rng.next_u64()) * n as u128) >> 64) as usize
 }
 
-/// The uniform floor after a sweep, in place, `icm_sweeps_impl`'s rule: the
-/// counts read once, each site of a state below the floor in index order
-/// taking `allowed[floor(u m)]` among the ascending surviving states its
-/// field allows; one uniform per site moved. The sites moved go to
+/// The uniform floor after a sweep, in place: the counts read once, then
+/// each state below the floor in ascending order and its sites in index
+/// order, each site taking `allowed[floor(u m)]` among the ascending
+/// surviving states its field allows; one uniform per site moved. The
+/// downstream floor's order; `icm_sweeps_impl` draws the same law site by
+/// site in index order. The sites moved go to
 /// `buffers.moved`.
 fn floor_uniform<L: Label>(
     graph: &Graph<'_>,
@@ -321,8 +381,12 @@ fn floor_uniform<L: Label>(
     if m == 0 {
         return Err(no_survivor(sweep, min_sites));
     }
-    for node in 0..labels.len() {
-        if counts[labels[node].get()] >= min_sites {
+    let n_nodes = labels.len();
+    for (node, short) in (0..q)
+        .filter(|&state| counts[state] > 0 && counts[state] < min_sites)
+        .flat_map(|state| (0..n_nodes).map(move |node| (node, state)))
+    {
+        if labels[node].get() != short {
             continue;
         }
         let mut n_allowed = 0usize;
@@ -428,21 +492,17 @@ fn apply_floor<L: Label>(
         floor_uniform(graph, labels, ask.min_sites, buffers, rng, sweep)?;
     }
     let Buffers {
-        moved,
-        dirty,
-        queue,
-        ..
+        moved, dirty, next, ..
     } = buffers;
     for &node in moved.iter() {
         let node = node as usize;
         if queued {
-            for site in std::iter::once(node).chain(
-                (graph.offsets[node] as usize..graph.offsets[node + 1] as usize)
-                    .map(|entry| graph.neighbours[entry] as usize),
-            ) {
+            // The downstream queue rule: the moved site's row, not the site.
+            for entry in graph.offsets[node] as usize..graph.offsets[node + 1] as usize {
+                let site = graph.neighbours[entry] as usize;
                 if !dirty[site] {
                     dirty[site] = true;
-                    queue.push_back(site as u32);
+                    next.push(site as u32);
                 }
             }
         } else {
@@ -450,6 +510,47 @@ fn apply_floor<L: Label>(
         }
     }
     Ok(!moved.is_empty())
+}
+
+/// The `EPOCH_GUARDED` floor: `None` unless every label is in use and one
+/// is below `min_sites`; otherwise the floor of `ask.policy` over the labels
+/// at the floor (none moves where no label is), and whether two or more
+/// labels were at the floor, the firings the guard counts.
+fn epoch_floor<L: Label>(
+    graph: &Graph<'_>,
+    labels: &mut [L],
+    ask: &Descend,
+    buffers: &mut Buffers,
+    rng: &mut ChaCha8Rng,
+    sweep: usize,
+    queued: bool,
+) -> Result<Option<bool>, String> {
+    let counts = &mut buffers.counts;
+    counts.fill(0);
+    for &label in labels.iter() {
+        counts[label.get()] += 1;
+    }
+    let smallest = counts.iter().copied().min().unwrap_or(0);
+    if !(0 < smallest && smallest < ask.min_sites) {
+        return Ok(None);
+    }
+    let eligible = counts
+        .iter()
+        .filter(|&&count| count >= ask.min_sites)
+        .count();
+    if eligible > 0 {
+        apply_floor(graph, labels, ask, buffers, rng, sweep, queued)?;
+    }
+    Ok(Some(eligible > 1))
+}
+
+/// Labels in use.
+fn in_use<L: Label>(labels: &[L], counts: &mut [usize]) -> usize {
+    counts.fill(0);
+    for &label in labels {
+        counts[label.get()] += 1;
+    }
+    counts.iter().filter(|&&count| count > 0).count()
 }
 
 /// The descent in place; the sweeps run (a worklist's visits over
@@ -475,6 +576,8 @@ pub fn icm_run<L: Label>(
     let n_nodes = labels.len();
     let mut rng = ChaCha8Rng::seed_from_u64(seed);
     buffers.dirty.fill(true);
+    let skip_clean = ask.skip_clean && !graph.directed;
+    let mut guard = 0usize;
     let sweeps = if ask.order == WORKLIST {
         worklist(graph, labels, ask, buffers, &mut rng)?
     } else {
@@ -504,7 +607,7 @@ pub fn icm_run<L: Label>(
                     } else {
                         visit[position] as usize
                     };
-                    if ask.skip_clean && !buffers.dirty[node] {
+                    if skip_clean && !buffers.dirty[node] {
                         continue;
                     }
                     buffers.dirty[node] = false;
@@ -518,11 +621,18 @@ pub fn icm_run<L: Label>(
                         }
                     }
                 }
-                let floor_now = ask.min_sites > 0 && (ask.floor_at == AT_SWEEP || !changed);
-                if floor_now && apply_floor(graph, labels, ask, buffers, &mut rng, sweeps, false)? {
+                if ask.min_sites > 0 && ask.floor_at == AT_SWEEP {
+                    if apply_floor(graph, labels, ask, buffers, &mut rng, sweeps, false)? {
+                        changed = true;
+                    }
+                } else if ask.min_sites > 0
+                    && epoch_floor(graph, labels, ask, buffers, &mut rng, sweeps, false)?
+                        == Some(true)
+                {
+                    guard += 1;
                     changed = true;
                 }
-                if !changed {
+                if !changed || guard > GUARD {
                     break;
                 }
             }
@@ -532,13 +642,17 @@ pub fn icm_run<L: Label>(
         buffers.order = order;
         result?
     };
+    if ask.order == WORKLIST || !skip_clean {
+        // A floor-moved site is not queued, and a skipped read is not exact
+        // on directed rows: read every site.
+        buffers.dirty.fill(true);
+    }
     Ok((sweeps, status(graph, labels, ask.min_sites, buffers)))
 }
 
-/// The worklist descent: visits until the queue empties or
-/// `max_iterations * n_nodes` visits are spent; a floor at `SWEEP` after
-/// every `n_nodes` visits and when the queue empties, at `EPOCH_GUARDED`
-/// only then. The sweeps are the visits over `n_nodes`, rounded up.
+/// The worklist descent ([`WORKLIST`]): epochs over an ascending queue,
+/// each changed site queuing its row's sites not already queued, the floor
+/// after every epoch; at most `max_iterations` epochs. The epochs run.
 fn worklist<L: Label>(
     graph: &Graph<'_>,
     labels: &mut [L],
@@ -547,47 +661,61 @@ fn worklist<L: Label>(
     rng: &mut ChaCha8Rng,
 ) -> Result<usize, String> {
     let n_nodes = labels.len();
-    let allowed = ask.max_iterations.saturating_mul(n_nodes);
-    buffers.queue.clear();
-    buffers.queue.extend(0..n_nodes as u32);
     let mut local = std::mem::take(&mut buffers.local);
-    let mut visits = 0usize;
+    let mut sums = std::mem::take(&mut buffers.sums);
+    let mut current = std::mem::take(&mut buffers.order);
+    current.clear();
+    current.extend(0..n_nodes as u32);
+    buffers.next.clear();
+    let (mut epochs, mut guard) = (0usize, 0usize);
     let result = (|| -> Result<(), String> {
-        loop {
-            while visits < allowed {
-                let Some(node) = buffers.queue.pop_front() else {
-                    break;
-                };
+        while !current.is_empty() && epochs < ask.max_iterations {
+            let mut edits = 0usize;
+            for &node in &current {
                 let node = node as usize;
-                visits += 1;
                 buffers.dirty[node] = false;
-                let best = graph.best(&mut local, labels, node);
+                let best = graph.best_split(&mut local, &mut sums, labels, node);
                 if best != labels[node].get() {
+                    edits += 1;
                     labels[node] = L::put(best);
                     for entry in graph.offsets[node] as usize..graph.offsets[node + 1] as usize {
                         let far = graph.neighbours[entry] as usize;
                         if !buffers.dirty[far] {
                             buffers.dirty[far] = true;
-                            buffers.queue.push_back(far as u32);
+                            buffers.next.push(far as u32);
                         }
                     }
                 }
-                if ask.min_sites > 0 && ask.floor_at == AT_SWEEP && visits.is_multiple_of(n_nodes) {
-                    apply_floor(graph, labels, ask, buffers, rng, visits / n_nodes, true)?;
+            }
+            if ask.min_sites > 0 {
+                if ask.floor_at == AT_SWEEP {
+                    if apply_floor(graph, labels, ask, buffers, rng, epochs + 1, true)? {
+                        edits += 1;
+                    }
+                } else if epoch_floor(graph, labels, ask, buffers, rng, epochs + 1, true)?
+                    == Some(true)
+                {
+                    guard += 1;
+                    edits += 1;
                 }
             }
-            if visits >= allowed || ask.min_sites == 0 || !buffers.queue.is_empty() {
+            epochs += 1;
+            if edits == 0 || in_use(labels, &mut buffers.counts) <= 1 || guard > GUARD {
                 return Ok(());
             }
-            let sweep = visits.div_ceil(n_nodes);
-            if !apply_floor(graph, labels, ask, buffers, rng, sweep, true)? {
-                return Ok(());
-            }
+            buffers.next.sort_unstable();
+            std::mem::swap(&mut current, &mut buffers.next);
+            buffers.next.clear();
         }
+        Ok(())
     })();
     buffers.local = local;
+    buffers.sums = sums;
+    current.clear();
+    current.extend(0..n_nodes as u32);
+    buffers.order = current;
     result?;
-    Ok(visits.div_ceil(n_nodes.max(1)))
+    Ok(epochs)
 }
 
 /// `icm.descended`'s stop, read off the labelling: infeasible where a site
@@ -636,14 +764,17 @@ pub fn status<L: Label>(
 }
 
 /// The greedy whole-label merge in place, `potts_loop::merge_labels`'
-/// rounds with the boundary gain divided by `divisor` (`2` the full gain of
-/// an edge read from both ends, `4` half of it) and, with `adjacent`, only
-/// pairs of labels sharing an edge admissible; the rounds run, the last
-/// finding no pair. `divisor = 2`, every pair, is it bitwise.
+/// rounds; the rounds run, the last finding no pair. `B[u, v]` sums the
+/// couplings of `u`'s rows' entries at `v`. The gain of merging `u` into `v`
+/// is `(B[u, v] + B[v, u]) / 2`, every coupling between the two once, or
+/// with `halved` `B[u, v] / 2`, `u`'s rows alone halved: the downstream
+/// `merge_assignment`'s. With `adjacent` a pair is admissible only where
+/// `B[u, v] > 0`, as `merge_assignment` admits it. The full gain over every
+/// pair is `merge_labels` bitwise.
 pub fn merge_run<L: Label>(
     graph: &Graph<'_>,
     labels: &mut [L],
-    divisor: f64,
+    halved: bool,
     adjacent: bool,
     buffers: &mut Buffers,
 ) -> usize {
@@ -651,7 +782,6 @@ pub fn merge_run<L: Label>(
     let Buffers {
         field_sums,
         bond_sums,
-        touching,
         admissible,
         counts,
         ..
@@ -661,7 +791,6 @@ pub fn merge_run<L: Label>(
         rounds += 1;
         field_sums.fill(0.0);
         bond_sums.fill(0.0);
-        touching.fill(0);
         admissible.fill(0);
         counts.fill(0);
         for (node, &label) in labels.iter().enumerate() {
@@ -675,7 +804,6 @@ pub fn merge_run<L: Label>(
             for entry in graph.offsets[node] as usize..graph.offsets[node + 1] as usize {
                 let far = labels[graph.neighbours[entry] as usize].get();
                 bond_sums[u * q + far] += graph.couplings[entry];
-                touching[u * q + far] += 1;
             }
         }
         let mut chosen: Option<(usize, usize)> = None;
@@ -688,11 +816,15 @@ pub fn merge_run<L: Label>(
                 if v == u || counts[v] == 0 || admissible[u * q + v] != counts[u] {
                     continue;
                 }
-                if adjacent && touching[u * q + v] == 0 {
+                if adjacent && bond_sums[u * q + v] <= 0.0 {
                     continue;
                 }
-                let delta = -(field_sums[u * q + v] - field_sums[u * q + u])
-                    - (bond_sums[u * q + v] + bond_sums[v * q + u]) / divisor;
+                let gain = if halved {
+                    bond_sums[u * q + v] / 2.0
+                } else {
+                    (bond_sums[u * q + v] + bond_sums[v * q + u]) / 2.0
+                };
+                let delta = -(field_sums[u * q + v] - field_sums[u * q + u]) - gain;
                 if delta < lowest {
                     lowest = delta;
                     chosen = Some((u, v));
@@ -729,6 +861,7 @@ macro_rules! dispatch {
             offsets: &problem.held.offsets,
             neighbours: &problem.held.neighbours,
             couplings: &problem.held.couplings,
+            directed: problem.held.directed,
         };
         match &mut *problem.labels {
             Labels::Narrow($labels) => $body,
@@ -746,6 +879,7 @@ struct Held {
     neighbours: Vec<u32>,
     couplings: Vec<f64>,
     field: Vec<f64>,
+    directed: bool,
 }
 
 /// One Potts problem: the adjacency, the field and the buffers, held
@@ -756,6 +890,23 @@ pub struct PottsProblem {
     labels: Labels,
     buffers: Buffers,
     colours: Vec<u32>,
+    /// The expansion's network over the symmetric edges, laid out on the
+    /// first `alpha_expansion` and kept.
+    cut: Option<LatticeCut>,
+    /// TRW-S's chain layout and messages, handed over on the first `trws`.
+    chains: Option<Chains>,
+}
+
+/// What one `alpha_expansion` reports.
+pub struct Expanded {
+    /// Complete cycles over the labels.
+    pub cycles: usize,
+    /// Moves that lowered the energy.
+    pub moves: usize,
+    /// Whether a cycle lowered nothing.
+    pub converged: bool,
+    /// The composed ICM's sweeps and stop code, where one ran.
+    pub icm: Option<(usize, u8)>,
 }
 
 /// The parts [`dispatch`] borrows at once.
@@ -768,7 +919,10 @@ struct Parts<'a> {
 
 impl PottsProblem {
     /// Build from compressed rows and a `(n_nodes, n_states)` field; with
-    /// `compact`, labels in a byte where `n_states <= 255`.
+    /// `compact`, labels in a byte where `n_states <= 255`. With `directed`
+    /// the rows are a directed adjacency: each descent reads a site's own
+    /// row, and the energy halves every entry, so it scores the symmetric
+    /// coupling `(A_ij + A_ji) / 2`.
     ///
     /// # Errors
     /// Returns `Err` for an adjacency that is not compressed rows over the
@@ -780,6 +934,7 @@ impl PottsProblem {
         field: Vec<f64>,
         n_states: usize,
         compact: bool,
+        directed: bool,
     ) -> Result<Self, String> {
         if offsets.is_empty() || n_states == 0 {
             return Err("a problem needs one site and one label".to_string());
@@ -817,6 +972,7 @@ impl PottsProblem {
                 neighbours: neighbours.iter().map(|&j| j as u32).collect(),
                 couplings: couplings.to_vec(),
                 field,
+                directed,
             },
             labels: if narrow {
                 Labels::Narrow(vec![0; n_nodes])
@@ -825,6 +981,8 @@ impl PottsProblem {
             },
             buffers: Buffers::new(n_nodes, n_states),
             colours,
+            cut: None,
+            chains: None,
         })
     }
 
@@ -889,10 +1047,10 @@ impl PottsProblem {
     }
 
     /// The merge from the held labels; the rounds and the energy.
-    pub fn merge_held(&mut self, divisor: f64, adjacent: bool) -> (usize, f64) {
+    pub fn merge_held(&mut self, halved: bool, adjacent: bool) -> (usize, f64) {
         dispatch!(self.parts(), |graph, labels, buffers, colours| {
             let _ = colours;
-            let rounds = merge_run(&graph, labels, divisor, adjacent, buffers);
+            let rounds = merge_run(&graph, labels, halved, adjacent, buffers);
             (rounds, graph.energy(labels))
         })
     }
@@ -936,7 +1094,7 @@ impl PottsProblem {
     /// The bytes each structure holds: adjacency, couplings, field, labels,
     /// buffers.
     #[must_use]
-    pub fn bytes_held(&self) -> [usize; 5] {
+    pub fn bytes_held(&self) -> [usize; 7] {
         let labels = match &self.labels {
             Labels::Narrow(labels) => labels.capacity(),
             Labels::Wide(labels) => 4 * labels.capacity(),
@@ -947,7 +1105,203 @@ impl PottsProblem {
             8 * self.held.field.capacity(),
             labels,
             self.buffers.bytes() + 4 * self.colours.capacity(),
+            self.cut.as_ref().map_or(0, LatticeCut::bytes),
+            self.chains.as_ref().map_or(0, Chains::bytes),
         ]
+    }
+
+    /// Lay out the expansion's network over the symmetric edges
+    /// `first[e] -- second[e]` at `coupling[e]`, kept for every later
+    /// `alpha_expansion`.
+    ///
+    /// # Errors
+    /// As [`LatticeCut::build`].
+    pub fn set_cut(
+        &mut self,
+        first: &[usize],
+        second: &[usize],
+        coupling: &[f64],
+    ) -> Result<(), String> {
+        self.cut = Some(LatticeCut::build(
+            self.held.n_nodes,
+            first,
+            second,
+            coupling,
+        )?);
+        Ok(())
+    }
+
+    /// Whether the expansion's network is held.
+    #[must_use]
+    pub fn holds_cut(&self) -> bool {
+        self.cut.is_some()
+    }
+
+    /// Hold TRW-S's chain layout.
+    pub fn set_chains(&mut self, chains: Chains) {
+        self.chains = Some(chains);
+    }
+
+    /// Whether TRW-S's chain layout is held.
+    #[must_use]
+    pub fn holds_chains(&self) -> bool {
+        self.chains.is_some()
+    }
+
+    /// The field with each `-inf` replaced as `sim.potts.penalized` does:
+    /// the row's least allowed log-weight less `1 + sum_e |J_e|`.
+    ///
+    /// # Errors
+    /// Returns `Err` where a site allows no label.
+    fn penalized(&self) -> Result<Option<Vec<f64>>, String> {
+        let q = self.held.n_states;
+        let field = &self.held.field;
+        if field.iter().all(|v| v.is_finite()) {
+            return Ok(None);
+        }
+        let margin = 1.0 + 0.5 * self.held.couplings.iter().map(|j| j.abs()).sum::<f64>();
+        let mut values = field.clone();
+        for (node, row) in values.chunks_mut(q).enumerate() {
+            let least = row
+                .iter()
+                .copied()
+                .filter(|v| v.is_finite())
+                .fold(f64::INFINITY, f64::min);
+            if least == f64::INFINITY {
+                return Err(format!("site {node} allows no label"));
+            }
+            for value in row.iter_mut().filter(|v| !v.is_finite()) {
+                *value = least - margin;
+            }
+        }
+        Ok(Some(values))
+    }
+
+    /// Alpha-expansion from the held labels on the held network:
+    /// `alpha_expansion`'s cycle, move for move. Each label's cut starts from
+    /// the flow its last cut in this run ended on, and no flow is carried
+    /// between runs, as a network laid out per run does. A move is kept where
+    /// its energy change is negative; a cycle counts where the energy fell by
+    /// more than `1e-12`. With `then_icm`, index-order ICM of at most
+    /// `icm_iterations` sweeps follows in the same call.
+    ///
+    /// # Errors
+    /// Returns `Err` where the network is not held or a site allows no label.
+    pub fn expand_held(
+        &mut self,
+        max_iterations: usize,
+        then_icm: bool,
+        icm_iterations: usize,
+    ) -> Result<Expanded, String> {
+        let penalized = self.penalized()?;
+        let (n_nodes, q) = (self.held.n_nodes, self.held.n_states);
+        let Some(cut) = self.cut.as_mut() else {
+            return Err("the expansion's network is not held".to_string());
+        };
+        cut.forget();
+        let values: &[f64] = penalized.as_deref().unwrap_or(&self.held.field);
+        let graph = Graph {
+            field: values,
+            n_states: q,
+            offsets: &self.held.offsets,
+            neighbours: &self.held.neighbours,
+            couplings: &self.held.couplings,
+            directed: self.held.directed,
+        };
+        let mut labels: Vec<usize> = match &self.labels {
+            Labels::Narrow(held) => held.iter().map(|&s| s as usize).collect(),
+            Labels::Wide(held) => held.iter().map(|&s| s as usize).collect(),
+        };
+        // `_infinite_capacity`: no cut pays it.
+        let pinned = 1.0
+            + values.iter().map(|v| v.abs()).sum::<f64>()
+            + 0.5 * self.held.couplings.iter().sum::<f64>();
+        let mut proposed = labels.clone();
+        let mut changed: Vec<u32> = Vec::with_capacity(n_nodes);
+        let mut moved = vec![false; n_nodes];
+        let mut held = graph.energy(&labels);
+        let mut current = held;
+        let (mut moves, mut cycles, mut converged) = (0usize, 0usize, false);
+        for cycle in 1..=max_iterations {
+            cycles = cycle;
+            let mut improved = false;
+            for alpha in 0..q {
+                cut.fill_expansion(values, q, &labels, alpha, pinned);
+                let side = cut.solve(Some(alpha));
+                changed.clear();
+                for node in 0..n_nodes {
+                    proposed[node] = if side[node] { labels[node] } else { alpha };
+                    moved[node] = proposed[node] != labels[node];
+                    if moved[node] {
+                        changed.push(node as u32);
+                    }
+                }
+                if !changed.is_empty() {
+                    let change = cut.energy_change(values, q, &labels, &proposed, &changed, &moved);
+                    let candidate = held + change;
+                    if candidate < held {
+                        std::mem::swap(&mut labels, &mut proposed);
+                        held = candidate;
+                    }
+                    for &node in &changed {
+                        moved[node as usize] = false;
+                    }
+                }
+                if held < current - 1e-12 {
+                    current = held;
+                    improved = true;
+                    moves += 1;
+                }
+            }
+            if !improved {
+                converged = true;
+                break;
+            }
+        }
+        match &mut self.labels {
+            Labels::Narrow(held) => {
+                for (slot, &s) in held.iter_mut().zip(&labels) {
+                    *slot = s as u8;
+                }
+            }
+            Labels::Wide(held) => {
+                for (slot, &s) in held.iter_mut().zip(&labels) {
+                    *slot = s as u32;
+                }
+            }
+        }
+        let icm = if then_icm {
+            let ask = Descend {
+                order: INDEX,
+                min_sites: 0,
+                policy: UNIFORM,
+                floor_at: AT_SWEEP,
+                max_iterations: icm_iterations,
+                skip_clean: true,
+            };
+            let (sweeps, stop, _) = self.descend(&ask, 0)?;
+            Some((sweeps, stop))
+        } else {
+            None
+        };
+        Ok(Expanded {
+            cycles,
+            moves,
+            converged,
+            icm,
+        })
+    }
+
+    /// TRW-S on the held field and chain layout.
+    ///
+    /// # Errors
+    /// Returns `Err` where the chain layout is not held.
+    pub fn trws_held(&mut self, max_iterations: usize, tolerance: f64) -> Result<TrwsRun, String> {
+        let q = self.held.n_states;
+        let Some(chains) = self.chains.as_mut() else {
+            return Err("the chain layout is not held".to_string());
+        };
+        Ok(chains.run(&self.held.field, q, max_iterations, tolerance))
     }
 
     /// The anneal and its polish on the held graph: [`potts_loop_impl`] on
@@ -979,6 +1333,7 @@ impl PottsProblem {
                 offsets: &self.held.offsets,
                 neighbours: &self.held.neighbours,
                 couplings: &self.held.couplings,
+                directed: self.held.directed,
             };
             self.buffers.dirty.fill(true);
             status(
@@ -1012,13 +1367,14 @@ impl PottsProblem {
     /// field; `compact=False` keeps `u32` labels (the general path, for
     /// measurement).
     #[new]
-    #[pyo3(signature = (offsets, neighbours, couplings, field, compact = true))]
+    #[pyo3(signature = (offsets, neighbours, couplings, field, compact = true, directed = false))]
     fn py_new(
         offsets: PyReadonlyArray1<'_, i64>,
         neighbours: PyReadonlyArray1<'_, i64>,
         couplings: PyReadonlyArray1<'_, f64>,
         field: PyReadonlyArray2<'_, f64>,
         compact: bool,
+        directed: bool,
     ) -> PyResult<Self> {
         let offsets = offsets.as_slice()?;
         let (values, n_states) = field_rows(&field, offsets.len().saturating_sub(1))?;
@@ -1029,8 +1385,147 @@ impl PottsProblem {
             values,
             n_states,
             compact,
+            directed,
         )
         .map_err(PyValueError::new_err)
+    }
+
+    /// Whether the rows are a directed adjacency.
+    #[getter]
+    fn directed(&self) -> bool {
+        self.held.directed
+    }
+
+    /// Whether the expansion's network is held.
+    #[getter]
+    fn cut_held(&self) -> bool {
+        self.holds_cut()
+    }
+
+    /// Whether TRW-S's chain layout is held.
+    #[getter]
+    fn chains_held(&self) -> bool {
+        self.holds_chains()
+    }
+
+    /// Lay out the expansion's network over `first[e] -- second[e]` at
+    /// `coupling[e]` (`PottsGraph.endpoints`), once.
+    fn hold_cut(
+        &mut self,
+        first: PyReadonlyArray1<'_, i64>,
+        second: PyReadonlyArray1<'_, i64>,
+        coupling: PyReadonlyArray1<'_, f64>,
+    ) -> PyResult<()> {
+        let first = crate::maxflow::node_indices(first.as_slice()?)?;
+        let second = crate::maxflow::node_indices(second.as_slice()?)?;
+        self.set_cut(&first, &second, coupling.as_slice()?)
+            .map_err(PyValueError::new_err)
+    }
+
+    /// Alpha-expansion from `start`, then index ICM where `then_icm`: the
+    /// labelling, its energy, the cycles, the moves, whether the expansion
+    /// converged, and the ICM's sweeps and stop code (`0, 0` without it).
+    #[pyo3(signature = (start, max_iterations, then_icm = false, icm_iterations = 200))]
+    #[allow(clippy::type_complexity)]
+    fn alpha_expansion<'py>(
+        &mut self,
+        py: Python<'py>,
+        start: PyReadonlyArray1<'_, i64>,
+        max_iterations: usize,
+        then_icm: bool,
+        icm_iterations: usize,
+    ) -> PyResult<(
+        Bound<'py, PyArray1<i64>>,
+        f64,
+        usize,
+        usize,
+        bool,
+        usize,
+        u8,
+    )> {
+        let start = start.as_slice()?;
+        if start.is_empty() {
+            // The field's argmax, `alpha_expansion`'s default start.
+            self.argmax_held();
+        } else {
+            self.load(start).map_err(PyValueError::new_err)?;
+        }
+        let ran = py
+            .detach(|| self.expand_held(max_iterations, then_icm, icm_iterations))
+            .map_err(PyValueError::new_err)?;
+        let value = self.held_energy();
+        let (sweeps, stop) = ran.icm.unwrap_or((0, CONVERGED));
+        Ok((
+            self.unload().into_pyarray(py),
+            value,
+            ran.cycles,
+            ran.moves,
+            ran.converged,
+            sweeps,
+            stop,
+        ))
+    }
+
+    /// Hold `sal.search.trws.chain_layout`'s arrays, `ends` flattened, once.
+    #[allow(clippy::too_many_arguments)]
+    fn hold_chains(
+        &mut self,
+        offsets: PyReadonlyArray1<'_, i64>,
+        slots: PyReadonlyArray1<'_, i64>,
+        neighbours: PyReadonlyArray1<'_, i64>,
+        ends: PyReadonlyArray1<'_, i64>,
+        coupling: PyReadonlyArray1<'_, f64>,
+        weight: PyReadonlyArray1<'_, f64>,
+        chain_offsets: PyReadonlyArray1<'_, i64>,
+        chain_heads: PyReadonlyArray1<'_, i64>,
+        chain_edges: PyReadonlyArray1<'_, i64>,
+    ) -> PyResult<()> {
+        let chains = Chains::build(
+            self.held.n_nodes,
+            self.held.n_states,
+            offsets.as_slice()?,
+            slots.as_slice()?,
+            neighbours.as_slice()?,
+            ends.as_slice()?,
+            coupling.as_slice()?,
+            weight.as_slice()?,
+            chain_offsets.as_slice()?,
+            chain_heads.as_slice()?,
+            chain_edges.as_slice()?,
+        )
+        .map_err(PyValueError::new_err)?;
+        self.set_chains(chains);
+        Ok(())
+    }
+
+    /// TRW-S from zero messages: the kept labelling, its decoded energy, the
+    /// bound trace and whether it converged.
+    #[allow(clippy::type_complexity)]
+    fn trws<'py>(
+        &mut self,
+        py: Python<'py>,
+        max_iterations: usize,
+        tolerance: f64,
+    ) -> PyResult<(
+        Bound<'py, PyArray1<i64>>,
+        f64,
+        Bound<'py, PyArray1<f64>>,
+        bool,
+    )> {
+        if max_iterations < 1 || tolerance.is_nan() || tolerance < 0.0 {
+            return Err(PyValueError::new_err(format!(
+                "max_iterations must be >= 1 and tolerance >= 0, got {max_iterations} and {tolerance}"
+            )));
+        }
+        let ran = py
+            .detach(|| self.trws_held(max_iterations, tolerance))
+            .map_err(PyValueError::new_err)?;
+        Ok((
+            ran.labelling.into_pyarray(py),
+            ran.energy,
+            ran.trace.into_pyarray(py),
+            ran.converged,
+        ))
     }
 
     /// Sites.
@@ -1052,7 +1547,7 @@ impl PottsProblem {
     }
 
     /// Bytes held per structure: adjacency, couplings, field, labels, buffers.
-    fn footprint(&self) -> [usize; 5] {
+    fn footprint(&self) -> [usize; 7] {
         self.bytes_held()
     }
 
@@ -1126,8 +1621,7 @@ impl PottsProblem {
     ) -> PyResult<(Bound<'py, PyArray1<i64>>, f64, usize)> {
         self.load(labelling.as_slice()?)
             .map_err(PyValueError::new_err)?;
-        let divisor = if halved { 4.0 } else { 2.0 };
-        let (rounds, value) = py.detach(|| self.merge_held(divisor, adjacent));
+        let (rounds, value) = py.detach(|| self.merge_held(halved, adjacent));
         Ok((self.unload().into_pyarray(py), value, rounds))
     }
 
@@ -1149,6 +1643,11 @@ impl PottsProblem {
         merge: bool,
     ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
         let state = state.as_slice_mut()?;
+        if self.held.directed {
+            return Err(PyValueError::new_err(
+                "the anneal's conditional needs symmetric rows; this problem holds directed ones",
+            ));
+        }
         if state.len() != self.held.n_nodes {
             return Err(PyValueError::new_err("state has the wrong number of sites"));
         }
@@ -1182,7 +1681,7 @@ mod tests {
     fn path(field: Vec<f64>, q: usize) -> PottsProblem {
         let offsets = [0, 1, 3, 5, 6];
         let neighbours = [1, 0, 2, 1, 3, 2];
-        PottsProblem::build(&offsets, &neighbours, &[1.0; 6], field, q, true).unwrap()
+        PottsProblem::build(&offsets, &neighbours, &[1.0; 6], field, q, true, false).unwrap()
     }
 
     fn ask(order: u8, skip_clean: bool) -> Descend {
@@ -1234,10 +1733,10 @@ mod tests {
         let field = vec![0.0, -5.0, 0.0, -5.0, 0.0, 0.3, 0.0, 0.3];
         let mut problem = path(field, 2);
         problem.load(&[0, 0, 1, 1]).unwrap();
-        let (rounds, _) = problem.merge_held(2.0, false);
+        let (rounds, _) = problem.merge_held(false, false);
         assert_eq!((problem.unload(), rounds), (vec![0, 0, 0, 0], 2));
         problem.load(&[0, 0, 1, 1]).unwrap();
-        let (rounds, _) = problem.merge_held(4.0, false);
+        let (rounds, _) = problem.merge_held(true, false);
         assert_eq!((problem.unload(), rounds), (vec![0, 0, 1, 1], 1));
     }
 

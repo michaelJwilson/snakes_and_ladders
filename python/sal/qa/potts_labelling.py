@@ -28,6 +28,14 @@ start, and reports what each arm reaches and what it costs.
   single-site heat bath on :data:`~sal.search.ground_state.ANNEAL_SCHEDULE`
   over :data:`ANNEAL_SWEEPS` sweeps, polished by ``Polish.ICM_MERGE``.
 
+**The calls.** ``icm`` (the descent of ``icm+floor-smallest`` and
+``icm+merge`` too), ``ae+icm``, ``trws``, the merge and the anneal run on one
+:class:`~sal.search.potts_problem.PottsProblem` per instance, which returns
+the functions' labellings bitwise and crosses once per solve. ``icm-floor``
+and the smallest-first floor stay on the functions: the uniform floor's
+draws come from NumPy's stream there and a ChaCha8 stream in the held
+problem, the same law on other draws.
+
 **Per arm.** Energy and its gap to the TRW-S bound; sites unlike the planted
 labelling under the best renaming
 (:func:`~sal.search.spatio_sequential.label_accuracy`); the iterations and
@@ -57,6 +65,7 @@ import tracemalloc
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from functools import cached_property
 from types import FrameType
 from typing import Any
 
@@ -66,16 +75,15 @@ from sal.backend import Backend
 from sal.cost import Cost
 from sal.opt.budget import Budget
 from sal.opt.termination import Termination
-from sal.sample.potts_mcmc import PottsMove, Recolour, anneal_potts
-from sal.sample.potts_mcmc.chains import merge_labels
+from sal.sample.potts_mcmc import PottsMove, Recolour
 from sal.sample.schedule import Polish
-from sal.search.alpha_expansion import alpha_expansion
 from sal.search.ground_state import ANNEAL_SCHEDULE, Problem
 from sal.search.icm import (
     FloorPolicy,
     iterated_conditional_modes,
     merge_small_labels,
 )
+from sal.search.potts_problem import PottsProblem
 from sal.search.spatio_sequential import label_accuracy
 from sal.search.trws import trws
 from sal.sim.fixtures import fixture
@@ -151,6 +159,11 @@ class Instance:
     bound: float
     trws_seconds: float
 
+    @cached_property
+    def problem(self) -> PottsProblem:
+        """The cell held in Rust, built once and shared by every arm."""
+        return PottsProblem(self.cell.graph, self.cell.field)
+
 
 def instance(tier: str = "stress", variant: str | None = None) -> Instance:
     """The ``potts_labelling`` cell at ``tier``, or its ``variant``, with its floor and TRW-S bound.
@@ -186,13 +199,14 @@ def start_of(cell: PlantedPotts, name: str) -> np.ndarray:
     raise ValueError(msg)
 
 
-def _icm(cell: PlantedPotts, start: np.ndarray, min_sites: int = 0) -> Solved:
-    run = iterated_conditional_modes(
-        cell.graph,
-        cell.field,
-        np.random.default_rng([SEED, 2]),
-        start=start,
-        min_sites=min_sites,
+def _icm(work: Instance, start: np.ndarray, min_sites: int = 0) -> Solved:
+    rng = np.random.default_rng([SEED, 2])
+    run = (
+        work.problem.icm(rng, start=start)
+        if min_sites == 0
+        else iterated_conditional_modes(
+            work.cell.graph, work.cell.field, rng, start=start, min_sites=min_sites
+        )
     )
     return Solved(np.asarray(run.labelling), run.sweeps, run.termination)
 
@@ -207,15 +221,15 @@ def _argmax(work: Instance, start: np.ndarray) -> Solved:
 
 
 def _plain(work: Instance, start: np.ndarray) -> Solved:
-    return _icm(work.cell, start)
+    return _icm(work, start)
 
 
 def _floored(work: Instance, start: np.ndarray) -> Solved:
-    return _icm(work.cell, start, work.min_sites)
+    return _icm(work, start, work.min_sites)
 
 
 def _smallest_first(work: Instance, start: np.ndarray) -> Solved:
-    descended = _icm(work.cell, start)
+    descended = _icm(work, start)
     run = merge_small_labels(
         work.cell.graph,
         work.cell.field,
@@ -230,41 +244,36 @@ def _smallest_first(work: Instance, start: np.ndarray) -> Solved:
 
 
 def _expansion(work: Instance, start: np.ndarray) -> Solved:
-    expanded = alpha_expansion(work.cell.graph, work.cell.field, start=start)
-    descended = _icm(work.cell, np.asarray(expanded.labelling))
+    run = work.problem.alpha_expansion(start=start, then_icm=True)
     return Solved(
-        descended.labelling,
-        expanded.cycles + descended.iterations,
-        descended.termination,
+        np.asarray(run.labelling),
+        run.cycles + run.termination.iterations,
+        run.termination,
     )
 
 
 def _trws(work: Instance, start: np.ndarray) -> Solved:
     del start
-    run = trws(work.cell.graph, work.cell.field)
+    run = work.problem.trws()
     return Solved(
         np.asarray(run.labelling), run.termination.iterations, run.termination
     )
 
 
 def _merged(work: Instance, start: np.ndarray) -> Solved:
-    descended = _icm(work.cell, start)
-    labels, rounds = merge_labels(
-        work.cell.graph, np.asarray(work.cell.field), descended.labelling
-    )
+    descended = _icm(work, start)
+    merged = work.problem.merge(descended.labelling)
     return Solved(
-        labels,
-        descended.iterations + rounds,
-        Termination.after(rounds, converged=True),
+        np.asarray(merged.labelling),
+        descended.iterations + merged.sweeps,
+        merged.termination,
     )
 
 
 def _annealed(work: Instance, start: np.ndarray) -> Solved:
     graph = work.cell.graph
     visits = Problem(graph, work.cell.field, work.cell.n_states).visits_per_sweep
-    run = anneal_potts(
-        graph,
-        work.cell.field,
+    run = work.problem.anneal(
         ANNEAL_SCHEDULE.build(ANNEAL_SWEEPS),
         np.random.default_rng([SEED, 4]),
         move=(PottsMove.SINGLE_SITE,),
@@ -273,7 +282,7 @@ def _annealed(work: Instance, start: np.ndarray) -> Solved:
         budget=Budget(Cost.SITE_VISITS, ANNEAL_SWEEPS * visits),
         polish=Polish.ICM_MERGE,
     )
-    return Solved(np.asarray(run.best), run.n_sweeps, run.termination)
+    return Solved(np.asarray(run.labelling), run.sweeps, run.termination)
 
 
 #: Every arm by name, in the order the table prints them.
@@ -337,6 +346,8 @@ def measure(work: Instance, arm: str, start: str) -> Row:
     """
     solve = ARMS[arm]
     begin = start_of(work.cell, start)
+    # Built once per instance, outside every arm's trace, count and wall.
+    _ = work.problem
     tracemalloc.start()
     solve(work, begin.copy())
     _, peak = tracemalloc.get_traced_memory()

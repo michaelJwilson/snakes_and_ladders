@@ -626,6 +626,9 @@ class PottsProblem:
     n_nodes: int
     n_states: int
     narrow_labels: bool
+    directed: bool
+    cut_held: bool
+    chains_held: bool
     def __init__(
         self,
         offsets: np.ndarray,
@@ -633,7 +636,33 @@ class PottsProblem:
         couplings: np.ndarray,
         field: np.ndarray,
         compact: bool = True,
+        directed: bool = False,
     ) -> None: ...
+    def hold_cut(
+        self, first: np.ndarray, second: np.ndarray, coupling: np.ndarray
+    ) -> None: ...
+    def alpha_expansion(
+        self,
+        start: np.ndarray,
+        max_iterations: int,
+        then_icm: bool = False,
+        icm_iterations: int = 200,
+    ) -> tuple[np.ndarray, float, int, int, bool, int, int]: ...
+    def hold_chains(
+        self,
+        offsets: np.ndarray,
+        slots: np.ndarray,
+        neighbours: np.ndarray,
+        ends: np.ndarray,
+        coupling: np.ndarray,
+        weight: np.ndarray,
+        chain_offsets: np.ndarray,
+        chain_heads: np.ndarray,
+        chain_edges: np.ndarray,
+    ) -> None: ...
+    def trws(
+        self, max_iterations: int, tolerance: float
+    ) -> tuple[np.ndarray, float, np.ndarray, bool]: ...
     def footprint(self) -> list[int]: ...
     def set_field(self, field: np.ndarray) -> None: ...
     def energy(self, labelling: np.ndarray) -> float: ...
