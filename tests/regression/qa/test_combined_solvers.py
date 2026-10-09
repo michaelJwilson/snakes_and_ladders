@@ -72,6 +72,7 @@ def _single_thread() -> Iterator[None]:
     torch.set_num_threads(previous)
 
 
+@pytest.mark.smoke
 @pytest.mark.snapshot
 def test_the_untimed_table_on_the_ci_cells_is_conserved() -> None:
     found = study.from_fixtures("ci")
@@ -79,6 +80,7 @@ def test_the_untimed_table_on_the_ci_cells_is_conserved() -> None:
     assert study.table(study.summarize(runs), timed=False) == TABLE
 
 
+@pytest.mark.smoke
 @pytest.mark.patch
 @pytest.mark.parametrize(
     "move", [PottsMove.SINGLE_SITE, PottsMove.WOLFF, PottsMove.SWENDSEN_WANG], ids=str
