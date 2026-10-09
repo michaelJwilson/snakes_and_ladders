@@ -373,6 +373,7 @@ struct Workspace {
     ahead: Vec<f64>,
     switched: Vec<f64>,
     scratch: Vec<f64>,
+    terms: Vec<f64>,
 }
 
 impl Workspace {
@@ -386,6 +387,7 @@ impl Workspace {
             ahead: vec![0.0; n_states],
             switched: vec![0.0; if switched { n_states * n_states } else { 0 }],
             scratch: vec![0.0; if kronecker { n_states } else { 0 }],
+            terms: vec![0.0; n_states],
         }
     }
 }
@@ -443,9 +445,14 @@ fn posteriors_block(
         ahead,
         switched,
         scratch,
+        terms,
     } = work;
 
-    counts.fill(f64::NEG_INFINITY);
+    // The counts are summed in probability space and logged once, at the
+    // block's end (issue #1410): each pair is a posterior probability, at
+    // most one, so the sum neither overflows nor loses a term a `log_add`
+    // would keep.
+    counts.fill(0.0);
     let mut start = first;
     for (segment, &length) in lengths.iter().enumerate() {
         let base = start * n_states;
@@ -522,7 +529,7 @@ fn posteriors_block(
                         let pair =
                             forward[step * n_states + from] + factors.entry(from, to) + ahead[to]
                                 - total_evidence;
-                        counts[row + to] = log_add(counts[row + to], pair);
+                        counts[row + to] += pair.exp();
                     }
                     gamma[local + step * n_states + from] =
                         forward[step * n_states + from] + beta[from] - total_evidence;
@@ -537,21 +544,39 @@ fn posteriors_block(
                 n_states,
                 switched,
             );
+            // Each row's terms less their maximum, exponentiated once: the
+            // carried `beta` is one logarithm of their sum and the pair
+            // counts take them in probability space (issue #1410), where a
+            // `log_add` per term took an exponential and a `ln_1p` each.
             for from in 0..n_states {
                 let row = from * n_states;
-                let mut carried = f64::NEG_INFINITY;
+                let mut high = f64::NEG_INFINITY;
                 for to in 0..n_states {
-                    let pair = forward[step * n_states + from] + kernel[row + to] + ahead[to]
-                        - total_evidence;
-                    counts[row + to] = log_add(counts[row + to], pair);
-                    carried = log_add(carried, kernel[row + to] + ahead[to]);
+                    let term = kernel[row + to] + ahead[to];
+                    terms[to] = term;
+                    high = high.max(term);
                 }
+                let carried = if high == f64::NEG_INFINITY {
+                    f64::NEG_INFINITY
+                } else {
+                    let scale = (forward[step * n_states + from] + high - total_evidence).exp();
+                    let mut sum = 0.0;
+                    for to in 0..n_states {
+                        let one = (terms[to] - high).exp();
+                        sum += one;
+                        counts[row + to] += scale * one;
+                    }
+                    high + sum.ln()
+                };
                 beta[from] = carried;
                 gamma[local + step * n_states + from] =
                     forward[step * n_states + from] + carried - total_evidence;
             }
         }
         start += length;
+    }
+    for one in counts.iter_mut() {
+        *one = one.ln();
     }
 }
 

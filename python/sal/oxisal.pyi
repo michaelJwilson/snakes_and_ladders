@@ -351,6 +351,7 @@ def negative_binomial_dispersions_exposed(
     mean: np.ndarray,
     lower: np.ndarray,
     upper: np.ndarray,
+    start: np.ndarray,
     tolerance: float,
     value: np.ndarray,
     at_boundary: np.ndarray,

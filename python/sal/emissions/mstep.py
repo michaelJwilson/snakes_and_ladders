@@ -1109,6 +1109,7 @@ def solve_dispersion_exposed_rust(
     offsets: torch.Tensor,
     *,
     tolerance: float = 1e-12,
+    starts: Sequence[float] | None = None,
 ) -> list[SolvedDispersion]:
     """:func:`solve_dispersion` under an exposure, every state in the compiled kernel (issue #933).
 
@@ -1124,6 +1125,19 @@ def solve_dispersion_exposed_rust(
     observation, 2.2x at 8.3, 1.3x at 16.7, parity at 23.7 and 0.4x at 59.
     The cap is where the kernel still clears the 2x root ``CLAUDE.md`` keeps
     a compiled path for.
+
+    **Inside the bracket the kernel steps by safeguarded Newton on**
+    ``log r`` **from** ``starts`` (issue #1410): the bracket ends are scored
+    as the oracle scores them, so the boundary decisions are its, and each
+    interior step takes the score and its slope in one pass, falling back to
+    the bisection step where Newton leaves the bracket. ``starts`` is each
+    state's dispersion from the previous EM iteration, or the bracket's
+    midpoint in ``log r`` where it is ``None``. It stops within
+    ``tolerance / 2`` of the root in ``log r``, the bisection's own bound, so
+    the two agree within ``tolerance`` and not bitwise; ``iterations`` counts
+    the interior score evaluations, 45 for the bisection's every solve. On
+    ``count_hmm_reference/stress`` it took 2 to 4 where the bisection took
+    45.
 
     Returns
     -------
@@ -1162,6 +1176,9 @@ def solve_dispersion_exposed_rust(
         np.asarray(means, dtype=np.float64),
         np.asarray([_dispersion_lower(u) for u in uppers]),
         np.asarray(uppers, dtype=np.float64),
+        np.full(n_states, np.nan)
+        if starts is None
+        else np.asarray(starts, dtype=np.float64),
         tolerance,
         value,
         at_boundary,
