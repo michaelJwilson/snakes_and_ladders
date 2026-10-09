@@ -23,6 +23,7 @@ pub mod coded_emission;
 pub mod count_hmm;
 pub mod count_mixture;
 pub mod count_mstep;
+pub mod count_pair_hmm;
 pub mod count_pairs;
 pub mod coupled;
 pub mod dense_emission;
@@ -113,6 +114,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ragged_sample::ragged_sample_paths, m)?)?;
     m.add_function(wrap_pyfunction!(max_flow, m)?)?;
     m.add_class::<LatticeCut>()?;
+    m.add_class::<count_pair_hmm::PyCountPairHmm>()?;
     m.add_function(wrap_pyfunction!(ising_ground_state, m)?)?;
     m.add_function(wrap_pyfunction!(ising_ground_states, m)?)?;
     #[cfg(feature = "sandbox")]

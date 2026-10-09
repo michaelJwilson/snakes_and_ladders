@@ -337,6 +337,8 @@ whether or not it has members yet.
 
 .. automodule:: sal.opt.hmm.estimation
 
+.. automodule:: sal.opt.hmm.count_pair
+
 .. automodule:: sal.opt.hmm.jax
    :members:
 

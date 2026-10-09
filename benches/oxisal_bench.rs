@@ -15,6 +15,7 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use oxisal::count_mstep::{solve_exposed_dispersion, Exposed};
+use oxisal::count_pair_hmm::{Data, Model, Options, Params, Solver};
 use oxisal::coupled::{class_posteriors_into, external_field_into, CoupledShape, EmissionTables};
 use oxisal::double;
 use oxisal::maxflow::{max_flow_impl, FlowNetwork};
@@ -488,6 +489,64 @@ fn bench_ragged_posteriors(c: &mut Criterion) {
     }
 }
 
+/// One Baum-Welch iteration of the unphased count-pair HMM (issue #1412) at the
+/// `count_hmm_reference` `downstream` variant's size, 10,240 positions in segments of 128 and
+/// seven states, per-state and tied, under each M-step solver. Counts are uniform draws, not the
+/// cell, so the numbers rank the paths and the PR's table carries the fixture's.
+fn bench_count_pair_hmm(c: &mut Criterion) {
+    let (n, k) = (10_240_usize, 7_usize);
+    let mut rng = SplitMix64::new(1412);
+    let exposures: Vec<f64> = (0..n).map(|_| 0.5 + 1.5 * unit(&mut rng)).collect();
+    let counts: Vec<u32> = exposures
+        .iter()
+        .map(|e| (e * 400.0 * (0.5 + unit(&mut rng))) as u32)
+        .collect();
+    let trials: Vec<u32> = (0..n)
+        .map(|_| 1 + (150.0 * unit(&mut rng)) as u32)
+        .collect();
+    let successes: Vec<u32> = trials
+        .iter()
+        .map(|&t| (f64::from(t) * unit(&mut rng)) as u32)
+        .collect();
+    let data = Data::new(counts, exposures, successes, trials, vec![128; n / 128]).unwrap();
+    let stay: f64 = 1.0 - 1e-7;
+    let log_transition: Vec<f64> = (0..k * k)
+        .map(|i| {
+            if i % (k + 1) == 0 {
+                stay.ln()
+            } else {
+                ((1.0 - stay) / 6.0).ln()
+            }
+        })
+        .collect();
+    let params = Params {
+        dispersion: vec![2.0; k],
+        mean: (0..k).map(|s| 300.0 * 1.2_f64.powi(s as i32 - 3)).collect(),
+        alpha: (0..k).map(|s| 1000.0 * (0.1 + 0.12 * s as f64)).collect(),
+        beta: (0..k).map(|s| 1000.0 * (0.9 - 0.12 * s as f64)).collect(),
+        log_initial: vec![-(k as f64).ln(); k],
+        log_transition,
+    };
+    for (name, tied, solver) in [
+        ("per_state_newton", false, Solver::Newton),
+        ("tied_newton", true, Solver::Newton),
+        ("tied_lbfgs", true, Solver::Lbfgs),
+    ] {
+        let options = Options {
+            tied,
+            fit_initial: false,
+            fit_transition: false,
+        };
+        c.bench_function(&format!("count_pair_hmm/{name}/{n}"), |b| {
+            b.iter_batched(
+                || Model::new(data.clone(), params.clone(), options).unwrap(),
+                |mut model| model.fit(1, 0.0, 0.0, solver).unwrap(),
+                criterion::BatchSize::LargeInput,
+            );
+        });
+    }
+}
+
 #[cfg(feature = "sandbox")]
 criterion_group!(
     benches,
@@ -499,7 +558,8 @@ criterion_group!(
     bench_max_flow_kernels,
     bench_pruning_gradient,
     bench_exposed_dispersion,
-    bench_ragged_posteriors
+    bench_ragged_posteriors,
+    bench_count_pair_hmm
 );
 #[cfg(not(feature = "sandbox"))]
 criterion_group!(
@@ -510,6 +570,7 @@ criterion_group!(
     bench_class_posteriors,
     bench_max_flow,
     bench_exposed_dispersion,
-    bench_ragged_posteriors
+    bench_ragged_posteriors,
+    bench_count_pair_hmm
 );
 criterion_main!(benches);
