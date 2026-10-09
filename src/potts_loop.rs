@@ -772,6 +772,14 @@ pub fn potts_loop<'py>(
     let ran = py
         .detach(|| potts_loop_impl(state, &lattice, &plan, seed))
         .map_err(PyValueError::new_err)?;
+    ran_dict(py, ran)
+}
+
+/// A run's [`Ran`] as the dict `potts_loop` returns.
+///
+/// # Errors
+/// Where a dict entry cannot be set.
+pub fn ran_dict(py: Python<'_>, ran: Ran) -> PyResult<Bound<'_, pyo3::types::PyDict>> {
     let out = pyo3::types::PyDict::new(py);
     out.set_item("best", PyArray1::from_vec(py, ran.best))?;
     out.set_item("best_energy", ran.best_energy)?;

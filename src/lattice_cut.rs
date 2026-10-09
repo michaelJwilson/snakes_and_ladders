@@ -336,6 +336,78 @@ impl LatticeCut {
         side
     }
 
+    /// Drop every kept flow, so the next cut of each key starts from zero,
+    /// as a network laid out for one run does (issue #1413).
+    pub fn forget(&mut self) {
+        self.kept.iter_mut().for_each(|kept| *kept = None);
+    }
+
+    /// `E(after) - E(before)` over the lattice's edges for the sites in
+    /// `changed` (ascending, `moved[n]` true for each): the field terms of
+    /// those sites, then each edge they touch once, in arc order (issue
+    /// #1413). `values` is the field as a log-weight.
+    #[must_use]
+    pub fn energy_change(
+        &self,
+        values: &[f64],
+        n_states: usize,
+        before: &[usize],
+        after: &[usize],
+        changed: &[u32],
+        moved: &[bool],
+    ) -> f64 {
+        let (mut gained, mut lost) = (0.0_f64, 0.0_f64);
+        for &node in changed {
+            let node = node as usize;
+            gained += values[node * n_states + after[node]];
+            lost += values[node * n_states + before[node]];
+        }
+        let mut bonds = 0.0_f64;
+        for &node in changed {
+            let node = node as usize;
+            for arc in self.start[node]..self.start[node + 1] {
+                let arc = arc as usize;
+                let other = self.head[arc] as usize;
+                if moved[other] && other < node {
+                    continue;
+                }
+                let agree = f64::from(u8::from(after[node] == after[other]))
+                    - f64::from(u8::from(before[node] == before[other]));
+                bonds += self.coupling[self.edge_of_arc[arc] as usize] * agree;
+            }
+        }
+        -(gained - lost) - bonds
+    }
+
+    /// The heap bytes the network and its kept flows hold.
+    #[must_use]
+    pub fn bytes(&self) -> usize {
+        let words = self.start.capacity()
+            + self.head.capacity()
+            + self.sister.capacity()
+            + self.first.capacity()
+            + self.second.capacity()
+            + self.parent.capacity()
+            + self.distance.capacity()
+            + 2 * self.arc_of_edge.capacity()
+            + self.edge_of_arc.capacity()
+            + self.local.capacity()
+            + self.active.capacity()
+            + self.orphans.capacity();
+        let doubles = self.coupling.capacity()
+            + self.residual.capacity()
+            + self.terminal.capacity()
+            + self.capacity.capacity()
+            + self.stamp.capacity()
+            + self
+                .kept
+                .iter()
+                .flatten()
+                .map(|kept| kept.flow.capacity())
+                .sum::<usize>();
+        4 * words + 8 * doubles + self.sink_tree.capacity() + self.queued.capacity()
+    }
+
     /// Place `key`'s kept flow on the new capacities. An edge whose flow now
     /// exceeds its capacity is clamped, and the excess is returned through
     /// the two ends' terminals: a terminal's net flow is unbounded in either

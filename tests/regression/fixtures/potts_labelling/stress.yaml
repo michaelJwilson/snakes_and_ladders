@@ -1,0 +1,48 @@
+model: potts-reference
+oracle: none
+
+# The Potts labelling cell (issue #1413): a downstream package's labelling
+# step, mirrored from a seed; no downstream data is committed. Read off the
+# downstream stream's problems (six: five realizations of its study manifest,
+# two held out for calibration and three evaluated, at 3,000 sites, and one
+# development realization at 6,000): every site of degree 6 at unit weight on
+# one component (two at 6,000), coupling 1, q = 5 (4 on two), no forbidden
+# label, a floor of 50 sites; across the five at 3,000: the smallest planted
+# share 0.005 to 0.128 and the largest 0.37 to 0.64, the median top-two margin
+# 0.8 to 3.7 nats (its 10% quantile 0.1 to 0.6, its 90% 2.3 to 9.7), the
+# argmax unlike the planted label at 18% to 49% of sites, 301 to 400 of 9,000
+# edges unlike under the planting, the TRW-S decode at its bound within 3e-9,
+# and ICM from the argmax 6 to 223 nats above it. This file is the stream's
+# median problem: 3,000 sites on a periodic triangular lattice (degree 6),
+# q = 5, the median margin 1.7 nats (margin_ratio 1.7 / 6), log-normal about
+# it at scale 1.0, misled at 30%, the plane waves at 0.15 of their wavenumber
+# so the planted domains are few and large. Its variants span the stream.
+seed: 7
+shape: [50, 60]
+graph: triangular
+boundary: periodic
+n_states: 5
+coupling: 1.0
+shares: [0.006, 0.05, 0.15, 0.27, 0.524]
+margin_ratio: 0.2833
+margin_spread: 1.0
+mislead: 0.30
+jitter: 0.25
+frequency: 0.15
+planted_digest: 3a9ac9156c362b48
+
+# One factor or one corner at a time (PottsReferenceParams.variant).
+variants:
+  # the stream's easiest: median margin 3.7, argmax misled at 18%
+  easy: {margin_ratio: 0.6167, mislead: 0.18}
+  # the stream's hardest: median margin 0.8, argmax misled at 49%
+  hard: {margin_ratio: 0.1333, mislead: 0.45}
+  # the development realization: 6,000 sites in two components, q = 4,
+  # shares 0.090 / 0.189 / 0.335 / 0.386, median margin 10.4, misled at 1.2%
+  dev_6000:
+    shape: [100, 60]
+    components: 2
+    n_states: 4
+    shares: [0.0902, 0.1885, 0.3352, 0.3861]
+    margin_ratio: 1.7367
+    mislead: 0.012

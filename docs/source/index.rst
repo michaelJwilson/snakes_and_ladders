@@ -551,6 +551,9 @@ whether or not it has members yet.
 .. automodule:: sal.search.icm.numba
    :members:
 
+.. automodule:: sal.search.potts_problem
+   :members:
+
 .. automodule:: sal.search.trws
    :members:
 
@@ -634,6 +637,9 @@ whether or not it has members yet.
 .. automodule:: sal.external.hmm_inputs
    :members:
 
+.. automodule:: sal.external.stream
+   :members:
+
 .. automodule:: sal.external.hmc
    :members:
 
@@ -674,6 +680,9 @@ whether or not it has members yet.
    :members:
 
 .. automodule:: sal.validation.scripts.package
+   :members:
+
+.. automodule:: sal.validation.scripts.stream
    :members:
 
 .. automodule:: sal.validation.pymaxflow
@@ -862,10 +871,16 @@ whether or not it has members yet.
 .. automodule:: sal.qa.count_pair_hmm_anneal
    :members:
 
+.. automodule:: sal.qa.combined_solvers
+   :members:
+
 .. automodule:: sal.qa.hmm_fit_semantics
    :members:
 
 .. automodule:: sal.qa.known_ground_states
+   :members:
+
+.. automodule:: sal.qa.potts_labelling
    :members:
 
 .. automodule:: sal.scripts

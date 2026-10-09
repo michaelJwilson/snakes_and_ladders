@@ -151,6 +151,12 @@
     the wrong basin there, and the instance is bracketed below by the TRW-S
     bound and above by the planted energy rather than solved. At 3,000 sites
     TRW-S decodes a labelling at its own bound, 335 below the planted energy.
+  optimizers: >-
+    TRW-S wins here: on the 3,000-site labelling cell it decodes at its bound,
+    where ICM from the argmax stops 13.00 nats above it and alpha-expansion
+    then ICM 2.08 (experiment 040). `PottsProblem` runs ICM, the floor, the
+    merge, alpha-expansion and TRW-S in one crossing each, pinned bitwise to
+    the calls it replaces (issue #1413).
 
 "Low-density parity-check code, Gallager (3,6)":
   optimizers: >-
@@ -347,6 +353,9 @@ untested pairings:
     The instance exists to defeat descent, and what it is pinned against is
     descent. Separating a sampler from descent on it is the comparison it was
     declared for and is not yet run.
+  potts_reference / optimizers: >-
+    The optimizers are pinned on `potts_labelling`, the same model at the
+    downstream stream's size (issue #1413); this cell referees samplers.
   potts_lattice / surrogates: >-
     The relaxation is refereed against enumerated maximum cuts, which fixes
     the size at what enumeration reaches rather than at the declared one.

@@ -13,9 +13,18 @@ bitwise, so the study can move onto this fixture.
 
 **Draw order.** The plane-wave surface, the misled sites, the wrong labels and
 the jitter are drawn, in that order, from ``default_rng(seed)``: the order
-#1378 drew them in. A k-NN graph's points come from ``default_rng([seed, 1])``
-and the forbidden labels from ``default_rng([seed, 2])``, so a variant adding
-either leaves every other draw where it was.
+#1378 drew them in. A k-NN graph's points come from ``default_rng([seed, 1])``,
+the forbidden labels from ``default_rng([seed, 2])`` and the per-site margin
+factors from ``default_rng([seed, 3])``, so a variant adding any of them
+leaves every other draw where it was.
+
+**A spread margin** (issue #1413). With ``margin_spread > 0`` each site's
+margin is the declared one times ``exp(margin_spread * z)``, ``z`` standard
+normal: a log-normal margin whose median is the declared one, the heavy
+right tail a field summed over many observations carries. ``0``, the
+default, is the constant margin, bitwise. ``frequency`` scales every plane
+wave's wavenumber, so a value under one cuts fewer, larger domains; ``1``,
+the default, is bitwise the cell before it.
 
 **Variants.** ``stress.yaml`` declares ``variants``: a name, and the one
 factor that differs from the file's own instance (issue #1390's list).
@@ -151,6 +160,11 @@ class PottsReferenceParams:
     forbidden : float
         The fraction of sites at which one label, neither the planted nor the
         top two, is forbidden.
+    margin_spread : float
+        The log-scale of each site's margin factor; ``0`` keeps every margin
+        the declared one.
+    frequency : float
+        The factor on every plane wave's wavenumber.
     variants : Mapping[str, Mapping[str, Any]]
         One-factor variants by name, as the file declares them.
     """
@@ -169,6 +183,8 @@ class PottsReferenceParams:
     neighbours: int = 6
     components: int = 1
     forbidden: float = 0.0
+    margin_spread: float = 0.0
+    frequency: float = 1.0
     variants: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     declared: Mapping[str, Any] = field(default_factory=dict, compare=False)
     path: Path = field(default=Path(), compare=False)
@@ -214,6 +230,14 @@ class PottsReferenceParams:
             msg = f"{path}: {components} components do not divide {rows} rows"
             raise ValueError(msg)
         variants = declared.get("variants") or {}
+        spread = float(declared.get("margin_spread", 0.0))
+        if not spread >= 0.0:
+            msg = f"{path}: margin_spread must be >= 0, got {spread}"
+            raise ValueError(msg)
+        frequency = float(declared.get("frequency", 1.0))
+        if not frequency > 0.0:
+            msg = f"{path}: frequency must be > 0, got {frequency}"
+            raise ValueError(msg)
         return cls(
             seed=int(declared["seed"]),
             graph=graph,
@@ -229,6 +253,8 @@ class PottsReferenceParams:
             neighbours=int(declared.get("neighbours", 6)),
             components=components,
             forbidden=fractions["forbidden"],
+            margin_spread=spread,
+            frequency=frequency,
             variants={str(name): dict(entry) for name, entry in variants.items()},
             declared=dict(declared),
             path=path,
@@ -326,6 +352,8 @@ class PottsReferenceParams:
                 # #1378's arithmetic, operation for operation, so the stress
                 # tier is its cell bitwise.
                 argument = kr * first / rows + kc * second_axis / columns
+            if self.frequency != 1.0:
+                argument = self.frequency * argument
             surface += np.cos(2.0 * np.pi * argument + phase)
         cuts = np.quantile(surface, np.cumsum(self.shares)[:-1])
         planted = np.searchsorted(cuts, surface).astype(np.int64)
@@ -339,6 +367,12 @@ class PottsReferenceParams:
         sites = np.arange(n)
         values[sites, second] = 0.0
         values[sites, top] = margin
+        if self.margin_spread > 0.0:
+            factor = np.exp(
+                self.margin_spread
+                * np.random.default_rng([self.seed, 3]).normal(size=n)
+            )
+            values *= factor[:, None]
         values += rng.normal(0.0, self.jitter, size=values.shape)
         if self.forbidden > 0.0:
             draws = np.random.default_rng([self.seed, 2])

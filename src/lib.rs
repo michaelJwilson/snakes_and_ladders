@@ -41,6 +41,8 @@ pub mod metropolis;
 pub mod mixture_stream;
 pub mod potts;
 pub mod potts_loop;
+pub mod potts_problem;
+pub mod potts_trws;
 pub mod pruning;
 #[cfg(feature = "sandbox")]
 pub mod pruning_burn;
@@ -116,6 +118,7 @@ fn oxisal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<LatticeCut>()?;
     m.add_class::<count_pair_hmm::PyCountPairHmm>()?;
     m.add_class::<count_pair_hmm::PyPhasedCountPairHmm>()?;
+    m.add_class::<potts_problem::PottsProblem>()?;
     m.add_function(wrap_pyfunction!(ising_ground_state, m)?)?;
     m.add_function(wrap_pyfunction!(ising_ground_states, m)?)?;
     #[cfg(feature = "sandbox")]

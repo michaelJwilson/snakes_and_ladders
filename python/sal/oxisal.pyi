@@ -724,3 +724,77 @@ class PhasedCountPairHmm:
         self, posterior: np.ndarray, solver: str
     ) -> tuple[bool, bool, int, float, list[int], list[int]]: ...
     def viterbi(self) -> tuple[np.ndarray, np.ndarray]: ...
+
+class PottsProblem:
+    """One Potts problem held across solves (#1413): ``sal.search.potts_problem``'s backend."""
+
+    n_nodes: int
+    n_states: int
+    narrow_labels: bool
+    directed: bool
+    cut_held: bool
+    chains_held: bool
+    def __init__(
+        self,
+        offsets: np.ndarray,
+        neighbours: np.ndarray,
+        couplings: np.ndarray,
+        field: np.ndarray,
+        compact: bool = True,
+        directed: bool = False,
+    ) -> None: ...
+    def hold_cut(
+        self, first: np.ndarray, second: np.ndarray, coupling: np.ndarray
+    ) -> None: ...
+    def alpha_expansion(
+        self,
+        start: np.ndarray,
+        max_iterations: int,
+        then_icm: bool = False,
+        icm_iterations: int = 200,
+    ) -> tuple[np.ndarray, float, int, int, bool, int, int]: ...
+    def hold_chains(
+        self,
+        offsets: np.ndarray,
+        slots: np.ndarray,
+        neighbours: np.ndarray,
+        ends: np.ndarray,
+        coupling: np.ndarray,
+        weight: np.ndarray,
+        chain_offsets: np.ndarray,
+        chain_heads: np.ndarray,
+        chain_edges: np.ndarray,
+    ) -> None: ...
+    def trws(
+        self, max_iterations: int, tolerance: float
+    ) -> tuple[np.ndarray, float, np.ndarray, bool]: ...
+    def footprint(self) -> list[int]: ...
+    def set_field(self, field: np.ndarray) -> None: ...
+    def energy(self, labelling: np.ndarray) -> float: ...
+    def argmax(self) -> tuple[np.ndarray, float]: ...
+    def icm(
+        self,
+        start: np.ndarray,
+        order: int,
+        min_sites: int,
+        policy: int,
+        floor_at: int,
+        max_iterations: int,
+        seed: int,
+        skip_clean: bool = True,
+    ) -> tuple[np.ndarray, float, int, int]: ...
+    def merge(
+        self, labelling: np.ndarray, halved: bool, adjacent: bool
+    ) -> tuple[np.ndarray, float, int]: ...
+    def anneal(
+        self,
+        state: np.ndarray,
+        moves: list[int],
+        temperatures: np.ndarray,
+        budget: int,
+        n_main: int,
+        seed: int,
+        polish: bool,
+        min_sites: int,
+        merge: bool,
+    ) -> dict[str, Any]: ...
