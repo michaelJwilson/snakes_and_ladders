@@ -49,3 +49,25 @@ variants:
   delta_0.6: {delta_log_mean: 0.6}
   stay_1e-8: {stay: 0.99999999}
   stay_1e-2: {stay: 0.99}
+  # A downstream caller's instance as a whole, not one factor (issue #1412):
+  # its count-pair HMM at the Baum-Welch call, read off five of its problems
+  # (one 4-group instance and four drawn from its stream, 4-5 groups each),
+  # nothing of them committed. Read: 8,324-10,496 positions in 88-110
+  # segments of median length 84-118; K = 7 unphased states, the transition
+  # held at stay 1 - 1e-7; exposure median 309-923, log-sd 1.0-1.9; trials
+  # median 37-133, mean 92-179; fitted shared 1 / r 0.14-0.34 and shared
+  # concentration 940-2,374; one level at 95.0-97.3% and 5-16 levels, loss
+  # and gain levels at log depth ratio -0.82 to 0.96, allele rate 0.02-0.15
+  # where one allele is lost. Not mirrored: trials are 1 + Poisson here and
+  # over-dispersed there (log-sd 0.86-0.91), and segment lengths vary there.
+  downstream:
+    n_positions: 10240
+    segment_length: 128
+    shares: [0.96, 0.02, 0.01, 0.004, 0.002, 0.002, 0.001, 0.001]
+    ladder: [0, 0, -2, 2, -2, 1, 3, 2]
+    rate: [0.5, 0.03, 0.03, 0.05, 0.15, 0.33, 0.48, 0.65]
+    dispersion: [4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0, 4.0]
+    concentration: [1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0, 1000.0]
+    base_mean: 450.0
+    exposure_spread: 1.3
+    trials_mean: 100.0
