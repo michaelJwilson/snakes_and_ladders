@@ -9,6 +9,10 @@ Baum-Welch written below on the Python E step and the family's own
 The declared tolerance is `test_count_pair_hmm`'s, 1e-9 relative. The
 `DecodeShift` is pinned analytically: after one iteration each group's
 exposures are `e exp(-S_g)` with `S_g` read off the starting decode and means.
+`DifferentiatedShift` is pinned the same way at the fitted means, and its M
+step to `scipy.optimize` on the expected log-likelihood with `S_g` moving with
+the means (within 1e-6 relative, as the unshifted joint step's pin); its
+gradient through `S_g` is pinned to central differences in the Rust unit tests.
 """
 
 from __future__ import annotations
@@ -17,12 +21,20 @@ from collections.abc import Iterator
 
 import numpy as np
 import pytest
+import scipy.optimize
 import torch
 from sal.backend import Backend
 from sal.emissions import CountPairEmission
 from sal.likelihood.ragged import posteriors, viterbi
 from sal.opt.em import EmConfig
-from sal.opt.hmm import CountPairHmm, DecodeShift, PhasedCountPairHmm, SwitchKind
+from sal.opt.hmm import (
+    CountPairHmm,
+    DecodeShift,
+    DifferentiatedShift,
+    MStepSolver,
+    PhasedCountPairHmm,
+    SwitchKind,
+)
 from sal.qa import hmm_fit_semantics as study
 from sal.ragged import Ragged
 from sal.sim.count_hmm_cell import CountHmm
@@ -264,7 +276,107 @@ def test_the_decode_shift_rescales_each_group(
     np.testing.assert_allclose(model.exposures, expected, rtol=1e-13)
 
 
+def _shifted(
+    data: CountHmm, k: int, stay: float, shift: DifferentiatedShift
+) -> CountPairHmm:
+    # The tied unphased model under the downstream caller's semantics, the shift moving.
+    log_initial, log_transition, family = study.start(data, k, stay)
+    return CountPairHmm(
+        Ragged(np.ascontiguousarray(data.observations.astype(np.int64)), data.lengths),
+        log_initial.numpy(),
+        log_transition.numpy(),
+        family,
+        covariate=Ragged(np.ascontiguousarray(data.covariate), data.lengths),
+        tied=True,
+        fit_initial=False,
+        fit_transition=False,
+        shift=shift,
+    )
+
+
+@pytest.mark.oracle
+def test_the_differentiated_shift_m_step_is_scipys_maximum(
+    cell: tuple[CountHmm, int, float],
+) -> None:
+    data, k, stay = cell
+    n = len(data.observations)
+    groups = (np.arange(n) * 3) // n
+    weights = 1.0 + (np.arange(n) % 5) / 10.0
+    model = _shifted(data, k, stay, DifferentiatedShift(groups, weights))
+    # The first E step scores the exposures as given; its decode is held through the M step.
+    posterior = np.exp(model.posteriors().log_posterior)
+    decode = posterior.argmax(axis=1)
+    start = model.components
+    model.fit(EmConfig(max_iterations=1, tolerance=0.0), solver=MStepSolver.LBFGS)
+    fitted = model.components
+
+    def shifts(log_mean: np.ndarray) -> np.ndarray:
+        # S_g = ln sum_{t in g} lambda_t mu_{d_t}, one per position.
+        terms = np.log(weights) + log_mean[decode]
+        per_group = np.array([logsumexp(terms[groups == g]) for g in range(3)])
+        return per_group[groups]
+
+    def expected(theta: np.ndarray) -> float:
+        # The expected log-likelihood at rates e exp(-S_g(mu)) mu_k, tied r and tau.
+        rate = 1.0 / (1.0 + np.exp(-theta[k : 2 * k]))
+        tau = np.exp(theta[2 * k + 1])
+        family = CountPairEmission(
+            np.full(k, np.exp(theta[2 * k])),
+            np.exp(theta[:k]),
+            rate * tau,
+            (1.0 - rate) * tau,
+            np.ones(k, dtype=np.int64),
+            joint=False,
+        )
+        covariate = data.covariate.copy()
+        covariate[:, 0] = covariate[:, 0] * np.exp(-shifts(theta[:k]))
+        emit = family.log_density(
+            torch.as_tensor(data.observations), covariate=torch.as_tensor(covariate)
+        )
+        return float((torch.as_tensor(posterior) * emit).sum())
+
+    def pack(family: CountPairEmission) -> np.ndarray:
+        return np.concatenate(
+            [
+                np.log(family.total.mean.numpy()),
+                np.log(family.alpha.numpy() / family.beta.numpy()),
+                np.log(family.total.dispersion.numpy()[:1]),
+                np.log((family.alpha + family.beta).numpy()[:1]),
+            ]
+        )
+
+    scale = float(posterior.sum())
+    solved = scipy.optimize.minimize(
+        lambda x: -expected(x) / scale,
+        pack(start),
+        method="L-BFGS-B",
+        options={"ftol": 1e-13, "gtol": 1e-8, "maxiter": 2000},
+    )
+    best = expected(solved.x)
+    mine = expected(pack(fitted))
+    assert mine >= best - 1e-6 * abs(best)
+    # The exposures left for the next E step are e exp(-S_g) at the fitted means.
+    given = data.covariate[:, 0]
+    rescaled = np.where(
+        given > 0, given * np.exp(-shifts(np.log(fitted.total.mean.numpy()))), 0.0
+    )
+    np.testing.assert_allclose(model.exposures, rescaled, rtol=1e-13)
+
+
 @pytest.mark.bug
+@pytest.mark.smoke
+def test_a_differentiated_shift_needs_the_joint_step(
+    cell: tuple[CountHmm, int, float],
+) -> None:
+    data, k, stay = cell
+    n = len(data.observations)
+    model = _shifted(data, k, stay, DifferentiatedShift(np.zeros(n), np.ones(n)))
+    with pytest.raises(ValueError, match="lbfgs"):
+        model.fit(EmConfig(max_iterations=2))
+
+
+@pytest.mark.bug
+@pytest.mark.smoke
 def test_a_phased_chain_refuses_a_bad_switch(cell: tuple[CountHmm, int, float]) -> None:
     data, k, stay = cell
     with pytest.raises(ValueError, match="Kronecker kind"):

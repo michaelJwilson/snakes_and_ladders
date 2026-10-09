@@ -20,6 +20,25 @@ one; and a joint L-BFGS emission M step (:attr:`MStepSolver.LBFGS`) beside
 the per-block one. ``baum_welch_family`` and ``tied_m_step`` stay as its
 oracles: ``tests/regression/opt/test_count_pair_hmm.py`` pins each path.
 
+**API.** Construct either class from the observations, the starting
+chain and emission, the covariate, and the options; then:
+
+- ``fit(config, *, solver, parameter_tolerance, inner_iterations, carry,
+  max_concentration)``: the whole Baum-Welch, one crossing, an
+  :class:`~sal.opt.hmm.estimation.EmFit` with ``spent`` and its
+  ``Termination``;
+- ``posteriors()``, ``log_likelihood()``, ``viterbi()``: the E step, its
+  evidence and the decode at the held parameters;
+- ``m_step(posterior, *, solver)``: one emission M step on given posteriors;
+- ``components``, ``log_initial``, ``log_transition``, ``exposures``: the
+  held state, read back.
+
+The options: ``tied`` (one dispersion and concentration), ``fit_initial``
+and ``fit_transition`` (held when false), ``shift`` (:class:`DecodeShift`,
+``S_g`` held through each M step, or :class:`DifferentiatedShift`, ``S_g``
+moving with the means in it), and on the phased model ``switch`` and
+``switch_kind``.
+
 **The two solvers' optima differ under a varying exposure.** The per-block
 step takes each mean in closed form, ``sum w y / sum w e``, which is the
 mean's maximum only where the exposure is constant; L-BFGS maximizes the
@@ -43,7 +62,13 @@ from sal.opt.hmm.forward import Posteriors, SwitchKind
 from sal.opt.termination import Stop, Termination
 from sal.ragged import Ragged
 
-__all__ = ["CountPairHmm", "DecodeShift", "MStepSolver", "PhasedCountPairHmm"]
+__all__ = [
+    "CountPairHmm",
+    "DecodeShift",
+    "DifferentiatedShift",
+    "MStepSolver",
+    "PhasedCountPairHmm",
+]
 
 
 class MStepSolver(StrEnum):
@@ -78,13 +103,34 @@ class DecodeShift:
     weights: np.ndarray
 
 
+@dataclass(frozen=True)
+class DifferentiatedShift:
+    """:class:`DecodeShift` with ``S_g`` moving with the means inside each M step.
+
+    The decode ``d_t`` is held from the E step, as in :class:`DecodeShift`;
+    the means are not: the M step maximizes the expected log-likelihood at
+    rates ``e_t mu_k exp(-S_g(mu))``, its gradient carrying ``d S_g / d ln
+    mu_j``, the share of ``sum lambda_t mu_{d_t}`` decoded to ``j``. The
+    rates are then unchanged by ``mu -> c mu``, so the means' scale is
+    arbitrary. Only :attr:`MStepSolver.LBFGS` takes it.
+
+    Parameters
+    ----------
+    groups, weights
+        As :class:`DecodeShift`.
+    """
+
+    groups: np.ndarray
+    weights: np.ndarray
+
+
 class _CountPairModel:
     """The methods the unphased and phased models share over ``oxisal``'s one ``Model``."""
 
     _model: oxisal.CountPairHmm | oxisal.PhasedCountPairHmm
     _trials: torch.Tensor | None
 
-    def _shift(self, shift: DecodeShift | None) -> None:
+    def _shift(self, shift: DecodeShift | DifferentiatedShift | None) -> None:
         if shift is None:
             return
         groups = np.asarray(shift.groups)
@@ -97,6 +143,7 @@ class _CountPairModel:
         self._model.set_shift(
             np.ascontiguousarray(groups, dtype=np.uint32),
             np.ascontiguousarray(log_weight),
+            differentiated=isinstance(shift, DifferentiatedShift),
         )
 
     @property
@@ -141,6 +188,7 @@ class _CountPairModel:
         parameter_tolerance: float = 0.0,
         inner_iterations: int = 500,
         carry: bool = False,
+        max_concentration: float | None = None,
     ) -> EmFit:
         """Baum-Welch from the held parameters, in one crossing; the model keeps the result.
 
@@ -156,7 +204,16 @@ class _CountPairModel:
         below 500 is the caller's stopping rule, so reaching it is not a
         failure to settle); ``carry`` keeps its curvature pairs from one M
         step to the next, as one quasi-Newton run over the changing expected
-        log-likelihood keeps its Hessian estimate.
+        log-likelihood keeps its Hessian estimate. ``max_concentration``
+        bounds the beta-binomial concentration ``tau = a + b`` that step may
+        return, the search projected onto ``ln tau <= ln max_concentration``;
+        ``None`` leaves it free.
+
+        Raises
+        ------
+        ValueError
+            :attr:`MStepSolver.NEWTON` with a ``max_concentration`` or under a
+            :class:`DifferentiatedShift`, or a non-positive bound.
 
         Returns
         -------
@@ -172,6 +229,7 @@ class _CountPairModel:
                 str(solver),
                 inner_iterations,
                 carry,
+                np.inf if max_concentration is None else float(max_concentration),
             )
         )
         reason = Stop(stop)
@@ -305,9 +363,10 @@ class CountPairHmm(_CountPairModel):
     fit_initial, fit_transition : bool
         Whether the M step re-estimates the initial distribution and the
         transition; ``baum_welch_family`` always fits the first.
-    shift : DecodeShift | None
+    shift : DecodeShift | DifferentiatedShift | None
         The exposure rescaled per group from the decode at every fit
-        iteration; ``None`` holds it as given.
+        iteration, ``S_g`` held through the M step or moving with the means
+        in it; ``None`` holds the exposure as given.
 
     Raises
     ------
@@ -327,7 +386,7 @@ class CountPairHmm(_CountPairModel):
         tied: bool = False,
         fit_initial: bool = True,
         fit_transition: bool = True,
-        shift: DecodeShift | None = None,
+        shift: DecodeShift | DifferentiatedShift | None = None,
     ) -> None:
         self._model = oxisal.CountPairHmm(
             *_arrays(observations, components, covariate),
@@ -387,7 +446,7 @@ class PhasedCountPairHmm(_CountPairModel):
         tied: bool = False,
         fit_initial: bool = True,
         fit_transition: bool = True,
-        shift: DecodeShift | None = None,
+        shift: DecodeShift | DifferentiatedShift | None = None,
     ) -> None:
         self._model = oxisal.PhasedCountPairHmm(
             *_arrays(observations, components, covariate),
