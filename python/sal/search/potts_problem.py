@@ -12,7 +12,15 @@ the floor's ``max_iterations * n_nodes`` uniforms up front.
 Potts solve is a pure function: there are no parameters to fit, so the object
 holds the *problem* and its buffers, never a result, and :meth:`set_field`
 replaces the one input a labelling loop changes. Composed solvers (an anneal
-and its polish, a descent and its floor) run inside one method.
+and its polish, a descent and its floor, an expansion and its ICM) run inside
+one method. The expansion's network and TRW-S's chain layout are laid out on
+the first call that needs them and held.
+
+**Directed rows.** :meth:`PottsProblem.from_directed_csr` holds a directed
+adjacency as given: each descent reads a site's own row, as the downstream
+labelling step's does, and the energy halves every entry, so it scores
+:meth:`~sal.sim.graph.PottsGraph.from_directed_csr`'s symmetric coupling.
+The expansion and TRW-S read that symmetric graph.
 
 **Oracles, and where the stream differs.** :meth:`PottsProblem.icm` in
 :attr:`~sal.search.icm.SweepOrder.INDEX` order without a floor, or with the
@@ -25,8 +33,12 @@ seeded by one draw of ``rng``, a chain of the same law on another stream.
 :attr:`MergePairs.ALL` is :func:`sal.sample.potts_mcmc.chains.merge_labels`
 bitwise; :meth:`PottsProblem.anneal` is
 :func:`~sal.sample.potts_mcmc.anneal_potts`' Rust loop on the held graph,
-bitwise. Every energy is the Rust loop's (each edge read from both ends and
-halved), within ``1e-9`` relative of :func:`~sal.sim.potts.energy`.
+bitwise. :meth:`PottsProblem.alpha_expansion` is
+:func:`~sal.search.alpha_expansion.alpha_expansion`'s labelling, cycles and
+moves bitwise, and :meth:`PottsProblem.trws` the numba TRW-S kernel's bound
+trace and labelling bitwise. Every energy is the Rust loop's (each edge read
+from both ends and halved), within ``1e-9`` relative of
+:func:`~sal.sim.potts.energy`.
 """
 
 from __future__ import annotations
@@ -47,8 +59,15 @@ from sal.sample.potts_mcmc.moves import (
     refuse_negative_coupling,
 )
 from sal.sample.schedule import Polish, TempSchedule
-from sal.search.alpha_expansion import Labelling
+from sal.search.alpha_expansion import (
+    DEFAULT_MAX_CYCLES,
+    EXPANSION,
+    ExpansionResult,
+    Labelling,
+)
 from sal.search.icm import FloorPolicy, SweepOrder, check_min_sites
+from sal.search.maxflow import check_non_negative_couplings
+from sal.search.trws import MAX_ITERATIONS, TOLERANCE, TrwsResult, chain_layout
 from sal.sim.graph import PottsGraph
 from sal.sim.potts import SiteField, check_labelling, log_weight_of, site_field
 
@@ -57,9 +76,9 @@ class FloorAt(StrEnum):
     """When the floor runs inside :meth:`PottsProblem.icm` (issue #1413)."""
 
     SWEEP = "sweep"
-    """After every sweep: :func:`~sal.search.icm.iterated_conditional_modes`' placement."""
+    """After every sweep, wherever a label in use is below the floor: :func:`~sal.search.icm.iterated_conditional_modes`' placement."""
     EPOCH_GUARDED = "epoch-guarded"
-    """Once a sweep is clean; the descent resumes where the floor moved a site, until it moves none or ``max_iterations`` sweeps are spent (the guard)."""
+    """The downstream floor: after every sweep, only while every label is in use and one is below the floor. A firing with two or more labels at the floor counts against a guard and keeps the descent going; the eleventh stops it, at the budget."""
 
 
 class MergeGain(StrEnum):
@@ -68,7 +87,7 @@ class MergeGain(StrEnum):
     FULL = "full"
     """Its coupling once: the energy change exactly (:func:`sal.sample.potts_mcmc.chains.merge_labels`)."""
     HALVED = "halved"
-    """Half its coupling: the downstream labelling step's ``merge_assignment`` rule, which misses a merge the energy takes (experiment 040)."""
+    """``B[u, v] / 2``: the couplings of ``u``'s rows at ``v``, halved, as the downstream ``merge_assignment`` reads them; half the gain on a symmetric graph, so it misses a merge the energy takes (experiment 040)."""
 
 
 class MergePairs(StrEnum):
@@ -77,7 +96,7 @@ class MergePairs(StrEnum):
     ALL = "all"
     """Every pair of labels in use."""
     ADJACENT = "adjacent"
-    """Only pairs sharing at least one edge, as ``merge_assignment`` reads them."""
+    """Only pairs whose couplings from ``u``'s rows at ``v`` sum above zero, as ``merge_assignment`` admits them."""
 
 
 #: The Rust codes of each enum member.
@@ -125,6 +144,39 @@ class PottsProblem:
         offsets, neighbours, couplings = graph.compressed_adjacency()
         self._problem = _held()(offsets, neighbours, couplings, rows)
 
+    @classmethod
+    def from_directed_csr(
+        cls,
+        indptr: np.ndarray,
+        indices: np.ndarray,
+        weights: np.ndarray,
+        field: SiteField | np.ndarray,
+        *,
+        scale: float = 1.0,
+        n_states: int | None = None,
+    ) -> PottsProblem:
+        """A directed adjacency held as given: each descent reads ``scale * A_ij`` along site ``i``'s row.
+
+        ``graph`` is :meth:`~sal.sim.graph.PottsGraph.from_directed_csr`'s
+        symmetric graph, which the energy, the expansion and TRW-S score. The
+        anneal refuses directed rows. A site whose neighbours did not change
+        is not skipped, since a row need not name every site naming it.
+        """
+        graph = PottsGraph.from_directed_csr(indptr, indices, weights, scale=scale)
+        held = cls.__new__(cls)
+        held.graph = graph
+        rows = held._rows(field, n_states)
+        held.n_states = int(rows.shape[1])
+        held._problem = _held()(
+            np.ascontiguousarray(indptr, dtype=np.int64),
+            np.ascontiguousarray(indices, dtype=np.int64),
+            np.ascontiguousarray(np.asarray(weights, dtype=np.float64) * scale),
+            rows,
+            True,
+            True,
+        )
+        return held
+
     def _rows(self, field: SiteField | np.ndarray, n_states: int | None) -> np.ndarray:
         rows = site_field(
             np.asarray(log_weight_of(field), dtype=float),
@@ -142,8 +194,16 @@ class PottsProblem:
         return float(self._problem.energy(self._labels(labelling)))
 
     def footprint(self) -> dict[str, int]:
-        """Bytes held per structure: adjacency, couplings, field, labels, buffers."""
-        names = ("adjacency", "couplings", "field", "labels", "buffers")
+        """Bytes held per structure: adjacency, couplings, field, labels, buffers, the expansion's network and TRW-S's chains (zero until laid out)."""
+        names = (
+            "adjacency",
+            "couplings",
+            "field",
+            "labels",
+            "buffers",
+            "cut",
+            "chains",
+        )
         return dict(zip(names, self._problem.footprint(), strict=True))
 
     def _labels(self, labelling: np.ndarray) -> np.ndarray:
@@ -193,8 +253,15 @@ class PottsProblem:
         floor_at : FloorAt
             When it runs.
         max_iterations : int
-            Sweeps allowed; a worklist's visits are ``max_iterations *
-            n_nodes``, its sweeps those visits over ``n_nodes``, rounded up.
+            Sweeps allowed; a worklist's epochs.
+
+        ``WORKLIST`` is the downstream two-queue descent with its shuffles
+        replaced by index order: an epoch visits its queue ascending, a site
+        that changes queues its row's sites not already queued, and the
+        descent stops after an epoch that changed nothing (its floor not
+        counted against the guard), once at most one label is in use, or
+        when no site is queued. A site's conditional sums its row's couplings
+        per label before adding the field, the downstream arithmetic.
 
         Returns
         -------
@@ -271,6 +338,102 @@ class PottsProblem:
             float(value),
             rounds,
             termination=Termination.after(rounds, converged=True),
+        )
+
+    def alpha_expansion(
+        self,
+        *,
+        start: np.ndarray | None = None,
+        max_iterations: int = DEFAULT_MAX_CYCLES,
+        then_icm: bool = False,
+        icm_iterations: int = 200,
+    ) -> ExpansionResult:
+        """:func:`~sal.search.alpha_expansion.alpha_expansion` on the held network, then index ICM where ``then_icm``.
+
+        The network over ``graph``'s edges is laid out on the first call and
+        held, so a solve crosses once where the function crosses once per
+        move plus once for the network; each run starts every label's cut
+        from zero flow, as the function's does.
+
+        Returns
+        -------
+        ExpansionResult
+            The labelling and energy (after the ICM where it ran), the
+            expansion's cycles and moves, and the expansion's termination,
+            or, where it converged and the ICM ran, the ICM's (its sweeps
+            the iterations).
+
+        Raises
+        ------
+        ValueError
+            If a coupling is negative, a site allows no label, or as
+            :func:`~sal.sim.potts.check_labelling` raises.
+        """
+        if not self._problem.cut_held:
+            check_non_negative_couplings(self.graph, EXPANSION.reason)
+            first, second, coupling = self.graph.endpoints
+            self._problem.hold_cut(
+                np.ascontiguousarray(first, dtype=np.int64),
+                np.ascontiguousarray(second, dtype=np.int64),
+                np.ascontiguousarray(coupling, dtype=np.float64),
+            )
+        begin = np.empty(0, dtype=np.int64) if start is None else self._labels(start)
+        labels, value, cycles, moves, converged, sweeps, stop = (
+            self._problem.alpha_expansion(
+                begin, max_iterations, then_icm, icm_iterations
+            )
+        )
+        termination = Termination.after(cycles, converged=converged)
+        if then_icm and converged:
+            reason = _STOP[stop]
+            termination = Termination(reason is Stop.CONVERGED, sweeps, reason)
+        return ExpansionResult(
+            labels, float(value), cycles, moves, termination=termination
+        )
+
+    def trws(
+        self,
+        *,
+        max_iterations: int = MAX_ITERATIONS,
+        tolerance: float = TOLERANCE,
+    ) -> TrwsResult:
+        """:func:`~sal.search.trws.trws` on the held field: its bound trace and labelling, bitwise.
+
+        The chain layout is :func:`~sal.search.trws.chain_layout`'s, laid
+        out on the first call and held with the messages.
+
+        Returns
+        -------
+        TrwsResult
+            The largest bound, the lowest-energy decode and its energy as the
+            decode scores it, the trace, and converged or the budget.
+
+        Raises
+        ------
+        ValueError
+            If an edge is a self-loop, ``max_iterations < 1`` or
+            ``tolerance < 0``.
+        """
+        if not self._problem.chains_held:
+            layout = chain_layout(self.graph)
+            self._problem.hold_chains(
+                layout.offsets,
+                layout.slots,
+                layout.neighbours,
+                np.ascontiguousarray(layout.ends.reshape(-1)),
+                layout.coupling,
+                layout.weight,
+                layout.chain_offsets,
+                layout.chain_heads,
+                layout.chain_edges,
+            )
+        labels, value, trace, converged = self._problem.trws(max_iterations, tolerance)
+        return TrwsResult(
+            bound=float(trace.max()),
+            labelling=labels,
+            energy=float(value),
+            trace=trace,
+            termination=Termination.after(len(trace), converged=converged),
         )
 
     def anneal(

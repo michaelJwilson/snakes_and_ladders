@@ -20,6 +20,7 @@ use oxisal::maxflow::{max_flow_impl, FlowNetwork};
 #[cfg(feature = "sandbox")]
 use oxisal::maxflow_declined::{max_flow_with, Algorithm};
 use oxisal::potts_problem::{Descend, PottsProblem, AT_SWEEP, INDEX, UNIFORM};
+use oxisal::potts_trws::Chains;
 use oxisal::pruning::{pruning_log_likelihood_impl, LeafObservations};
 #[cfg(feature = "sandbox")]
 use oxisal::pruning_burn::pruning_gradient_impl;
@@ -424,7 +425,7 @@ fn bench_potts_problem(c: &mut Criterion) {
         })
         .collect();
     let mut problem =
-        PottsProblem::build(&offsets, &neighbours, &couplings, field, q, true).unwrap();
+        PottsProblem::build(&offsets, &neighbours, &couplings, field, q, true, false).unwrap();
     let mut group = c.benchmark_group("potts_problem_50x60");
     for skip_clean in [true, false] {
         let ask = Descend {
@@ -445,10 +446,95 @@ fn bench_potts_problem(c: &mut Criterion) {
     group.bench_function("merge_full", |b| {
         b.iter(|| {
             problem.load(&start).unwrap();
-            problem.merge_held(2.0, false)
+            problem.merge_held(false, false)
         });
     });
+    // The edges once each, lower end first, in row order: what
+    // `PottsGraph.endpoints` and `trws.chain_layout` read.
+    let (mut first, mut second) = (Vec::new(), Vec::new());
+    for node in 0..n {
+        for &far in &neighbours[offsets[node] as usize..offsets[node + 1] as usize] {
+            let far = far as usize;
+            if far > node {
+                first.push(node);
+                second.push(far);
+            }
+        }
+    }
+    let unit = vec![1.0f64; first.len()];
+    problem.set_cut(&first, &second, &unit).unwrap();
+    group.bench_function("alpha_expansion_held_cut", |b| {
+        b.iter(|| {
+            problem.load(&start).unwrap();
+            problem.expand_held(50, false, 200).unwrap().cycles
+        });
+    });
+    problem.set_chains(chain_layout(n, q, &first, &second));
+    group.bench_function("trws_100_iterations", |b| {
+        b.iter(|| problem.trws_held(100, 0.0).unwrap().trace.len());
+    });
     group.finish();
+}
+
+/// `sal.search.trws.chain_layout` of unit-coupled edges `first[e] < second[e]`.
+fn chain_layout(n: usize, q: usize, first: &[usize], second: &[usize]) -> Chains {
+    let n_edges = first.len();
+    let mut rows: Vec<Vec<i64>> = vec![Vec::new(); n];
+    let (mut outgoing, mut rank, mut seen) =
+        (vec![Vec::new(); n], vec![0usize; n_edges], vec![0usize; n]);
+    let mut neighbours = vec![0i64; 2 * n_edges];
+    let mut ends = Vec::with_capacity(2 * n_edges);
+    for edge in 0..n_edges {
+        let (low, high) = (first[edge], second[edge]);
+        rows[low].push(2 * edge as i64);
+        rows[high].push(2 * edge as i64 + 1);
+        neighbours[2 * edge] = high as i64;
+        neighbours[2 * edge + 1] = low as i64;
+        ends.extend([low as i64, high as i64]);
+        outgoing[low].push(edge);
+        rank[edge] = seen[high];
+        seen[high] += 1;
+    }
+    let mut offsets = vec![0i64];
+    let mut slots = Vec::new();
+    for row in &rows {
+        slots.extend(row);
+        offsets.push(slots.len() as i64);
+    }
+    let weight: Vec<f64> = (0..n)
+        .map(|node| 1.0 / outgoing[node].len().max(seen[node]).max(1) as f64)
+        .collect();
+    let (mut heads, mut walked, mut bounds) = (Vec::new(), Vec::new(), vec![0i64]);
+    for node in 0..n {
+        if outgoing[node].is_empty() && seen[node] == 0 {
+            heads.push(node as i64);
+            bounds.push(walked.len() as i64);
+        }
+        for &start in &outgoing[node][seen[node].min(outgoing[node].len())..] {
+            heads.push(node as i64);
+            let mut edge = Some(start);
+            while let Some(at) = edge {
+                walked.push(at as i64);
+                let high = second[at];
+                edge = outgoing[high].get(rank[at]).copied();
+            }
+            bounds.push(walked.len() as i64);
+        }
+    }
+    Chains::build(
+        n,
+        q,
+        &offsets,
+        &slots,
+        &neighbours,
+        &ends,
+        &vec![1.0; n_edges],
+        &weight,
+        &bounds,
+        &heads,
+        &walked,
+    )
+    .unwrap()
 }
 
 #[cfg(feature = "sandbox")]

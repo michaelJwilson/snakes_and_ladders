@@ -154,9 +154,9 @@
   optimizers: >-
     TRW-S wins here: on the 3,000-site labelling cell it decodes at its bound,
     where ICM from the argmax stops 13.00 nats above it and alpha-expansion
-    then ICM 2.08 (experiment 040). `PottsProblem` runs ICM, the floor and
-    the merge in one crossing each, pinned bitwise to the calls it replaces
-    (issue #1413).
+    then ICM 2.08 (experiment 040). `PottsProblem` runs ICM, the floor, the
+    merge, alpha-expansion and TRW-S in one crossing each, pinned bitwise to
+    the calls it replaces (issue #1413).
 
 "Low-density parity-check code, Gallager (3,6)":
   optimizers: >-

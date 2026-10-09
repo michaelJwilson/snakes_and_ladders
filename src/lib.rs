@@ -41,6 +41,7 @@ pub mod mixture_stream;
 pub mod potts;
 pub mod potts_loop;
 pub mod potts_problem;
+pub mod potts_trws;
 pub mod pruning;
 #[cfg(feature = "sandbox")]
 pub mod pruning_burn;

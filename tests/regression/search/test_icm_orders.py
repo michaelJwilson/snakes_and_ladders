@@ -43,7 +43,10 @@ def _local_minimum(labelling: np.ndarray) -> bool:
 
 
 @pytest.mark.oracle
-@pytest.mark.parametrize("order", list(SweepOrder))
+# WORKLIST is PottsProblem.icm's alone (test_potts_problem.py), refused here.
+@pytest.mark.parametrize(
+    "order", [order for order in SweepOrder if order is not SweepOrder.WORKLIST]
+)
 def test_every_order_stops_at_a_single_site_local_minimum(order: SweepOrder) -> None:
     run = iterated_conditional_modes(
         GRAPH,

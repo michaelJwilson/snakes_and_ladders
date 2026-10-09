@@ -4,7 +4,7 @@
 variants; `docs/experiments/040-*.md` reports it. This pins the CI cell from
 the field's argmax: alpha-expansion+ICM, TRW-S's decode and the anneal reach
 the bound, ICM stops 6.33 nats above it with or without the floor or the
-merge, and the descent crosses into Rust once per solve.
+merge, and each solver crosses into the held problem once per solve.
 """
 
 from __future__ import annotations
@@ -38,5 +38,7 @@ def test_expansion_trws_and_the_anneal_reach_the_bound_where_icm_stops_short() -
         assert rows[arm].unlike == 42, arm
     for arm in ("icm", "icm-floor", "icm+floor-smallest", "icm+merge"):
         assert rows[arm].gap == pytest.approx(ICM_GAP, abs=scale), arm
-    assert rows["icm"].crossings == 1
+    # One call on the held problem, and the problem counted once.
+    for arm in ("icm", "ae+icm", "trws"):
+        assert rows[arm].crossings == 2, arm
     assert rows["argmax"].crossings == 0
