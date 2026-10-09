@@ -232,6 +232,7 @@ def label_step(
     wolff_schedule: TempSchedule | None = None,
     wolff_moves_per_step: int = 4,
     min_sites: int = 0,
+    cluster_backend: Backend = Backend.RUST,
 ) -> np.ndarray:
     """One label block: the ground state of the Potts model in the field, by ``solver``.
 
@@ -246,6 +247,11 @@ def label_step(
     issue #1055): after each sweep a class holding fewer sites is dissolved
     into those at or above it. ``0``, the default, is the step before the
     floor existed, bitwise; the other solvers have no floor and refuse one.
+
+    ``cluster_backend`` runs the Wolff moves, as
+    :func:`~sal.sample.potts_mcmc.anneal_potts` takes it: ``RUST``, the
+    default since #1362, draws a chain of the same law on another stream than
+    the ``PYTHON`` oracle (issue #1424).
     """
     if min_sites != 0 and solver is not LabelSolver.ICM:
         msg = (
@@ -303,6 +309,7 @@ def label_step(
                 rng,
                 beta=params.beta / temperature,
                 lists=lists,
+                backend=cluster_backend,
             )
         value = energy(graph, potential, labels)
         if value < best_value:
@@ -359,6 +366,7 @@ def fit_spatio_sequential(
     backend: Backend = Backend.RUST,
     min_label_sites: int = 0,
     covariate_rows: CovariateRows = "range",
+    cluster_backend: Backend = Backend.RUST,
 ) -> SpatioSequentialFit:
     """Block-coordinate ascent on ``log p(x, l | theta)``.
 
@@ -412,6 +420,11 @@ def fit_spatio_sequential(
         so on the Rust backend they are built once here and every E step, field
         and labelled log-likelihood of the fit reuses them. ``"range"``, the
         default, is the only value the NumPy backend takes: it builds no table.
+    cluster_backend : Backend
+        Which implementation runs the Wolff solver's moves (:func:`label_step`):
+        :data:`~sal.backend.Backend.RUST`, the default since #1362, or the
+        :data:`~sal.backend.Backend.PYTHON` oracle, a chain of the same law on
+        another stream (issue #1424).
 
     Raises
     ------
@@ -461,6 +474,7 @@ def fit_spatio_sequential(
             solver,
             field=field,
             wolff_schedule=wolff_schedule,
+            cluster_backend=cluster_backend,
         )
         candidate = log_likelihood_of(params, observations, proposed)
         if candidate >= values[-1]:
@@ -761,6 +775,7 @@ def graph_burn_in(
     *,
     wolff_moves_per_step: int = 4,
     seed_counts: bool = False,
+    cluster_backend: Backend = Backend.RUST,
 ) -> SpatioSequentialFit:
     """``Graph_BurnIn++`` (the textbook's burn-in algorithm): the blocks while the inverse temperature rises.
 
@@ -771,7 +786,8 @@ def graph_burn_in(
     M step, then the field. Emissions are seeded once by ``Emission_Mixture++``
     and labels uniformly; the returned fit is the state at the schedule's end,
     to be polished by :func:`fit_spatio_sequential`. ``seed_counts`` is
-    :func:`seed_emissions`'s.
+    :func:`seed_emissions`'s. ``cluster_backend`` runs the Wolff passes, as
+    :func:`fit_spatio_sequential` takes it (issue #1424).
     """
     params = seed_emissions(params, observations, rng, seed_counts=seed_counts)
     labels = rng.integers(0, params.n_classes, size=params.graph.n_nodes)
@@ -792,6 +808,7 @@ def graph_burn_in(
                 rng,
                 beta=beta,
                 lists=lists,
+                backend=cluster_backend,
             )
         density = class_log_density(params, observations, labels)
         for m in range(
