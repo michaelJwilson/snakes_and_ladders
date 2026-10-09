@@ -3,7 +3,7 @@ id: "040"
 date: 2026-10-09
 commit: 28a9e621692be98f96b2c619035529536e3f0a7d
 branch: claude/potts-labelling-study-1413
-pr: 0
+pr: 1415
 tickets: [1413]
 problem: potts-lattice
 fixture: tests/regression/fixtures/potts_labelling/stress.yaml and its variants easy, hard and dev_6000, mirroring the downstream stream's problems (3,000 sites, q = 5, degree 6, floor 50)
