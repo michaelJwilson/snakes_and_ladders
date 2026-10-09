@@ -6,7 +6,7 @@ branch: claude/gmm-anneal-1378b
 pr: 0
 tickets: [1378]
 problem: mixture
-fixture: tests/regression/fixtures/mixture/ci.yaml, the five-component mixture of experiment 004, best-known 1111.596410; and the seven-state joint count-pair HMM built in sal.qa.count_pair_hmm_anneal (8,000 positions, seed 1378), which the registry does not declare
+fixture: tests/regression/fixtures/mixture/ci.yaml, the five-component mixture of experiment 004, best-known 1111.596410; and the seven-state joint count-pair HMM built in sal.qa.count_pair_hmm_anneal (8,000 positions, seed 1378), declared since #1416 as tests/regression/fixtures/count_pair_hmm/ci.yaml with the same draw
 size: release
 methods: [restarts, anneal]
 budget: 3000

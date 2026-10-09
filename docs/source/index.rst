@@ -133,6 +133,9 @@ whether or not it has members yet.
 .. automodule:: sal.sim.count_hmm_cell
    :members:
 
+.. automodule:: sal.sim.count_pair_hmm
+   :members:
+
 .. automodule:: sal.sim.mixture
    :members:
 

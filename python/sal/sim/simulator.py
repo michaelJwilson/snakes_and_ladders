@@ -23,7 +23,8 @@ stream from it once (issue #829).
 count pairs draw a keyed stream per vertex so the Rust twin can be checked
 vertex by vertex (#671), which one generator cannot reproduce; the codes have
 an encoder and a channel and no dataset record yet; a frustrated lattice or a
-glass is an instance rather than a draw; a test function has no data.
+glass is an instance rather than a draw; a test function has no data; a
+reference cell is drawn by its own ``instance()`` and pinned by a digest.
 """
 
 from __future__ import annotations
@@ -135,6 +136,15 @@ NOT_SIMULATED: dict[str, str] = {
     "spatio-tiling": "an instance and not a draw: the planted states are the truth a ground state is read against",
     "frustrated-lattice": "an instance and not a draw: the graph, or the glass at a frustration, is the data",
     "test-functions": "a surface has no data",
+    "potts-reference": (
+        "a reference cell drawn by its own `instance()` from the declared seed "
+        "and pinned by a digest in the file (#1390); no caller draws an ensemble"
+    ),
+    "count-hmm-reference": "as `potts-reference`",
+    "count-pair-hmm": (
+        "as `potts-reference`; `instance()` is `sim.hmm.simulate_sequences` "
+        "on the declared chain (#1416)"
+    ),
 }
 
 

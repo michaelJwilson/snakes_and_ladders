@@ -1,8 +1,9 @@
 """HMC annealing as a start for Baum-Welch on a reference count-pair HMM (issue #1378, Part B).
 
-The second fixture of #1378's Part B: seven states over a joint count pair
-(:class:`~sal.emissions.CountPairEmission`), a negative-binomial total and
-beta-binomial successes, 8,000 positions in one segment. The issue asks for
+The second fixture of #1378's Part B, declared as `count_pair_hmm/ci`
+(:mod:`sal.sim.count_pair_hmm`, issue #1416): seven states over a joint count
+pair (:class:`~sal.emissions.CountPairEmission`), a negative-binomial total
+and beta-binomial successes, 8,000 positions in one segment. The issue asks for
 98% of observations on one level and rare levels at 1--2%, which cannot both
 hold of the states; they hold of the levels. Five states share the dominant
 total level (98% of positions); two rare states sit on their own total
@@ -51,22 +52,13 @@ from sal.ragged import Ragged
 from sal.sample.hmc import anneal
 from sal.sample.schedule import InverseLinearTempSchedule
 from sal.sample.tune import Criterion, StepTuning
-from sal.sim.hmm import HmmParams, simulate_sequences
+from sal.sim import fixtures
+from sal.sim.count_pair_hmm import CountPairHmmParams
 
+#: The seed of the comparison's starts; the instance's is `count_pair_hmm/ci`'s.
 SEED = 1378
 K = 7
 N = 8_000
-#: Occupancy: the dominant state, four states on its total level, two rare levels.
-OCCUPANCY = np.array([0.90, 0.02, 0.02, 0.02, 0.02, 0.01, 0.01])
-#: Total channel: five states on one level, two rare levels.
-MEAN = np.array([100.0, 100.0, 100.0, 100.0, 100.0, 50.0, 150.0])
-#: Success rate: the two rare levels equal the dominant state's.
-RATE = np.array([0.5, 0.4, 0.6, 0.3, 0.7, 0.5, 0.5])
-DISPERSION = 10.0
-CONCENTRATION = 1.2e4
-#: Mean dwell of a rare state, in positions; the chain is reversible with
-#: stationary law :data:`OCCUPANCY`.
-RARE_DWELL = 50.0
 
 #: Passes per start: gradients and Baum-Welch iterations alike.
 BUDGET = Budget(Cost.EVALUATIONS, 600)
@@ -109,55 +101,36 @@ class Fixture:
         return float(abs(self.at_truth) / self.data.values.shape[0])
 
 
-def _family(
-    mean: np.ndarray, rate: np.ndarray, concentration: float
-) -> CountPairEmission:
+def _start(dispersion: float, mean: np.ndarray, rate: np.ndarray) -> CountPairEmission:
+    """The joint family a fit starts from, at concentration 100."""
     return CountPairEmission(
-        np.full(K, DISPERSION),
+        np.full(K, dispersion),
         mean,
-        concentration * rate,
-        concentration * (1.0 - rate),
+        100.0 * rate,
+        100.0 * (1.0 - rate),
         None,
         joint=True,
     )
 
 
-def _transition() -> np.ndarray:
-    """Reversible with stationary law :data:`OCCUPANCY`: leave ``k`` at ``c (1 - pi_k)``, land ``∝ pi_j``."""
-    leave = (1.0 - OCCUPANCY) / (RARE_DWELL * (1.0 - OCCUPANCY[1:]).mean())
-    transition = leave[:, None] * OCCUPANCY[None, :] / (1.0 - OCCUPANCY[:, None])
-    np.fill_diagonal(transition, 1.0 - leave)
-    out: np.ndarray = transition
-    return out
-
-
 def fixture() -> Fixture:
-    """Simulate the reference HMM, and the objective at a quantile-placed start."""
-    truth = _family(MEAN, RATE, CONCENTRATION)
-    params = HmmParams(
-        n_states=K,
-        lengths=(N,),
-        initial=OCCUPANCY,
-        transition=_transition(),
-        emissions=truth,
-        seed=SEED,
-        tolerance=0.0,
-    )
-    simulated = simulate_sequences(params)
+    """Draw ``count_pair_hmm/ci``, and the objective at a quantile-placed start."""
+    params: CountPairHmmParams = fixtures.fixture("count_pair_hmm", "ci").params
+    simulated = params.instance()
     values = np.asarray(simulated.observations, dtype=np.float64).reshape(N, 2)
     data = Ragged(values, (N,))
     totals = values[:, 0]
-    start = _family(
+    start = _start(
+        params.dispersion,
         np.quantile(totals, np.linspace(0.05, 0.95, K)),
         np.linspace(0.3, 0.7, K),
-        100.0,
     )
     objective = EmissionHmmObjective(data, start)
     at = objective.theta_from(
         {
-            "log_initial": torch.log(torch.as_tensor(OCCUPANCY)),
-            "log_transition": torch.log(torch.as_tensor(_transition())),
-            **truth.named_parameters(),
+            "log_initial": torch.log(torch.as_tensor(params.occupancy)),
+            "log_transition": torch.log(torch.as_tensor(params.transition)),
+            **params.components.named_parameters(),
         }
     )
     return Fixture(

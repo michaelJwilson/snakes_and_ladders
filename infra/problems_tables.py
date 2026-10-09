@@ -303,6 +303,7 @@ ORACLES: dict[str, str] = {
     "sim.canonical.PlantedSpinGlass": "planted truth",
     "sim.potts_cell.PlantedPotts": "planted truth",
     "sim.count_hmm_cell.CountHmm": "planted truth",
+    "sim.count_pair_hmm.CountPairHmmParams": "planted truth",
 }
 
 

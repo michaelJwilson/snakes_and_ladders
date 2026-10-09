@@ -231,6 +231,14 @@
     levels than fitted states, so no fit reaches the truth and the
     log-likelihood at the truth is a reference point, not a maximum.
 
+"Joint count-pair HMM, rare states on their own levels":
+  optimizers: >-
+    Baum-Welch from the generating parameters climbs (issue #1416). From
+    perturbed starts at 600 passes, tuned HMC annealing then Baum-Welch trails
+    polished restarts, 0 of 4 starts, its schedule ending 2,300 to 2,800 nats
+    above the truth (experiment 030, issue #1378). Nothing enumerates the
+    paths; the referee is the log-likelihood at the generating parameters.
+
 "Coupled spatio-sequential model":
   initializers: >-
     The annealed data-sampled burn-in beats a uniform start at an equal budget
