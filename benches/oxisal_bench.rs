@@ -579,6 +579,8 @@ fn bench_count_pair_hmm(c: &mut Criterion) {
             );
         });
     }
+}
+
 /// `PottsProblem`'s descent and merge (#1413) on the `potts_labelling`
 /// stress shape: a periodic triangular 50 x 60 lattice, degree 6, q = 5,
 /// a seeded field; the descent with and without skipping clean sites.
