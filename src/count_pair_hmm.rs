@@ -309,16 +309,86 @@ impl Chain {
 
 /// A covariate rescaled per sequence group from the decode (issue #1412, gap 5): after each E
 /// step, with `d_t` the copy state of largest posterior at position `t`, group `g`'s exposures
-/// become `e_t exp(-S_g)` with `S_g = ln sum_{t in g} lambda_t mu_{d_t}` at the current means;
-/// the M step then conditions on them, held, and the next E step scores against them.
+/// become `e_t exp(-S_g)` with `S_g = ln sum_{t in g} lambda_t mu_{d_t}`, and the next E step
+/// scores against them.
+///
+/// Held (`differentiated = false`), `S_g` is taken at the means of that E step and the M step
+/// conditions on it. Differentiated, the decode is held and `S_g` moves with the means inside
+/// the M step: the joint objective and its gradient carry `d S_g / d ln mu_j = c_gj`, the share
+/// of `sum lambda_t mu_{d_t}` decoded to `j`. Only [`Solver::Lbfgs`] takes the second.
 #[derive(Clone, Debug)]
 pub struct Shift {
     /// Each position's group, `0..groups`.
     pub group: Vec<u32>,
     /// `ln lambda_t` per position.
     pub log_weight: Vec<f64>,
+    /// Whether `S_g` moves with the means inside the M step.
+    pub differentiated: bool,
     /// The exposures as given, which every rescale starts from.
     base: Vec<f64>,
+}
+
+/// A differentiated shift's decode, held through one M step: `(G, K)` row-major
+/// `ln sum_{t in g, d_t = j} lambda_t`, `-inf` where no position of `g` decodes to `j`.
+#[derive(Clone, Debug)]
+struct Coupling {
+    groups: usize,
+    log_lambda: Vec<f64>,
+}
+
+impl Coupling {
+    /// `S_g` at `log_mean`, and `c_gj = exp(ln lambda_gj + ln mu_j - S_g)`, `(G, K)`.
+    fn at(&self, log_mean: &[f64]) -> (Vec<f64>, Vec<f64>) {
+        let k = log_mean.len();
+        let mut shares = vec![0.0; self.groups * k];
+        let shifts = (0..self.groups)
+            .map(|g| {
+                let terms: Vec<f64> = (0..k)
+                    .map(|j| self.log_lambda[g * k + j] + log_mean[j])
+                    .collect();
+                let total = log_sum(&terms);
+                if !total.is_finite() {
+                    // No weight in the group: nothing to normalize, so no rescale.
+                    return 0.0;
+                }
+                for (j, term) in terms.iter().enumerate() {
+                    shares[g * k + j] = (term - total).exp();
+                }
+                total
+            })
+            .collect();
+        (shifts, shares)
+    }
+}
+
+/// What the joint objective reads of a differentiated shift in one M step.
+struct Coupled<'a> {
+    coupling: &'a Coupling,
+    /// The group of each observed total, as [`Moments`] orders them.
+    group: Vec<usize>,
+    /// `Y_g = sum_{t in g} y_t sum_k w_tk` over the observed totals.
+    counts: Vec<f64>,
+}
+
+impl<'a> Coupled<'a> {
+    fn new(coupling: &'a Coupling, groups_of: &[u32], moments: &Moments) -> Self {
+        let n = moments.observed.len();
+        let group: Vec<usize> = moments
+            .observed
+            .iter()
+            .map(|&t| groups_of[t] as usize)
+            .collect();
+        let mut counts = vec![0.0; coupling.groups];
+        for (i, &g) in group.iter().enumerate() {
+            let weight: f64 = (0..moments.k).map(|s| moments.columns[s * n + i]).sum();
+            counts[g] += weight * moments.counts[i];
+        }
+        Self {
+            coupling,
+            group,
+            counts,
+        }
+    }
 }
 
 /// How the joint L-BFGS M step runs.
@@ -328,6 +398,9 @@ pub struct Inner {
     pub iterations: u32,
     /// Whether the curvature pairs carry from one M step to the next.
     pub carry: bool,
+    /// The largest concentration `tau = a + b` the step may return: a box on `ln tau`, the
+    /// search projected onto it. Infinite, the default, leaves `tau` free.
+    pub max_concentration: f64,
 }
 
 impl Default for Inner {
@@ -335,6 +408,7 @@ impl Default for Inner {
         Self {
             iterations: 500,
             carry: false,
+            max_concentration: f64::INFINITY,
         }
     }
 }
@@ -710,8 +784,31 @@ pub fn log_density_into(data: &Data, params: &Params, layers: usize, out: &mut [
 /// Under `tied` the count tails' and the depth tails' terms depend on the shared `r` and `tau`
 /// alone, so they are summed over the states' pooled tails once rather than per state: `K`
 /// times fewer of the walks to the largest count each evaluation makes.
-fn emission_objective(moments: &Moments, theta: &[f64], tied: bool, gradient: &mut [f64]) -> f64 {
+///
+/// With `coupled`, a differentiated shift: each observed exposure is `e_t exp(-S_g(mu))` at the
+/// held decode, the value carries `-sum_g S_g Y_g` for the `y ln m` terms, and the gradient in
+/// `ln mu_j` gains `-sum_g c_gj H_g`, `H_g` the group's derivative in the log rate.
+fn emission_objective(
+    moments: &Moments,
+    theta: &[f64],
+    tied: bool,
+    coupled: Option<&Coupled<'_>>,
+    gradient: &mut [f64],
+) -> f64 {
     let k = moments.k;
+    // The exposures the totals are scored at: shifted at theta's means under a coupling.
+    let (shifts, shares) = coupled.map_or((Vec::new(), Vec::new()), |c| c.coupling.at(&theta[..k]));
+    let exposures: std::borrow::Cow<'_, [f64]> = match coupled {
+        Some(c) => moments
+            .exposures
+            .iter()
+            .zip(&c.group)
+            .map(|(e, &g)| e * (-shifts[g]).exp())
+            .collect::<Vec<f64>>()
+            .into(),
+        None => moments.exposures.as_slice().into(),
+    };
+    let mut pushes = vec![0.0; coupled.map_or(0, |c| c.coupling.groups)];
     let shared = if tied { 1 } else { k };
     let index_r = |state: usize| 2 * k + if tied { 0 } else { state };
     let index_tau = |state: usize| 2 * k + shared + if tied { 0 } else { state };
@@ -766,12 +863,15 @@ fn emission_objective(moments: &Moments, theta: &[f64], tied: bool, gradient: &m
             if w == 0.0 {
                 continue;
             }
-            let (y, e) = (moments.counts[i], moments.exposures[i]);
+            let (y, e) = (moments.counts[i], exposures[i]);
             let rate = e * mu;
             let share = log_share(r, rate);
             nb -= w * (r + y) * share;
             d_r += w * (-share + (rate - y) / (r + rate) + y / r);
             d_mu -= w * e * (y + r) / (r + rate);
+            if let Some(c) = coupled {
+                pushes[c.group[i]] += w * (y - rate * (y + r) / (r + rate));
+            }
         }
         nb += moments.count_sum[state] * mu.ln();
         d_mu += moments.count_sum[state] / mu;
@@ -803,6 +903,16 @@ fn emission_objective(moments: &Moments, theta: &[f64], tied: bool, gradient: &m
         gradient[k + state] -= tau * (g_a - g_b) * p * (1.0 - p);
         gradient[index_r(state)] -= d_r * r;
         gradient[index_tau(state)] -= (p * g_a + (1.0 - p) * g_b) * tau;
+    }
+    if let Some(c) = coupled {
+        for (g, (&shift, &count)) in shifts.iter().zip(&c.counts).enumerate() {
+            if count != 0.0 {
+                value -= shift * count;
+            }
+            for j in 0..k {
+                gradient[j] += shares[g * k + j] * pushes[g];
+            }
+        }
     }
     for g in gradient.iter_mut() {
         *g /= scale;
@@ -836,6 +946,10 @@ pub enum LbfgsStop {
 /// so a sequence of related solves carries its Hessian estimate across them as one BFGS run over
 /// a changing objective does (the downstream caller's M step).
 ///
+/// `upper`, if given, bounds each coordinate above: the start and every trial point are
+/// projected onto it, the Armijo test reads the projected step, and a coordinate on its bound
+/// whose gradient points out of the box does not count against the gradient tolerance.
+///
 /// # Returns
 /// The final value, the iterations taken and how it stopped.
 #[allow(clippy::too_many_arguments)]
@@ -847,8 +961,17 @@ pub fn lbfgs(
     gradient_tolerance: f64,
     value_tolerance: f64,
     max_iterations: u32,
+    upper: Option<&[f64]>,
 ) -> (f64, u32, LbfgsStop) {
     let d = x.len();
+    let project = |v: &mut [f64]| {
+        if let Some(upper) = upper {
+            for (vi, &u) in v.iter_mut().zip(upper) {
+                *vi = vi.min(u);
+            }
+        }
+    };
+    project(x);
     let mut g = vec![0.0; d];
     let mut f = objective(x, &mut g);
     pairs.retain(|(s, _, _)| s.len() == d);
@@ -860,7 +983,12 @@ pub fn lbfgs(
     let mut g_trial = vec![0.0; d];
     let mut alpha_k = vec![0.0; memory];
     for iteration in 0..max_iterations {
-        if g.iter().fold(0.0_f64, |m, v| m.max(v.abs())) <= gradient_tolerance {
+        let free = |i: usize| upper.is_none_or(|u| x[i] < u[i] || g[i] > 0.0);
+        if (0..d)
+            .filter(|&i| free(i))
+            .fold(0.0_f64, |m, i| m.max(g[i].abs()))
+            <= gradient_tolerance
+        {
             return (f, iteration, LbfgsStop::Gradient);
         }
         // Two-loop recursion: direction = -H g.
@@ -905,8 +1033,19 @@ pub fn lbfgs(
             for ((t, xi), di) in trial.iter_mut().zip(x.iter()).zip(&direction) {
                 *t = xi + step * di;
             }
+            project(&mut trial);
+            let taken = if upper.is_some() {
+                trial
+                    .iter()
+                    .zip(x.iter())
+                    .zip(&g)
+                    .map(|((t, xi), gi)| (t - xi) * gi)
+                    .sum()
+            } else {
+                step * slope
+            };
             let value = objective(&trial, &mut g_trial);
-            if value.is_finite() && value <= f + 1e-4 * step * slope {
+            if value.is_finite() && taken < 0.0 && value <= f + 1e-4 * taken {
                 accepted = Some(value);
                 break;
             }
@@ -956,6 +1095,8 @@ pub struct Model {
     switch: Vec<f64>,
     /// The decode-driven exposure rescale, if any.
     shift: Option<Shift>,
+    /// A differentiated shift's decode, from the last fit iteration's E step.
+    coupling: Option<Coupling>,
     /// The joint M step's settings.
     pub inner: Inner,
     /// Curvature pairs carried between joint M steps under `inner.carry`.
@@ -1062,16 +1203,23 @@ impl Model {
             chain,
             switch,
             shift: None,
+            coupling: None,
             inner: Inner::default(),
             pairs: Pairs::new(),
         })
     }
 
-    /// Rescale the exposures from the decode at every iteration of [`Model::fit`] ([`Shift`]).
+    /// Rescale the exposures from the decode at every iteration of [`Model::fit`] ([`Shift`]),
+    /// `S_g` held through each M step or, `differentiated`, moving with the means in it.
     ///
     /// # Errors
     /// Arrays not one per position, or a non-finite weight.
-    pub fn set_shift(&mut self, group: Vec<u32>, log_weight: Vec<f64>) -> Result<(), String> {
+    pub fn set_shift(
+        &mut self,
+        group: Vec<u32>,
+        log_weight: Vec<f64>,
+        differentiated: bool,
+    ) -> Result<(), String> {
         let n = self.data.len();
         if group.len() != n || log_weight.len() != n {
             return Err("a shift takes one group and one log weight per position".into());
@@ -1082,8 +1230,26 @@ impl Model {
         self.shift = Some(Shift {
             group,
             log_weight,
+            differentiated,
             base: self.data.exposures.clone(),
         });
+        self.coupling = None;
+        Ok(())
+    }
+
+    /// A solver the held shift admits: a differentiated shift needs the joint one.
+    ///
+    /// # Errors
+    /// [`Solver::Newton`] under a differentiated shift, or under a concentration bound.
+    pub fn admits(&self, solver: Solver) -> Result<(), String> {
+        if solver == Solver::Newton {
+            if self.shift.as_ref().is_some_and(|s| s.differentiated) {
+                return Err("a differentiated shift needs the 'lbfgs' solver".into());
+            }
+            if self.inner.max_concentration < f64::INFINITY {
+                return Err("a concentration bound needs the 'lbfgs' solver".into());
+            }
+        }
         Ok(())
     }
 
@@ -1116,6 +1282,7 @@ impl Model {
         let ln_mean: Vec<f64> = self.params.mean.iter().map(|m| m.ln()).collect();
         let groups = shift.group.iter().max().map_or(0, |&g| g as usize + 1);
         let mut terms: Vec<Vec<f64>> = vec![Vec::new(); groups];
+        let mut decoded = vec![0_usize; self.data.len()];
         for t in 0..self.data.len() {
             let row = &self.gamma[t * hidden..(t + 1) * hidden];
             let decode = (0..k)
@@ -1130,8 +1297,33 @@ impl Model {
                 })
                 .0;
             terms[shift.group[t] as usize].push(ln_mean[decode] + shift.log_weight[t]);
+            decoded[t] = decode;
+        }
+        if shift.differentiated {
+            // Held through the M step: per group and state, the decoded weights' log sum.
+            let mut log_lambda = vec![Vec::new(); groups * k];
+            for t in 0..self.data.len() {
+                log_lambda[shift.group[t] as usize * k + decoded[t]].push(shift.log_weight[t]);
+            }
+            self.coupling = Some(Coupling {
+                groups,
+                log_lambda: log_lambda.iter().map(|v| log_sum(v)).collect(),
+            });
+            return;
         }
         let factor: Vec<f64> = terms.iter().map(|v| (-log_sum(v)).exp()).collect();
+        let (group, base) = (shift.group.clone(), shift.base.clone());
+        self.data.rescale(&base, |t| factor[group[t] as usize]);
+    }
+
+    /// Under a differentiated shift, the exposures rescaled by `S_g` at the held means and the
+    /// held decode, as its M step left them.
+    fn rescale_coupled(&mut self) {
+        let (Some(shift), Some(coupling)) = (&self.shift, &self.coupling) else {
+            return;
+        };
+        let ln_mean: Vec<f64> = self.params.mean.iter().map(|m| m.ln()).collect();
+        let factor: Vec<f64> = coupling.at(&ln_mean).0.iter().map(|s| (-s).exp()).collect();
         let (group, base) = (shift.group.clone(), shift.base.clone());
         self.data.rescale(&base, |t| factor[group[t] as usize]);
     }
@@ -1171,13 +1363,29 @@ impl Model {
 
     /// The emission M step on `(n, H)` posterior probabilities, into the held parameters.
     #[must_use]
+    ///
+    /// Under a differentiated shift with a decode held ([`Model::fit`] sets it), the step reads
+    /// the exposures as given and moves `S_g` with the means, then leaves them rescaled at the
+    /// result; the caller checks the solver with [`Model::admits`].
     pub fn emission_m_step(&mut self, weights: &[f64], solver: Solver) -> Report {
         let k = self.n_states();
+        let coupled = match (&self.shift, &self.coupling) {
+            (Some(shift), Some(_)) if shift.differentiated => {
+                let base = shift.base.clone();
+                self.data.rescale(&base, |_| 1.0);
+                true
+            }
+            _ => false,
+        };
         let moments = Moments::new(&self.data, weights, k, self.chain.layers());
-        match solver {
+        let report = match solver {
             Solver::Newton => self.newton(&moments),
             Solver::Lbfgs => self.joint(&moments),
+        };
+        if coupled {
+            self.rescale_coupled();
         }
+        report
     }
 
     #[allow(clippy::needless_range_loop)]
@@ -1420,14 +1628,26 @@ impl Model {
         if !self.inner.carry {
             self.pairs.clear();
         }
+        let coupled = match (&self.shift, &self.coupling) {
+            (Some(shift), Some(coupling)) if shift.differentiated => {
+                Some(Coupled::new(coupling, &shift.group, m))
+            }
+            _ => None,
+        };
+        let upper: Option<Vec<f64>> = (self.inner.max_concentration < f64::INFINITY).then(|| {
+            let mut upper = vec![f64::INFINITY; theta.len()];
+            upper[2 * k + shared..].fill(self.inner.max_concentration.ln());
+            upper
+        });
         let (_, iterations, stop) = lbfgs(
-            |x, g| emission_objective(m, x, tied, g),
+            |x, g| emission_objective(m, x, tied, coupled.as_ref(), g),
             &mut theta,
             10,
             &mut self.pairs,
             1e-10,
             1e-14,
             self.inner.iterations,
+            upper.as_deref(),
         );
         for state in 0..k {
             let index = if tied { 0 } else { state };
@@ -1439,7 +1659,7 @@ impl Model {
             p.beta[state] = (1.0 - rate) * tau;
         }
         let mut gradient = vec![0.0; theta.len()];
-        emission_objective(m, &theta, tied, &mut gradient);
+        emission_objective(m, &theta, tied, coupled.as_ref(), &mut gradient);
         let finite = p
             .dispersion
             .iter()
@@ -1523,6 +1743,7 @@ impl Model {
         parameter_tolerance: f64,
         solver: Solver,
     ) -> Result<Fitted, String> {
+        self.admits(solver)?;
         let mut previous = f64::NEG_INFINITY;
         let mut log_likelihood = previous;
         let mut iterations = 0;
@@ -1698,16 +1919,20 @@ macro_rules! count_pair_methods {
         self.model.exposures().to_vec().into_pyarray(py)
     }
 
-    /// Rescale the exposures per group from the decode at every fit iteration.
+    /// Rescale the exposures per group from the decode at every fit iteration; `differentiated`
+    /// moves `S_g` with the means inside each M step.
+    #[pyo3(signature = (group, log_weight, differentiated = false))]
     fn set_shift(
         &mut self,
         group: PyReadonlyArray1<'_, u32>,
         log_weight: PyReadonlyArray1<'_, f64>,
+        differentiated: bool,
     ) -> PyResult<()> {
         self.model
             .set_shift(
                 slice(&group, "group")?.to_vec(),
                 slice(&log_weight, "log_weight")?.to_vec(),
+                differentiated,
             )
             .map_err(PyValueError::new_err)
     }
@@ -1731,7 +1956,7 @@ macro_rules! count_pair_methods {
     /// The whole fit; `(log_likelihood, iterations, stop, at_boundary, frozen, unsettled)`,
     /// `unsettled` `(iterations, residual, degenerate states)` or `None`.
     #[allow(clippy::type_complexity, clippy::too_many_arguments)]
-    #[pyo3(signature = (max_iterations, tolerance, parameter_tolerance, solver, inner_iterations = 500, carry = false))]
+    #[pyo3(signature = (max_iterations, tolerance, parameter_tolerance, solver, inner_iterations = 500, carry = false, max_concentration = f64::INFINITY))]
     fn fit(
         &mut self,
         py: Python<'_>,
@@ -1741,6 +1966,7 @@ macro_rules! count_pair_methods {
         solver: &str,
         inner_iterations: u32,
         carry: bool,
+        max_concentration: f64,
     ) -> PyResult<(
         f64,
         u32,
@@ -1753,10 +1979,14 @@ macro_rules! count_pair_methods {
         if inner_iterations == 0 {
             return Err(PyValueError::new_err("inner_iterations must be positive"));
         }
+        if max_concentration.is_nan() || max_concentration <= 0.0 {
+            return Err(PyValueError::new_err("max_concentration must be positive"));
+        }
         let model = &mut self.model;
         model.inner = Inner {
             iterations: inner_iterations,
             carry,
+            max_concentration,
         };
         let fitted = py
             .detach(|| model.fit(max_iterations, tolerance, parameter_tolerance, solver))
@@ -1822,6 +2052,7 @@ macro_rules! count_pair_methods {
         if weights.len() != model.data.len() * model.n_hidden() {
             return Err(PyValueError::new_err("posterior must be (n, hidden states)"));
         }
+        model.admits(solver).map_err(PyValueError::new_err)?;
         let report = py.detach(|| model.emission_m_step(weights, solver));
         Ok((
             report.converged,
@@ -1980,10 +2211,90 @@ mod tests {
             1e-12,
             0.0,
             100,
+            None,
         );
         assert_eq!(stop, LbfgsStop::Gradient);
         assert!((x[0] - 1.0).abs() < 1e-10 && (x[1] + 0.5).abs() < 1e-10);
         assert!(value < 1e-20);
+    }
+
+    /// Bounded above, the quadratic's minimum is on the bound in the bounded coordinate and
+    /// free in the other: the KKT point of the box.
+    #[test]
+    fn lbfgs_stops_on_an_upper_bound() {
+        let mut x = vec![3.0, -2.0];
+        let (_, _, stop) = lbfgs(
+            |x, g| {
+                g[0] = 2.0 * (x[0] - 1.0);
+                g[1] = 20.0 * (x[1] + 0.5);
+                (x[0] - 1.0).powi(2) + 10.0 * (x[1] + 0.5).powi(2)
+            },
+            &mut x,
+            5,
+            &mut Pairs::new(),
+            1e-12,
+            0.0,
+            100,
+            Some(&[0.25, f64::INFINITY]),
+        );
+        assert_eq!(stop, LbfgsStop::Gradient);
+        assert!(x[0] == 0.25 && (x[1] + 0.5).abs() < 1e-10, "{x:?}");
+    }
+
+    /// Under a differentiated shift the objective's gradient, through `S_g`, against central
+    /// differences: two groups, one with a state no position decodes to.
+    #[test]
+    fn the_shifted_emission_gradient_is_the_objectives() {
+        let data = Data::new(
+            vec![3, 10, 0, 7, 25, 4],
+            vec![1.0, 2.0, 0.0, 1.5, 3.0, 1.0],
+            vec![1, 4, 0, 2, 9, 3],
+            vec![5, 8, 0, 6, 12, 3],
+            vec![6],
+        )
+        .unwrap();
+        let weights = [0.3, 0.7, 0.9, 0.1, 0.5, 0.5, 0.2, 0.8, 0.6, 0.4, 0.1, 0.9];
+        let moments = Moments::new(&data, &weights, 2, 1);
+        let group = [0_u32, 0, 0, 1, 1, 1];
+        let (l0, l1) = (0.2_f64.ln(), 0.5_f64.ln());
+        let coupling = Coupling {
+            groups: 2,
+            log_lambda: vec![
+                log_sum(&[l0, l1]),
+                l1,
+                f64::NEG_INFINITY,
+                log_sum(&[l0, l1, l0]),
+            ],
+        };
+        let coupled = Coupled::new(&coupling, &group, &moments);
+        for tied in [false, true] {
+            let theta: Vec<f64> = if tied {
+                vec![1.0, 1.5, -0.2, 0.4, 0.7, 2.0]
+            } else {
+                vec![1.0, 1.5, -0.2, 0.4, 0.7, 0.2, 2.0, 1.5]
+            };
+            let mut gradient = vec![0.0; theta.len()];
+            emission_objective(&moments, &theta, tied, Some(&coupled), &mut gradient);
+            for i in 0..theta.len() {
+                let h = 1e-6;
+                let mut up = theta.clone();
+                let mut down = theta.clone();
+                up[i] += h;
+                down[i] -= h;
+                let mut scratch = vec![0.0; theta.len()];
+                let numeric =
+                    (emission_objective(&moments, &up, tied, Some(&coupled), &mut scratch)
+                        - emission_objective(&moments, &down, tied, Some(&coupled), &mut scratch))
+                        / (2.0 * h);
+                assert!(
+                    (numeric - gradient[i]).abs() < 1e-7,
+                    "tied {tied} entry {i}: {numeric} against {}",
+                    gradient[i]
+                );
+            }
+            // The shifted rate is unchanged by mu -> c mu: the gradient sums to zero over ln mu.
+            assert!((gradient[0] + gradient[1]).abs() < 1e-12, "{gradient:?}");
+        }
     }
 
     /// The objective's gradient against central differences on a small model.
@@ -2006,7 +2317,7 @@ mod tests {
                 vec![1.0, 1.5, -0.2, 0.4, 0.7, 0.2, 2.0, 1.5]
             };
             let mut gradient = vec![0.0; theta.len()];
-            emission_objective(&moments, &theta, tied, &mut gradient);
+            emission_objective(&moments, &theta, tied, None, &mut gradient);
             for i in 0..theta.len() {
                 let h = 1e-6;
                 let mut up = theta.clone();
@@ -2014,8 +2325,8 @@ mod tests {
                 up[i] += h;
                 down[i] -= h;
                 let mut scratch = vec![0.0; theta.len()];
-                let numeric = (emission_objective(&moments, &up, tied, &mut scratch)
-                    - emission_objective(&moments, &down, tied, &mut scratch))
+                let numeric = (emission_objective(&moments, &up, tied, None, &mut scratch)
+                    - emission_objective(&moments, &down, tied, None, &mut scratch))
                     / (2.0 * h);
                 assert!(
                     (numeric - gradient[i]).abs() < 1e-7,
@@ -2156,7 +2467,7 @@ mod tests {
             let start = std::time::Instant::now();
             let mut sink = 0.0;
             for _ in 0..200 {
-                sink += emission_objective(&moments, &theta, tied, &mut gradient);
+                sink += emission_objective(&moments, &theta, tied, None, &mut gradient);
             }
             let wall = start.elapsed().as_secs_f64() / 200.0 * 1e3;
             println!("tied {tied}: {wall:.4} ms per evaluation ({sink:.3e})");

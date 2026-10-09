@@ -45,6 +45,7 @@ from __future__ import annotations
 from sal.opt.hmm.count_pair import (
     CountPairHmm,
     DecodeShift,
+    DifferentiatedShift,
     MStepSolver,
     PhasedCountPairHmm,
 )
@@ -87,6 +88,7 @@ __all__ = [
     "CountPairHmm",
     "CovariateUpdate",
     "DecodeShift",
+    "DifferentiatedShift",
     "EStep",
     "EmFit",
     "EmissionHmmObjective",

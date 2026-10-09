@@ -57,7 +57,12 @@ def _batches(cell: CountHmm) -> tuple[Ragged, Ragged]:
 
 
 def _model(
-    cell: CountHmm, k: int, stay: float, semantics: study.Semantics, **options: bool
+    cell: CountHmm,
+    k: int,
+    stay: float,
+    semantics: study.Semantics,
+    *,
+    fit_initial: bool = True,
 ) -> CountPairHmm:
     log_initial, log_transition, family = study.start(cell, k, stay)
     observations, covariate = _batches(cell)
@@ -69,7 +74,7 @@ def _model(
         covariate=covariate,
         tied=semantics.tied,
         fit_transition=semantics.fit_transition,
-        **options,
+        fit_initial=fit_initial,
     )
 
 
@@ -248,6 +253,7 @@ def test_a_parameter_tolerance_stops_sooner(cell: tuple[CountHmm, int, float]) -
 
 
 @pytest.mark.bug
+@pytest.mark.smoke
 def test_a_tied_start_must_hold_one_value(cell: tuple[CountHmm, int, float]) -> None:
     data, k, stay = cell
     log_initial, log_transition, family = study.start(data, k, stay)
@@ -268,4 +274,43 @@ def test_a_tied_start_must_hold_one_value(cell: tuple[CountHmm, int, float]) -> 
             varied,
             covariate=covariate,
             tied=True,
+        )
+
+
+@pytest.mark.analytic
+def test_a_concentration_bound_holds_tau_and_an_idle_one_is_bitwise(
+    cell: tuple[CountHmm, int, float],
+) -> None:
+    data, k, stay = cell
+    config = EmConfig(max_iterations=20, tolerance=1e-10)
+    free = _model(data, k, stay, study.DOWNSTREAM)
+    free_fit = free.fit(config, solver=MStepSolver.LBFGS)
+    tau = float((free.components.alpha + free.components.beta)[0])
+    # A bound above every iterate's tau is never touched: the same fit, bit for bit.
+    idle = _model(data, k, stay, study.DOWNSTREAM)
+    idle_fit = idle.fit(config, solver=MStepSolver.LBFGS, max_concentration=1e300)
+    assert idle_fit.log_likelihood == free_fit.log_likelihood
+    np.testing.assert_array_equal(idle.components.alpha, free.components.alpha)
+    # Below the free fit's tau, the fit returns tau on the bound.
+    bound = tau / 4.0
+    held = _model(data, k, stay, study.DOWNSTREAM)
+    held.fit(config, solver=MStepSolver.LBFGS, max_concentration=bound)
+    found = (held.components.alpha + held.components.beta).numpy()
+    np.testing.assert_allclose(found, bound, rtol=1e-12)
+
+
+@pytest.mark.bug
+@pytest.mark.smoke
+def test_a_concentration_bound_needs_the_joint_step(
+    cell: tuple[CountHmm, int, float],
+) -> None:
+    data, k, stay = cell
+    model = _model(data, k, stay, study.DOWNSTREAM)
+    with pytest.raises(ValueError, match="lbfgs"):
+        model.fit(EmConfig(max_iterations=2), max_concentration=1e3)
+    with pytest.raises(ValueError, match="positive"):
+        model.fit(
+            EmConfig(max_iterations=2),
+            solver=MStepSolver.LBFGS,
+            max_concentration=0.0,
         )
